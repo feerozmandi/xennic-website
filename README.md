@@ -1,12 +1,16 @@
 # Xennic website
 
-Initial local-development scaffold for the Persian corporate website and the future Xennic modular monolith. The source of truth for architecture and decisions is the [Xennic Vault: META-INT-150](https://github.com/feerozmandi/ZNNY-Xennic-Vault/blob/main/00_Meta/Integration/META-INT-150%20%E2%80%94%20%DB%8C%DA%A9%D9%BE%D8%A7%D8%B1%DA%86%D9%87%E2%80%8C%D8%B3%D8%A7%D8%B2%DB%8C%20%D9%85%D8%B9%D9%85%D8%A7%D8%B1%DB%8C%20%D9%88%D8%A8%E2%80%8C%D8%B3%D8%A7%DB%8C%D8%AA%20%D9%88%20%D9%BE%D9%84%D8%AA%D9%81%D8%B1%D9%85%20Xennic.md); see also L2-MKT-002 through L2-MKT-005 in that Vault.
+Initial local-development scaffold for the Persian corporate website and the future Xennic modular monolith. The source of truth for architecture and decisions is the [Xennic Vault: META-INT-150](https://github.com/feerozmandi/ZNNY-Xennic-Vault/blob/dev/00_Meta/Integration/META-INT-150%20%E2%80%94%20%DB%8C%DA%A9%D9%BE%D8%A7%D8%B1%DA%86%D9%87%E2%80%8C%D8%B3%D8%A7%D8%B2%DB%8C%20%D9%85%D8%B9%D9%85%D8%A7%D8%B1%DB%8C%20%D9%88%D8%A8%E2%80%8C%D8%B3%D8%A7%DB%8C%D8%AA%20%D9%88%20%D9%BE%D9%84%D8%AA%D9%81%D8%B1%D9%85%20Xennic.md); see also L2-MKT-002 through L2-MKT-005 in that Vault.
 
 This is a **development scaffold**, not a production release. Page text is deliberately placeholder content; forms, Umami, automation integrations and production deployment are not implemented yet. There is no public customer login or registration.
 
 ## Project progress
 
 Persian management reports, current status and update guidance are available in [`docs/README.md`](docs/README.md).
+
+## Fonts
+
+IRANSans is the approved font, but the site uses the system font until an organizational license is purchased from `fontiran.com`. Licensed font files must never be committed to this public repository; keep them outside Git. The ignore rules are a safeguard, not a guarantee against forced additions.
 
 ## Local setup
 
@@ -31,6 +35,7 @@ Requirements: Node.js 20.18.1 or newer, npm and Docker Compose. PostgreSQL 16 ru
 ```sh
 npm run typecheck
 npm run lint
+npm run test:compat
 npm run build
 # With the development server and database running:
 npm run test:smoke
@@ -54,4 +59,4 @@ Fields are intentionally minimal and should be reviewed before adding real conte
 
 ## Security and deployment status
 
-The lockfile currently has outstanding upstream `npm audit` findings, including high-severity transitive issues; review and resolve them before exposing the application or CMS publicly. The scaffold is not deployed to the company's VPS. Deployment and integration with automation remain dependent on infrastructure readiness and separate approval.
+The lockfile has outstanding upstream `npm audit` findings; review and resolve them before exposing the application or CMS publicly. The `graphql-scalars` and `happy-dom` security overrides use versions outside their upstream parents’ declared ranges; compatibility checks reduce risk but do not establish official support. Reassess the overrides when upstream packages provide supported fixes. The scaffold is not deployed to the company's VPS. Deployment and integration with automation remain dependent on infrastructure readiness and separate approval.

@@ -15,7 +15,8 @@
     "db:init": "node --env-file=.env scripts/init-db.mjs",
     "generate:importmap": "node --env-file=.env ./node_modules/payload/bin.js generate:importmap",
     "generate:types": "node --env-file=.env ./node_modules/payload/bin.js generate:types",
-    "test:smoke": "node --test tests/smoke.mjs"
+    "test:smoke": "node --test tests/smoke.mjs",
+    "test:compat": "node --test tests/dependency-compat.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.91.0",
@@ -44,6 +45,8 @@
   },
   "overrides": {
     "dompurify": "3.4.17",
-    "undici": "7.30.1"
+    "undici": "7.30.1",
+    "graphql-scalars": "2.0.1",
+    "happy-dom": "21.0.4"
   }
 }
