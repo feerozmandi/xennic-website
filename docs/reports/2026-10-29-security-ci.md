@@ -13,7 +13,7 @@
 - لینک Vault در README اصلی از `main` قدیمی به `dev` اصلاح شد.
 - در بررسی Vault، `L2-MKT-003` نسخهٔ ۰.۲.۰ انتخاب IRANSans را تأیید می‌کند: خرید فقط از `fontiran.com` با لایسنس سازمانی، ممنوعیت کامیت فایل واقعی در مخزن عمومی، و فونت سیستمی تا زمان خرید. قواعد `.gitignore` برای فایل‌های فونت و مسیر خصوصی افزوده شد؛ نادیده‌گرفتن فایل محافظ مطلق در برابر افزودن اجباری نیست.
 - `graphql-scalars` از `1.22.2` به `2.0.1` و `happy-dom` از `20.14.6` به `21.0.4` به‌صورت npm override تغییر کردند؛ نسخه‌های تثبیت‌شدهٔ Next.js و Payload تغییر نکردند. از `npm audit fix --force` استفاده نشد.
-- Workflow `.github/workflows/ci.yml` برای همهٔ PRها `npm ci`، typecheck، lint و build را اجرا می‌کند؛ داده‌های محیطی آن فقط نمونهٔ غیرواقعی برای build هستند. در `dev` پیش از این تغییر، workflow `update-index` در این مخزن وجود نداشت؛ این Workflow جدید و مستقل است.
+- Workflow `.github/workflows/ci.yml` با `checkout@v6` و `setup-node@v6` برای همهٔ PRها `npm ci`، typecheck، lint و build را اجرا می‌کند؛ داده‌های محیطی آن فقط نمونهٔ غیرواقعی برای build هستند. در `dev` پیش از این تغییر، workflow `update-index` در این مخزن وجود نداشت؛ این Workflow جدید و مستقل است.
 - آزمون سازگاری `npm run test:compat` اضافه شد؛ این آزمون در Workflow محدود فعلی اجرا نمی‌شود و باید جداگانه اجرا شود.
 
 ## بررسی امنیتی دستی
