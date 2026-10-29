@@ -1,0 +1,49 @@
+{
+  "name": "xennic-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "db:init": "node --env-file=.env scripts/init-db.mjs",
+    "generate:importmap": "node --env-file=.env ./node_modules/payload/bin.js generate:importmap",
+    "generate:types": "node --env-file=.env ./node_modules/payload/bin.js generate:types",
+    "test:smoke": "node --test tests/smoke.mjs"
+  },
+  "dependencies": {
+    "@payloadcms/db-postgres": "3.91.0",
+    "@payloadcms/next": "3.91.0",
+    "@payloadcms/richtext-lexical": "3.91.0",
+    "@payloadcms/ui": "3.91.0",
+    "graphql": "^16.11.0",
+    "next": "16.4.3",
+    "payload": "3.91.0",
+    "pg": "8.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "16.4.3",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.17",
+    "undici": "7.30.1"
+  }
+}
