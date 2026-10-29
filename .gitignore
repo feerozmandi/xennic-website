@@ -10,3 +10,12 @@ coverage/
 *.tsbuildinfo
 media/
 .DS_Store
+
+# Licensed font assets must not be committed to this public repository.
+private-fonts/
+*[iI][rR][aA][nN][sS][aA][nN][sS]*
+*.[wW][oO][fF][fF]
+*.[wW][oO][fF][fF]2
+*.[tT][tT][fF]
+*.[oO][tT][fF]
+*.[eE][oO][tT]
