@@ -20,7 +20,7 @@ Requirements: Node.js 20.18.1 or newer, npm and Docker Compose. PostgreSQL 16 ru
 
 3. Open `http://localhost:3000` and `/admin`. On a fresh local database, create the first staff account through Payload's setup screen. Do not expose an uninitialized admin to the public. All CMS collections are currently restricted to authenticated staff; public pages do not yet read CMS data.
 
-`npm run db:init` is an idempotent development initialization script: it creates the `website` schema and the separate `shared.customers` table. Payload's development schema push creates its own tables in `website`. The Payload PostgreSQL `schemaName` option is experimental; keep table names distinct across schemas and validate future schema changes carefully. Neither this script nor development schema push is a production migration strategy. Future modules and schemas are intentionally not implemented.
+`npm run db:init` is an idempotent development initialization script: it creates the `website` schema and the separate `shared.customers` table. On databases created by the earlier scaffold, it removes the obsolete `organization_name` column only if it contains no data; otherwise it stops without changing the table so the data can be reviewed before migration. Payload's development schema push creates its own tables in `website`. The Payload PostgreSQL `schemaName` option is experimental; keep table names distinct across schemas and validate future schema changes carefully. Neither this script nor development schema push is a production migration strategy. Future modules and schemas are intentionally not implemented.
 
 ## Checks
 
@@ -44,7 +44,7 @@ Payload types and import map can be regenerated using `npm run generate:types` a
 - `FAQ`: question, answer.
 - `LeadSubmission`: name, organization, phone, email, subject, message, source, assigned staff, status, plus Payload timestamps. Public form submission is not enabled.
 - `Media`: file and alt text.
-- `shared.customers`: UUID, name, organization name, email, phone, source and creation time. This is independent of staff and is not a Payload auth collection.
+- `shared.customers`: UUID, name (person or organization), email, phone, source and creation time. This is independent of staff and is not a Payload auth collection.
 
 Fields are intentionally minimal and should be reviewed before adding real content or implementing forms. No Article, TechnicalNote or CaseStudy collections are included at this stage. Actual customer/lead handling, validations, retention and permissions require further design before public use.
 

@@ -4,7 +4,6 @@ CREATE SCHEMA IF NOT EXISTS shared;
 CREATE TABLE IF NOT EXISTS shared.customers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text,
-  organization_name text,
   email text,
   phone text,
   source text,
