@@ -4,6 +4,10 @@ Initial local-development scaffold for the Persian corporate website and the fut
 
 This is a **development scaffold**, not a production release. Page text is deliberately placeholder content; forms, Umami, automation integrations and production deployment are not implemented yet. There is no public customer login or registration.
 
+## Project progress
+
+Persian management reports, current status and update guidance are available in [`docs/README.md`](docs/README.md).
+
 ## Local setup
 
 Requirements: Node.js 20.18.1 or newer, npm and Docker Compose. PostgreSQL 16 runs in a local development container only.

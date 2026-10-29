@@ -1,0 +1,7 @@
+# Repository guidance
+
+- Treat the separate Xennic Vault as the source of truth for architecture, approved content and decisions. Repository progress reports are operational summaries, not replacements for the Vault. Ask the owner before making an architectural or technology decision that is not specified or approved.
+- For each session that changes the project, update `docs/status.md`, add a dated report under `docs/reports/` using `docs/report-template.md`, and update the report list in `docs/README.md` in the same pull request. Explain what changed, evidence, tests and their dates, outstanding risks, decisions needed, and whether a Vault follow-up is required. Do not invent approvals, test results, PR states or delivery claims. If a session makes no project changes, a new report is not mandatory.
+- Keep prior reports as historical snapshots; correct factual errors with an explicit dated correction rather than silently rewriting history. Give the current status an accurate date and baseline. Never include secrets, credentials, private customer data or raw sensitive logs: this repository is public.
+- Follow the repository's approved PR workflow. Do not commit directly to `main` or `dev`. Observe any session-specific branch restrictions and request clarification if the required base branch does not exist.
+- Preserve phase-one scope and do not deploy to the VPS without the required infrastructure readiness and owner approval.
