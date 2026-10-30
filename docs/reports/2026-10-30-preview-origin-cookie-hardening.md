@@ -22,7 +22,7 @@
 |---|---|---|
 | typecheck، lint، `test:preview-config`، `test:compat`، production build و `git diff --check` | ۲۰۲۶-۱۰-۳۰، Sandbox، Node 22 | موفق؛ آزمون config تنظیمات نهایی Payload را نیز در حالت preview و local بررسی کرد |
 | migration و seed، smoke و production test | ۲۰۲۶-۱۰-۳۰، PostgreSQL 16 و سرور production محلی، دادهٔ مصنوعی و proxy صرفاً آزمایشی | موفق؛ dashboard واقعی، login/logout، cookie، Bearer، REST/GraphQL، upload/media، Origin مجاز/نامجاز/غایب و CORS بررسی شد |
-| Docker، بازراه‌اندازی و restore با تغییرات جاری | GitHub Actions در PR | در انتظار نتیجهٔ اجرای CI؛ Docker در Sandbox موجود نبود. موفقیت restore قبلی در [گزارش تاریخی](2026-10-30-preview-recovery-security.md) به نسخهٔ پیشین مربوط است |
+| Docker، بازراه‌اندازی و restore با تغییرات جاری | GitHub Actions در PR | هر سه job در [اجرای 41107071485](https://github.com/feerozmandi/xennic-website/actions/runs/41107071485) برای `e2b6755` موفق، از جمله production-preview و restore؛ Docker در Sandbox موجود نبود. موفقیت restore قبلی در [گزارش تاریخی](2026-10-30-preview-recovery-security.md) به نسخهٔ پیشین مربوط است |
 | مرورگر، HTTPS/TLS و gate واقعی | پس از انتخاب زیرساخت | اجرا نشده؛ سرور و proxy آزمایشی HTTP محلی جایگزین آنها نیستند |
 
 ## ریسک‌ها و کارهای باز
