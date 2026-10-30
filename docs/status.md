@@ -20,6 +20,7 @@
 
 | مورد | نتیجهٔ ثبت‌شده | تاریخ و محیط |
 |---|---|---|
+| بازیابی آزمایشی و لاگ | تست محلی backup سرد و Job `production-preview` در [اجرای 41101679790](https://github.com/feerozmandi/xennic-website/actions/runs/41101679790) برای `969cee5` موفق؛ جزئیات و محدودیت‌ها در [گزارش](reports/2026-10-30-preview-recovery-security.md) | ۲۰۲۶-۱۰-۳۰، Sandbox و GitHub Actions؛ نه VPS |
 | بستهٔ production آزمایشی | هر سه job در [اجرای 41092208169](https://github.com/feerozmandi/xennic-website/actions/runs/41092208169) برای `4aa3978` موفق؛ اعداد و محدودیت‌های نمونه‌برداری در [گزارش](reports/2026-10-30-production-preview-package.md) ثبت شده‌اند | ۲۰۲۶-۱۰-۳۰، GitHub Actions؛ نه VPS |
 | CI طرح پیش‌نمایش | هر دو job در [اجرای 41087814542](https://github.com/feerozmandi/xennic-website/actions/runs/41087814542) برای کامیت `134b438` موفق بودند؛ Compose از dev server استفاده می‌کند و آزمون production نیست | ۲۰۲۶-۱۰-۳۰، GitHub Actions |
 | پیش‌نمایش فعلی | در Sandbox فعلی، سرور و پایگاه‌دادهٔ پیش‌نمایش مراحل قبل یافت نشد؛ رکورد و نمایش متن به‌صورت دستی بررسی نشدند | ۲۰۲۶-۱۰-۳۰، Sandbox فعلی؛ در راه‌اندازی بعدی بررسی شود |
