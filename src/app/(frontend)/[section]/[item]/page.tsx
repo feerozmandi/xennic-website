@@ -1,21 +1,24 @@
 import { notFound } from 'next/navigation'
-import { PlaceholderPage } from '@/components/site'
+import { ContentPage, DocumentContent } from '@/components/content'
+import { getPage, getService, getTeam } from '@/lib/content'
 
-const pages: Record<string, Record<string, string>> = {
-  company: { about: 'درباره ما', team: 'تیم' },
-  services: {
-    'industrial-electrical-consulting': 'مشاورهٔ فنی برق صنعتی',
-    'building-electrical-design': 'طراحی برق ساختمان',
-    'distribution-supervision': 'نظارت بر پروژه‌های توزیع',
-    'energy-audit': 'ممیزی انرژی',
-    'grounding-lightning-protection': 'طراحی سیستم ارت و صاعقه‌گیر',
-    'technical-training': 'آموزش فنی (کارگاه) — به‌زودی',
-  },
-}
+export const dynamic = 'force-dynamic'
 
 export default async function Detail({ params }: { params: Promise<{ section: string; item: string }> }) {
   const { section, item } = await params
-  const title = pages[section]?.[item]
-  if (!title) notFound()
-  return <PlaceholderPage title={title} />
+  if (section === 'services') {
+    const service = await getService(item)
+    if (!service) notFound()
+    return <ContentPage title={service.title}>{service.comingSoon && <span className="badge">به‌زودی</span>}<DocumentContent content={service.content} />{service.cta && <button className="button" type="button" disabled>{service.cta}</button>}</ContentPage>
+  }
+  if (section === 'company' && item === 'about') {
+    const page = await getPage('about')
+    if (!page) notFound()
+    return <ContentPage title={page.title}><DocumentContent content={page.content} /></ContentPage>
+  }
+  if (section === 'company' && item === 'team') {
+    const members = await getTeam()
+    return <ContentPage title="تیم">{members.map((member) => <article key={member.id}><h2>{member.name}</h2>{member.biography && <p>{member.biography}</p>}</article>)}</ContentPage>
+  }
+  notFound()
 }

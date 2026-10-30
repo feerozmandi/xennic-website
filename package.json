@@ -16,7 +16,8 @@
     "generate:importmap": "node --env-file=.env ./node_modules/payload/bin.js generate:importmap",
     "generate:types": "node --env-file=.env ./node_modules/payload/bin.js generate:types",
     "test:smoke": "node --test tests/smoke.mjs",
-    "test:compat": "node --test tests/dependency-compat.mjs"
+    "test:compat": "node --test tests/dependency-compat.mjs",
+    "seed": "node --env-file=.env --import=tsx scripts/seed.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.91.0",
@@ -41,6 +42,7 @@
     "eslint": "^9.0.0",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4.2.0",
+    "tsx": "4.23.15",
     "typescript": "^5.9.0"
   },
   "overrides": {

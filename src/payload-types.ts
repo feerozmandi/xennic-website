@@ -164,6 +164,7 @@ export interface Page {
   id: number;
   title: string;
   slug: string;
+  summary?: string | null;
   content?: {
     root: {
       type: string;
@@ -206,6 +207,8 @@ export interface Service {
     };
     [k: string]: unknown;
   } | null;
+  cta?: string | null;
+  comingSoon?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -410,6 +413,7 @@ export interface StaffSelect<T extends boolean = true> {
 export interface PagesSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
+  summary?: T;
   content?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -423,6 +427,8 @@ export interface ServicesSelect<T extends boolean = true> {
   slug?: T;
   summary?: T;
   content?: T;
+  cta?: T;
+  comingSoon?: T;
   updatedAt?: T;
   createdAt?: T;
 }

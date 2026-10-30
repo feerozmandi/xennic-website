@@ -2,7 +2,7 @@
 
 Initial local-development scaffold for the Persian corporate website and the future Xennic modular monolith. The source of truth for architecture and decisions is the [Xennic Vault: META-INT-150](https://github.com/feerozmandi/ZNNY-Xennic-Vault/blob/dev/00_Meta/Integration/META-INT-150%20%E2%80%94%20%DB%8C%DA%A9%D9%BE%D8%A7%D8%B1%DA%86%D9%87%E2%80%8C%D8%B3%D8%A7%D8%B2%DB%8C%20%D9%85%D8%B9%D9%85%D8%A7%D8%B1%DB%8C%20%D9%88%D8%A8%E2%80%8C%D8%B3%D8%A7%DB%8C%D8%AA%20%D9%88%20%D9%BE%D9%84%D8%AA%D9%81%D8%B1%D9%85%20Xennic.md); see also L2-MKT-002 through L2-MKT-005 in that Vault.
 
-This is a **development scaffold**, not a production release. Page text is deliberately placeholder content; forms, Umami, automation integrations and production deployment are not implemented yet. There is no public customer login or registration.
+This is a **development scaffold**, not a production release. Approved L2-MKT-004 content is seeded for the home, about, services, founder and track-record pages; other pages remain placeholders. Forms, Umami, automation integrations and production deployment are not implemented yet. There is no public customer login or registration.
 
 ## Project progress
 
@@ -23,10 +23,11 @@ Requirements: Node.js 20.18.1 or newer, npm and Docker Compose. PostgreSQL 16 ru
    npm ci
    docker compose up -d
    npm run db:init
+   npm run seed
    npm run dev
    ```
 
-3. Open `http://localhost:3000` and `/admin`. On a fresh local database, create the first staff account through Payload's setup screen. Do not expose an uninitialized admin to the public. All CMS collections are currently restricted to authenticated staff; public pages do not yet read CMS data.
+3. Open `http://localhost:3000` and `/admin`. On a fresh local database, create the first staff account through Payload's setup screen. Do not expose an uninitialized admin to the public. The approved public content collections are readable without login; writes and access to staff and leads are restricted to staff. Seed only inserts missing records and never overwrites existing CMS edits.
 
 `npm run db:init` is an idempotent development initialization script: it creates the `website` schema and the separate `shared.customers` table. On databases created by the earlier scaffold, it removes the obsolete `organization_name` column only if it contains no data; otherwise it stops without changing the table so the data can be reviewed before migration. Payload's development schema push creates its own tables in `website`. The Payload PostgreSQL `schemaName` option is experimental; keep table names distinct across schemas and validate future schema changes carefully. Neither this script nor development schema push is a production migration strategy. Future modules and schemas are intentionally not implemented.
 
@@ -55,7 +56,7 @@ Payload types and import map can be regenerated using `npm run generate:types` a
 - `Media`: file and alt text.
 - `shared.customers`: UUID, name (person or organization), email, phone, source and creation time. This is independent of staff and is not a Payload auth collection.
 
-Fields are intentionally minimal and should be reviewed before adding real content or implementing forms. No Article, TechnicalNote or CaseStudy collections are included at this stage. Actual customer/lead handling, validations, retention and permissions require further design before public use.
+Fields are intentionally minimal and were approved by the owner; form validation and handling still require implementation and review. No Article, TechnicalNote or CaseStudy collections are included at this stage. Actual customer/lead handling, validations, retention and permissions require further design before public use.
 
 ## Security and deployment status
 

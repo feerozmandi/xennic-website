@@ -30,3 +30,49 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      COMPOSE_PROJECT_NAME: xennic-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_USER: xennic_ci
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_DB: xennic_ci
+      DATABASE_URL: postgresql://xennic_ci:ci-only-password@127.0.0.1:5432/xennic_ci
+      PAYLOAD_SECRET: ci-only-placeholder-not-a-production-secret
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Write test-only environment
+        run: |
+          printf 'POSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDATABASE_URL=%s\nPAYLOAD_SECRET=%s\n' \
+            "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB" "$DATABASE_URL" "$PAYLOAD_SECRET" > .env
+      - name: Start and wait for healthy Compose services
+        run: docker compose up -d --wait --wait-timeout 120
+      - name: Initialize schemas
+        run: npm run db:init
+      - name: Seed approved content
+        run: npm run seed
+      - name: Start development server
+        run: |
+          npm run dev -- --hostname 127.0.0.1 > "$RUNNER_TEMP/xennic-next.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/xennic-next.pid"
+          node scripts/wait-for-server.mjs
+      - name: Run smoke tests
+        run: npm run test:smoke
+      - name: Show server log on failure
+        if: failure()
+        run: test ! -f "$RUNNER_TEMP/xennic-next.log" || cat "$RUNNER_TEMP/xennic-next.log"
+      - name: Stop server and Compose
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/xennic-next.pid"; then kill "$(cat "$RUNNER_TEMP/xennic-next.pid")" || true; fi
+          docker compose down --volumes --remove-orphans
