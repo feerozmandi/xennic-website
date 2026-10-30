@@ -22,6 +22,7 @@
 | بررسی کد adapter و CLI بسته‌های قفل‌شده | ۲۰۲۶-۱۰-۳۰، Node 22 و Payload/Postgres adapter 3.91.0 | schema push در production به‌صورت پیش‌فرض اجرا نمی‌شود و فرمان‌های migration موجودند؛ migration تولیدی پروژه و کارکرد آن هنوز آزموده نشده است |
 | typecheck، lint، `test:compat` و بررسی لینک‌های مستندات | ۲۰۲۶-۱۰-۳۰، Sandbox | موفق؛ آزمون production نیست |
 | `npm audit --omit=dev` | ۲۰۲۶-۱۰-۳۰، Sandbox | صفر critical/high، پنج moderate و هفت low؛ نتیجه وابسته به زمان است |
+| GitHub Actions | ۲۰۲۶-۱۰-۳۰، [اجرای 41087814542](https://github.com/feerozmandi/xennic-website/actions/runs/41087814542) برای کامیت `134b438` | هر دو job موفق؛ Compose با dev server است و آزمون بستهٔ production نیست |
 | آزمون بستهٔ production | ۲۰۲۶-۱۰-۳۰ | انجام نشده: بسته هنوز ساخته نشده و تصمیم‌های زیرساخت بازند؛ موفقیت CI فعلی به‌معنای آزمون production نیست |
 | وضعیت VPS و DNS | ۲۰۲۶-۱۰-۳۰ | بدون اتصال یا تغییر؛ داده‌های Vault تاریخی‌اند و وضعیت فعلی از دستیار زیرساخت درخواست می‌شود |
 
