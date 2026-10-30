@@ -76,6 +76,6 @@ export const LeadSubmissions: CollectionConfig = {
 }
 
 export const Media: CollectionConfig = {
-  slug: 'media', access: publicContentAccess, upload: true,
+  slug: 'media', access: publicContentAccess, upload: { staticDir: process.env.MEDIA_DIR || 'media' },
   fields: [{ name: 'alt', type: 'text', required: true }],
 }
