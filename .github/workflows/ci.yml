@@ -78,3 +78,23 @@ jobs:
         run: |
           if test -f "$RUNNER_TEMP/xennic-next.pid"; then kill "$(cat "$RUNNER_TEMP/xennic-next.pid")" || true; fi
           docker compose down --volumes --remove-orphans
+
+  production-preview:
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: xennic-preview-ci
+      PREVIEW_POSTGRES_DB: preview_ci
+      PREVIEW_POSTGRES_USER: preview_ci
+      PREVIEW_POSTGRES_PASSWORD: ci-only-preview-password
+      PREVIEW_DATABASE_URL: postgresql://preview_ci:ci-only-preview-password@postgres:5432/preview_ci
+      PREVIEW_PAYLOAD_SECRET: ci-only-preview-secret-not-for-real-use
+      PREVIEW_PORT: '3000'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build and test isolated production preview
+        run: bash scripts/ci-preview.sh

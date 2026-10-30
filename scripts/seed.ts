@@ -113,4 +113,4 @@ async function main() {
 }
 
 // Payload's PostgreSQL adapter retains a client; explicitly exit after completed writes.
-main().then(() => process.exit(0)).catch((error: unknown) => { console.error('Seed failed:', error); process.exit(1) })
+main().then(() => process.exit(0)).catch(() => { console.error('Seed failed; inspect locally with redaction.'); process.exit(1) })

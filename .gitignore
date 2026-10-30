@@ -19,3 +19,5 @@ private-fonts/
 *.[tT][tT][fF]
 *.[oO][tT][fF]
 *.[eE][oO][tT]
+
+!.env.preview.example

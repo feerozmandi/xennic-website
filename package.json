@@ -17,7 +17,9 @@
     "generate:types": "node --env-file=.env ./node_modules/payload/bin.js generate:types",
     "test:smoke": "node --test tests/smoke.mjs",
     "test:compat": "node --test tests/dependency-compat.mjs",
-    "seed": "node --env-file=.env --import=tsx scripts/seed.ts"
+    "seed": "node --env-file=.env --import=tsx scripts/seed.ts",
+    "preview:migrate": "node scripts/preview-task.mjs migrate",
+    "preview:seed": "node scripts/preview-task.mjs seed"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.91.0",

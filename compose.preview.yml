@@ -1,0 +1,35 @@
+# Isolated test stack only. Not an approved VPS deployment or proxy configuration.
+name: xennic-preview-test
+services:
+  postgres:
+    image: postgres:16.14-bookworm
+    environment:
+      POSTGRES_DB: ${PREVIEW_POSTGRES_DB:?required}
+      POSTGRES_USER: ${PREVIEW_POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${PREVIEW_POSTGRES_PASSWORD:?required}
+    volumes:
+      - preview_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    mem_limit: 256m
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.preview
+    environment:
+      DATABASE_URL: ${PREVIEW_DATABASE_URL:?required}
+      PAYLOAD_SECRET: ${PREVIEW_PAYLOAD_SECRET:?required}
+    ports:
+      - "127.0.0.1:${PREVIEW_PORT:-3000}:3000"
+    volumes:
+      - preview_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 512m
+volumes:
+  preview_db:
+  preview_media:
