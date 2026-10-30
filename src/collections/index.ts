@@ -2,6 +2,7 @@ import type { Access, CollectionConfig } from 'payload'
 
 const staffOnly: Access = ({ req: { user } }) => Boolean(user)
 const access = { create: staffOnly, read: staffOnly, update: staffOnly, delete: staffOnly }
+const publicContentAccess = { ...access, read: () => true }
 
 export const Staff: CollectionConfig = {
   slug: 'staff',
@@ -12,16 +13,7 @@ export const Staff: CollectionConfig = {
 }
 
 export const Pages: CollectionConfig = {
-  slug: 'pages', access, admin: { useAsTitle: 'title' },
-  fields: [
-    { name: 'title', type: 'text', required: true },
-    { name: 'slug', type: 'text', required: true, unique: true },
-    { name: 'content', type: 'richText' },
-  ],
-}
-
-export const Services: CollectionConfig = {
-  slug: 'services', access, admin: { useAsTitle: 'title' },
+  slug: 'pages', access: publicContentAccess, admin: { useAsTitle: 'title' },
   fields: [
     { name: 'title', type: 'text', required: true },
     { name: 'slug', type: 'text', required: true, unique: true },
@@ -30,8 +22,20 @@ export const Services: CollectionConfig = {
   ],
 }
 
+export const Services: CollectionConfig = {
+  slug: 'services', access: publicContentAccess, admin: { useAsTitle: 'title' },
+  fields: [
+    { name: 'title', type: 'text', required: true },
+    { name: 'slug', type: 'text', required: true, unique: true },
+    { name: 'summary', type: 'textarea' },
+    { name: 'content', type: 'richText' },
+    { name: 'cta', type: 'text' },
+    { name: 'comingSoon', type: 'checkbox', defaultValue: false },
+  ],
+}
+
 export const TrackRecordItems: CollectionConfig = {
-  slug: 'track-record-items', access, admin: { useAsTitle: 'title' },
+  slug: 'track-record-items', access: publicContentAccess, admin: { useAsTitle: 'title' },
   fields: [
     { name: 'title', type: 'text', required: true },
     { name: 'role', type: 'text' },
@@ -40,7 +44,7 @@ export const TrackRecordItems: CollectionConfig = {
 }
 
 export const TeamMembers: CollectionConfig = {
-  slug: 'team-members', access, admin: { useAsTitle: 'name' },
+  slug: 'team-members', access: publicContentAccess, admin: { useAsTitle: 'name' },
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'role', type: 'text' },
@@ -49,7 +53,7 @@ export const TeamMembers: CollectionConfig = {
 }
 
 export const FAQs: CollectionConfig = {
-  slug: 'faqs', access, admin: { useAsTitle: 'question' },
+  slug: 'faqs', access: publicContentAccess, admin: { useAsTitle: 'question' },
   fields: [
     { name: 'question', type: 'text', required: true },
     { name: 'answer', type: 'textarea', required: true },
@@ -72,6 +76,6 @@ export const LeadSubmissions: CollectionConfig = {
 }
 
 export const Media: CollectionConfig = {
-  slug: 'media', access, upload: true,
+  slug: 'media', access: publicContentAccess, upload: true,
   fields: [{ name: 'alt', type: 'text', required: true }],
 }
