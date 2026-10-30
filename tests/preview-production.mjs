@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import { test } from 'node:test'
 
@@ -34,11 +35,22 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     assert.notEqual(r.status, 200, 'second first-register denied')
     r = await request('/api/staff/login', { method: 'POST', headers: json, body: JSON.stringify({ email, password }) })
     assert.equal(r.status, 200, 'staff login')
-    const cookie = r.headers.get('set-cookie')?.split(';')[0]
+    const cookieHeader = r.headers.get('set-cookie') || ''
+    assert.match(cookieHeader, /HttpOnly/i)
+    assert.match(cookieHeader, /SameSite=Lax/i)
+    // Characterize current preview config: HTTPS Secure is not enabled yet.
+    assert.doesNotMatch(cookieHeader, /(?:^|;)\s*Secure(?:;|$)/i)
+    const cookie = cookieHeader.split(';')[0]
     const { token } = await r.json()
     assert.ok(cookie && token, 'session cookie and token')
     r = await request('/admin', { headers: { Cookie: cookie } })
     assert.equal(r.status, 200, 'admin with cookie')
+    // Characterization, not an endorsement: empty Payload CSRF list accepts
+    // cookie requests even when the Origin is not the approved preview origin.
+    r = await request('/api/staff/me', { headers: { Cookie: cookie, Origin: 'https://untrusted.example.invalid' } })
+    assert.equal((await r.json()).user.email, email, 'empty CSRF allowlist currently accepts foreign Origin')
+    r = await request('/api/staff/me', { headers: { Cookie: cookie, Origin: 'https://preview.xennic.ir' } })
+    assert.equal((await r.json()).user.email, email, 'preview Origin cookie behavior')
     r = await request('/api/staff/me', { headers: { Authorization: `Bearer ${token}` } })
     assert.equal(r.status, 200, 'Payload Bearer header survives proxy')
     assert.equal((await r.json()).user.email, email)
@@ -77,6 +89,11 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     assert.ok(media.doc?.url)
     r = await request(media.doc.url)
     assert.equal(r.status, 200, 'media retrieval behind proxy')
+    const imageHash = createHash('sha256').update(Buffer.from(await r.arrayBuffer())).digest('hex')
+    if (process.env.RESTORE_FIXTURE_PATH) {
+      // CI-only synthetic values; never printed or uploaded as artifacts.
+      await writeFile(process.env.RESTORE_FIXTURE_PATH, JSON.stringify({ email, password, token, cookie, mediaUrl: media.doc.url, imageHash }), { mode: 0o600 })
+    }
     r = await request('/health')
     assert.equal(r.status, 200)
     assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow')

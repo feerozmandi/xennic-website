@@ -2,8 +2,10 @@
 set -euo pipefail
 compose=(docker compose -f compose.preview.yml)
 metrics="${RUNNER_TEMP:-/tmp}/preview-resource-measurements.txt"
+export RESTORE_FIXTURE_PATH="$(mktemp "${RUNNER_TEMP:-/tmp}/preview-fixture.XXXXXX")"
+chmod 600 "$RESTORE_FIXTURE_PATH"
 : > "$metrics"
-cleanup() { "${compose[@]}" down --volumes --remove-orphans; }
+cleanup() { "${compose[@]}" down --volumes --remove-orphans; rm -f "$RESTORE_FIXTURE_PATH"; }
 trap cleanup EXIT
 printf '\n--- Build (off VPS) ---\n'
 python3 scripts/measure-preview-build.py | tee -a "$metrics"
@@ -46,4 +48,6 @@ node - <<'NODE'
 (async()=>{const r=await fetch('http://127.0.0.1:3000/api/media');const j=await r.json();if(!j.docs?.[0]?.url)throw Error('media missing after restart');const f=await fetch('http://127.0.0.1:3000'+j.docs[0].url);if(!f.ok)throw Error('file missing after restart');console.log('PASS: media persists after app restart')})().catch(e=>{console.error(e.message);process.exit(1)})
 NODE
 
+node tests/log-security.mjs
+bash scripts/ci-restore.sh
 python3 scripts/summarize-preview-metrics.py "$metrics"
