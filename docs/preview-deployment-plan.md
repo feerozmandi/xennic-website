@@ -10,7 +10,9 @@
 - فازهای زیرساخت `۰/A` و وضعیت واقعی Caddy/TLS و محدودیت‌های دسترسی باید از دستیار زیرساخت تأیید شوند. مجوز مقصد پیش‌نمایش به‌تنهایی اثبات آمادگی یا اجازهٔ اجرای فعلی روی سرور نیست.
 - فرم، اتصال n8n/CRM، تحلیل‌گر، خرید فونت و انتشار عمومی خارج از محدوده‌اند. هیچ دادهٔ واقعی مشتری یا محتوای عملیاتی نباید به محیط آزمایش کپی شود.
 
-## طرح فنی برای بررسی، نه نسخهٔ نهایی
+## طرح اولیه برای بررسی، نه نسخهٔ نهایی
+
+این بخش عکس وضعیت اولیه است؛ پیشرفت‌ها و اصلاحیهٔ این نشست در انتهای سند بر ادعاهای تاریخی مقدم‌اند.
 
 1. **اثر قابل‌تکرار:** ایمیج نسخه‌گذاری‌شدهٔ Next.js/Payload با نصب وابستگی پین‌شده، `npm run build` در مرحلهٔ build و `npm run start` در زمان اجرا؛ پیشنهاد Docker Compose مستقل با سرویس برنامه و PostgreSQL 16 مستقل. ساخت ایمیج ترجیحاً خارج VPS انجام شود تا build و cache، منابع پشتهٔ عملیاتی را مصرف نکنند؛ مسیر انتقال یا registry و سازگاری معماری CPU نیاز به تأیید دارد.
 2. **ایزوله‌سازی:** project name، سرویس‌ها، شبکه، PostgreSQL، credential، volume دیتابیس و volume آپلود جدا و مختص staging باشند؛ نام‌ها پس از دریافت inventory انتخاب و عدم برخورد بررسی شود. PostgreSQL هیچ پورت عمومی نداشته باشد؛ برنامه نیز قابل‌دورزدن از لایهٔ حفاظت نباشد. شبکهٔ خصوصی staging نباید به شبکه یا پایگاه‌دادهٔ n8n متصل شود. فقط نحوهٔ ارتباط Caddy با برنامه پس از مشخص‌شدن محل اجرای Caddy تعیین می‌شود.
@@ -86,3 +88,21 @@ CI فعلی فقط build و smoke با **dev server** را پوشش می‌ده�
 - `tests/preview-production.mjs` یک proxy شبیه‌سازی‌شدهٔ فقط محلی با اعتبار جداگانه است، نه راهکار امنیتی نهایی. Basic Auth و Payload Bearer هر دو از هدر `Authorization` استفاده می‌کنند؛ با یک هدر نمی‌توان هر دو را هم‌زمان حمل کرد. آزمون ورود Staff، کوکی، API دارای Bearer و media از proxy آزمایشی می‌گذرد؛ طراحی نهایی TLS/auth، جلوگیری از bypass و همهٔ مسیرها همچنان نیاز به آزمون در زیرساخت نهایی دارند.
 - healthcheck با اتصال DB روی `/health` است؛ هدر noindex در build پیش‌نمایش تنظیم می‌شود، نه جایگزین کنترل دسترسی. retention/backup و تست restore واقعی و حذف Secret از تمامی لاگ‌های upstream هنوز به بازبینی نیاز دارند.
 - `production-preview` در CI Docker build و start واقعی و Postgres جدا را اجرا می‌کند؛ گزارش خروجی و اندازه‌گیری واقعی در گزارش این نشست ثبت می‌شود. اعداد Docker/runner تخمین بار VPS نیستند؛ build memory فقط به‌صورت تغییر RAM آزاد کل runner، نه حداکثر RAM فرایند build، نمونه‌برداری می‌شود.
+
+### اجرای نمونه در محیط مجزای آزمایش
+
+دستورات زیر فقط برای محیط آزمایش محلی/CI، پس از تهیهٔ فایل خصوصی و تأیید نام project/volume، هستند؛ نه راهنمای اتصال سرور. از خروجی `docker compose config` با متغیرهای واقعی در گفتگو و لاگ خودداری شود.
+
+```sh
+docker compose --env-file /path/to/private-preview.env -f compose.preview.yml build app
+docker compose --env-file /path/to/private-preview.env -f compose.preview.yml up -d --wait postgres
+docker compose --env-file /path/to/private-preview.env -f compose.preview.yml run --rm --no-deps app npm run preview:migrate
+docker compose --env-file /path/to/private-preview.env -f compose.preview.yml run --rm --no-deps app npm run preview:seed
+docker compose --env-file /path/to/private-preview.env -f compose.preview.yml up -d --wait app
+```
+
+سپس در همان محیطِ محدود اولین Staff ساخته و نمایش صفحه بررسی شود؛ قبل از انتشار هیچ URL یا پورتی باز نشود. این نمونه ابزار مدیریت امن، proxy یا TLS نهایی نیست. `docker compose down --volumes` داده را حذف می‌کند و صرفاً برای تست دورریختنی مجاز است.
+
+### وابستگی‌های خارجی
+
+build به npm registry و image registry برای Node نیاز دارد؛ PostgreSQL از image `postgres:16.14-bookworm` تأمین می‌شود. runtime به PostgreSQL شبکهٔ داخلی و volume media نیاز دارد؛ سرویس n8n/CRM، analytics، SMTP، فونت خارجی یا CDN در بسته پیکربندی نشده و ارسال ایمیل در preview قطع است. این بیان به‌معنای اعمال firewall egress نیست؛ عدم اتصال ناخواستهٔ نهایی و سیاست egress هنوز باید آزموده و تأیید شود.

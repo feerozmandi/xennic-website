@@ -20,6 +20,7 @@
 
 | مورد | نتیجهٔ ثبت‌شده | تاریخ و محیط |
 |---|---|---|
+| بستهٔ production آزمایشی | هر سه job در [اجرای 41092208169](https://github.com/feerozmandi/xennic-website/actions/runs/41092208169) برای `4aa3978` موفق؛ اعداد و محدودیت‌های نمونه‌برداری در [گزارش](reports/2026-10-30-production-preview-package.md) ثبت شده‌اند | ۲۰۲۶-۱۰-۳۰، GitHub Actions؛ نه VPS |
 | CI طرح پیش‌نمایش | هر دو job در [اجرای 41087814542](https://github.com/feerozmandi/xennic-website/actions/runs/41087814542) برای کامیت `134b438` موفق بودند؛ Compose از dev server استفاده می‌کند و آزمون production نیست | ۲۰۲۶-۱۰-۳۰، GitHub Actions |
 | پیش‌نمایش فعلی | در Sandbox فعلی، سرور و پایگاه‌دادهٔ پیش‌نمایش مراحل قبل یافت نشد؛ رکورد و نمایش متن به‌صورت دستی بررسی نشدند | ۲۰۲۶-۱۰-۳۰، Sandbox فعلی؛ در راه‌اندازی بعدی بررسی شود |
 | TypeScript، lint، build و smoke | موفق | ۲۰۲۶-۱۰-۲۹، Sandbox توسعه؛ smoke با سرور محلی و PostgreSQL موقت |

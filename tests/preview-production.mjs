@@ -44,6 +44,25 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     assert.equal((await r.json()).user.email, email)
     r = await request('/api/staff/me', { headers: { Authorization: 'Basic dGVzdDp0ZXN0' } })
     assert.equal((await r.json()).user, null, 'Basic credentials cannot also carry a Payload Bearer token')
+    // Explicitly exercise the conflict at a Basic-auth gate, not merely at Payload.
+    const basic = `Basic ${Buffer.from('preview:test-only').toString('base64')}`
+    const basicProxy = http.createServer((req, res) => {
+      if (req.headers.authorization !== basic) { res.writeHead(401); res.end(); return }
+      const forward = http.request({ hostname: upstream.hostname, port: upstream.port, path: req.url, method: req.method, headers: { ...req.headers, host: upstream.host } }, fromApp => {
+        res.writeHead(fromApp.statusCode, fromApp.headers); fromApp.pipe(res)
+      })
+      forward.on('error', () => { res.writeHead(502); res.end() })
+      req.pipe(forward)
+    })
+    await new Promise(resolve => basicProxy.listen(0, '127.0.0.1', resolve))
+    try {
+      const basicBase = `http://127.0.0.1:${basicProxy.address().port}`
+      let basicResponse = await fetch(`${basicBase}/api/staff/me`, { headers: { Authorization: `Bearer ${token}` } })
+      assert.equal(basicResponse.status, 401, 'Basic gate rejects Payload Bearer header')
+      basicResponse = await fetch(`${basicBase}/api/staff/me`, { headers: { Authorization: basic, Cookie: cookie } })
+      assert.equal(basicResponse.status, 200, 'Basic gate plus Payload cookie')
+      assert.equal((await basicResponse.json()).user.email, email)
+    } finally { await new Promise(resolve => basicProxy.close(resolve)) }
     r = await request('/api/pages?where[slug][equals]=track-record-intro', { headers: { Authorization: `Bearer ${token}` } })
     const page = (await r.json()).docs[0]
     assert.ok(page?.id)
