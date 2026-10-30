@@ -1,7 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
 - **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۰
-- **مبنای بررسی:** `dev` در کامیت `c4f6d7736cc0cd15140b82e306434b6fd74e97af`، به‌علاوهٔ تغییرات [تکمیل متن مصوب](reports/2026-10-30-approved-introductions.md)؛ وضعیت ادغام و آزمون تغییرات را در PR مربوط ببینید.
+- **مبنای بررسی:** `dev` در کامیت `c4f6d7736cc0cd15140b82e306434b6fd74e97af`، به‌علاوهٔ تغییرات [تکمیل متن مصوب](reports/2026-10-30-approved-introductions.md) در [PR شمارهٔ ۵](https://github.com/feerozmandi/xennic-website/pull/5)؛ وضعیت ادغام و آخرین آزمون را در PR ببینید.
 - **جمع‌بندی:** صفحات اصلیِ دارای متن مصوب به CMS متصل شده‌اند؛ فرم‌ها و استقرار عملیاتی هنوز آمادهٔ انتشار نیستند.
 
 ## تکمیل‌شده
@@ -14,7 +14,7 @@
 | پایگاه‌داده | تنظیم Compose برای PostgreSQL 16 و جدول مستقل `shared.customers` با فیلدهای مصوب؛ `Staff` از مشتری جدا است و رابط عمومی مشتری وجود ندارد |
 | گزارش‌دهی | راهنمای مدیرکل، وضعیت جاری و سوابق در `docs/`؛ [PR شمارهٔ ۲](https://github.com/feerozmandi/xennic-website/pull/2) |
 | امنیت فایل‌ها و فونت | `.env.example` بدون مقدار واقعی؛ قواعد نادیده‌گرفتن فایل‌های محیطی و فونت. تا خرید قانونی IRANSans، فونت سیستمی موقت استفاده می‌شود |
-| CI | Workflow برای هر PR شامل `npm ci`، typecheck، lint، `test:compat`، build و Job مستقل Compose است؛ نتیجهٔ تغییر اخیر در PR مربوط قابل بررسی است |
+| CI | Workflow برای هر PR شامل `npm ci`، typecheck، lint، `test:compat`، build و Job مستقل Compose است؛ [اجرای 41012496381](https://github.com/feerozmandi/xennic-website/actions/runs/41012496381) برای کامیت `b645187` موفق بود |
 
 ## آزمون‌ها و محدودیت‌های تأیید
 
@@ -25,7 +25,7 @@
 | PostgreSQL و جدول مشتریان | راه‌اندازی دوبارهٔ `db:init` موفق؛ سناریوهای جدول تازه، قدیمی خالی و حفظ دادهٔ ستون قدیمی در نشست پیشین آزموده شد | ۲۰۲۶-۱۰-۲۹، PostgreSQL 16 موقت؛ نه Docker |
 | اجرای Docker Compose | موفق: healthcheck، `db:init`، seed، smoke و پاک‌سازی در [اجرای 41005542372](https://github.com/feerozmandi/xennic-website/actions/runs/41005542372) برای کامیت `6119f0c` | ۲۰۲۶-۱۰-۳۰، GitHub Actions |
 | بررسی وابستگی‌های اجرایی | `npm audit --omit=dev`: صفر critical، صفر high، ۵ moderate و ۷ low؛ وابسته به زمان بررسی | ۲۰۲۶-۱۰-۲۹، پس از تغییر lockfile |
-| بررسی GitHub | PRهای ۱ و ۲ بدون check خودکار بودند؛ Workflow جدید برای PRها اضافه شده و نتیجه باید در PR آن بررسی شود | ۲۰۲۶-۱۰-۲۹ |
+| بررسی GitHub | هر دو Job بررسی‌ها و Compose در [اجرای 41012496381](https://github.com/feerozmandi/xennic-website/actions/runs/41012496381) برای کامیت `b645187` موفق بودند؛ گام `test:compat` نیز اجرا شد | ۲۰۲۶-۱۰-۳۰، GitHub Actions |
 
 ## کارهای باز و ریسک‌ها
 

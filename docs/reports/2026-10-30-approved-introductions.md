@@ -2,7 +2,7 @@
 
 - **تاریخ گزارش:** ۲۰۲۶-۱۰-۳۰
 - **مبنای بررسی:** `dev` وب‌سایت در کامیت `c4f6d7736cc0cd15140b82e306434b6fd74e97af`؛ `L2-MKT-004` نسخهٔ ۰.۲.۱ در `dev` Vault در کامیت `c51e087f206b235987987906c62ea4a0ed689967`.
-- **وضعیت تغییر:** وضعیت ادغام و نتیجهٔ CI را در PR مربوط بررسی کنید.
+- **وضعیت تغییر:** [PR شمارهٔ ۵](https://github.com/feerozmandi/xennic-website/pull/5)؛ وضعیت ادغام و آخرین اجرای CI در PR قابل بررسی است.
 
 ## خلاصهٔ مدیریتی
 
@@ -22,7 +22,7 @@
 | `npm run test:smoke` | ۲۰۲۶-۱۰-۳۰، سرور محلی و PostgreSQL 16 موقت | چهار آزمون موفق؛ شامل متن دقیق پیشینه و محدودیت محتوای بخش پلتفرم |
 | `npm run test:compat`, typecheck، lint و build | ۲۰۲۶-۱۰-۳۰، Sandbox محلی | موفق |
 | افزودن متن به پایگاه‌دادهٔ موجود | ۲۰۲۶-۱۰-۳۰، PostgreSQL 16 موقت | اجرای seed رکورد غایب را افزود؛ اجرای مجدد ویرایش آزمایشی را حفظ کرد و صفحهٔ اصلی آن را از CMS خواند |
-| GitHub Actions و Compose | ۲۰۲۶-۱۰-۳۰ | نتیجه و لینک اجرای این PR پس از اجرا در GitHub بررسی شود؛ آزمون محلی پایگاه‌داده معادل Compose نیست |
+| GitHub Actions و Compose | ۲۰۲۶-۱۰-۳۰، [اجرای 41012496381](https://github.com/feerozmandi/xennic-website/actions/runs/41012496381) برای کامیت `b645187` | هر دو Job موفق: `checks` شامل `test:compat` و `compose-smoke` شامل healthcheck، `db:init`، seed، smoke و پاک‌سازی |
 
 ## ریسک‌ها و کارهای باز
 
