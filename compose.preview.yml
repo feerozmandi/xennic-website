@@ -22,6 +22,7 @@ services:
     environment:
       DATABASE_URL: ${PREVIEW_DATABASE_URL:?required}
       PAYLOAD_SECRET: ${PREVIEW_PAYLOAD_SECRET:?required}
+      PREVIEW_ORIGIN: ${PREVIEW_ORIGIN:?required}
     ports:
       - "127.0.0.1:${PREVIEW_PORT:-3000}:3000"
     volumes:

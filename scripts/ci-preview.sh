@@ -45,7 +45,7 @@ NODE
 "${compose[@]}" restart app
 node scripts/wait-for-server.mjs
 node - <<'NODE'
-(async()=>{const r=await fetch('http://127.0.0.1:3000/api/media');const j=await r.json();if(!j.docs?.[0]?.url)throw Error('media missing after restart');const f=await fetch('http://127.0.0.1:3000'+j.docs[0].url);if(!f.ok)throw Error('file missing after restart');console.log('PASS: media persists after app restart')})().catch(e=>{console.error(e.message);process.exit(1)})
+(async()=>{const r=await fetch('http://127.0.0.1:3000/api/media');const j=await r.json();if(!j.docs?.[0]?.url)throw Error('media missing after restart');const u=new URL(j.docs[0].url,'https://preview.xennic.ir');if(u.origin!=='https://preview.xennic.ir')throw Error('unexpected media origin');const f=await fetch('http://127.0.0.1:3000'+u.pathname+u.search);if(!f.ok)throw Error('file missing after restart');console.log('PASS: media persists after app restart')})().catch(e=>{console.error(e.message);process.exit(1)})
 NODE
 
 node tests/log-security.mjs

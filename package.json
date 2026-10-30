@@ -19,7 +19,8 @@
     "test:compat": "node --test tests/dependency-compat.mjs",
     "seed": "node --env-file=.env --import=tsx scripts/seed.ts",
     "preview:migrate": "node scripts/preview-task.mjs migrate",
-    "preview:seed": "node scripts/preview-task.mjs seed"
+    "preview:seed": "node scripts/preview-task.mjs seed",
+    "test:preview-config": "node --import=tsx --test tests/preview-config.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.91.0",
