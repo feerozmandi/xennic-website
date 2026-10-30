@@ -2,7 +2,7 @@ import { getPayload } from 'payload'
 import config from '../src/payload.config'
 import type { Page, Service } from '../src/payload-types'
 
-// Verbatim public copy from L2-MKT-004 v0.2.0, Vault dev cd38e4b.
+// Verbatim public copy from L2-MKT-004 v0.2.1, Vault dev c51e087.
 // The five principles below are explicitly incorporated by reference to L2-MKT-002 §9.
 type Block = { heading: string; text: string }
 function richText(blocks: Block[]): NonNullable<Page['content']> {
@@ -19,6 +19,11 @@ function richText(blocks: Block[]): NonNullable<Page['content']> {
 
 const founder = 'احمد فیروزمندی — مهندس برق قدرت با نزدیک به ۴ دهه تجربهٔ عملی در صنعت برق ایران؛ متخصص شبکهٔ توزیع، خط گرم (Live Line)، دیسپاچینگ و طراحی تأسیسات برق صنعتی و ساختمانی. عضو سازمان نظام مهندسی استان قم. سابقهٔ فعالیت در قم، تهران، مازندران و اصفهان. در کنار تجربهٔ مهندسی، بنیان‌گذار و توسعه‌دهندهٔ فروشگاه آنلاین «سالنمای نو» (salenoo.ir) و فعال در حوزهٔ هوش مصنوعی و اتوماسیون فرایندها — همین پیشینه، پایهٔ تلفیق «مهندسی سنتی + فناوری هوشمند» را شکل داده که مأموریت Xennic بر آن استوار است.'
 const pages: Array<Pick<Page, 'title' | 'slug' | 'summary' | 'content'>> = [
+  {
+    slug: 'track-record-intro',
+    title: 'تجربهٔ مهندسی که می‌توان به آن اعتماد کرد',
+    summary: 'با تجربه و پیشینهٔ حرفه‌ای مؤسس Xennic در صنعت برق، پیش از تأسیس این مجموعه، آشنا شوید.',
+  },
   {
     slug: 'home', title: 'مهندسی انرژی برای تصمیم‌های دقیق‌تر و آینده‌ای هوشمندتر',
     summary: 'زر نور نیرو یکتا در حوزهٔ مهندسی برق، انرژی و انرژی‌های تجدیدپذیر، راهکارهای مهندسی، مشاوره و تحلیل تخصصی ارائه می‌دهد؛ با تکیه بر دانش مهندسی و فناوری‌های نوین.',

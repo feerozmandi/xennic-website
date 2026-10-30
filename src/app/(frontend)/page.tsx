@@ -6,7 +6,7 @@ import { getPage, getServices } from '@/lib/content'
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  const [page, services] = await Promise.all([getPage('home'), getServices()])
+  const [page, services, trackRecordIntro] = await Promise.all([getPage('home'), getServices(), getPage('track-record-intro')])
   if (!page) notFound()
   return <>
     <section className="hero"><div className="container hero-content">
@@ -15,7 +15,7 @@ export default async function Home() {
     </div></section>
     <section className="container page-section"><h2>چرا Xennic؟</h2><DocumentContent content={page.content} /></section>
     <section className="surface-muted"><div className="container page-section"><h2>خدمات راهبردی</h2><ServiceCards services={services} /></div></section>
-    <section className="container page-section"><h2>تجربهٔ مهندسی که می‌توان به آن اعتماد کرد</h2><Link href="/track-record">مشاهدهٔ پیشینهٔ مهندسی</Link></section>
-    <section className="container page-section"><h2>Xennic Platform</h2><span className="badge">به‌زودی</span></section>
+    <section className="container page-section" data-testid="track-record-intro"><h2>تجربهٔ مهندسی که می‌توان به آن اعتماد کرد</h2>{trackRecordIntro?.summary && <p>{trackRecordIntro.summary}</p>}<Link href="/track-record">مشاهدهٔ پیشینهٔ مهندسی</Link></section>
+    <section className="container page-section" data-testid="platform-intro"><h2>Xennic Platform</h2><span className="badge">به‌زودی</span></section>
   </>
 }
