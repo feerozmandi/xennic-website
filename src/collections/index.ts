@@ -1,4 +1,5 @@
-import type { Access, CollectionConfig } from 'payload'
+import { APIError, type Access, type CollectionConfig } from 'payload'
+import { previewLoginAllowed } from '../lib/preview-security'
 
 const staffOnly: Access = ({ req: { user } }) => Boolean(user)
 const access = { create: staffOnly, read: staffOnly, update: staffOnly, delete: staffOnly }
@@ -6,7 +7,11 @@ const publicContentAccess = { ...access, read: () => true }
 
 export const Staff: CollectionConfig = {
   slug: 'staff',
-  auth: true,
+  // The preview HTTPS session is host-only, HttpOnly (Payload), and scoped to '/'.
+  auth: process.env.XENNIC_PREVIEW === '1' ? { cookies: { secure: true, sameSite: 'Lax' } } : true,
+  ...(process.env.XENNIC_PREVIEW === '1' ? { hooks: { beforeLogin: [({ req }) => {
+    if (!previewLoginAllowed(req.headers)) throw new APIError('Untrusted login origin', 403)
+  }] } } : {}),
   admin: { useAsTitle: 'email' },
   access,
   fields: [{ name: 'name', type: 'text', required: true }],

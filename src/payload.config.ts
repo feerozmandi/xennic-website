@@ -4,12 +4,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildConfig } from 'payload'
 import sharp from 'sharp'
+import { previewOrigin } from './lib/preview-security'
 import { FAQs, LeadSubmissions, Media, Pages, Services, Staff, TeamMembers, TrackRecordItems } from './collections'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
+const origin = previewOrigin(process.env)
 
 export default buildConfig({
   admin: { user: Staff.slug, importMap: { baseDir: dirname } },
+  ...(origin ? { serverURL: origin, csrf: [origin], cors: [origin] } : {}),
   collections: [Staff, Pages, Services, TrackRecordItems, TeamMembers, FAQs, LeadSubmissions, Media],
   db: postgresAdapter({ pool: { connectionString: process.env.DATABASE_URL }, schemaName: 'website', disableCreateDatabase: true }),
   // Preview must not emit password reset links or other emails to console or a real provider.

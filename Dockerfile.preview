@@ -1,6 +1,6 @@
 FROM node:22.22.3-bookworm-slim AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1 XENNIC_PREVIEW=1
+ENV NEXT_TELEMETRY_DISABLED=1 XENNIC_PREVIEW=1 PREVIEW_ORIGIN=https://preview.xennic.ir
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
@@ -9,7 +9,7 @@ RUN DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build PAYLOAD_SECRET=bu
 
 FROM node:22.22.3-bookworm-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 XENNIC_PREVIEW=1 PORT=3000 MEDIA_DIR=/app/media
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 XENNIC_PREVIEW=1 PREVIEW_ORIGIN=https://preview.xennic.ir PORT=3000 MEDIA_DIR=/app/media
 COPY --from=build --chown=node:node /app /app
 RUN mkdir -p /app/media && chown node:node /app/media
 USER node
