@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ listener تشخیصی OAuth](reports/2026-10-31-oauth-listener-result.md) | خطای تکراری و نیاز به status بدون replay |
 | ۲۰۲۶-۱۰-۳۱ | [تأیید خطای callback و issuer آزمایشی](reports/2026-10-31-oauth-callback-confirmed.md) | نتیجهٔ گزارش‌شده و تشخیص غیرمحرمانه |
 | ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ راه‌اندازی مجدد lab OAuth](reports/2026-10-31-oauth-lab-restarted.md) | بررسی CA و مسیرهای بدون نشست؛ اعتبارسنجی نامشخص |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ lab متوقف‌شدهٔ OAuth](reports/2026-10-31-oauth-lab-restart.md) | گزارش سرویس‌های متوقف، حفظ CA و عمر مستقل از مرورگر |
