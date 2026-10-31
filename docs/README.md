@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ راه‌اندازی مجدد lab OAuth](reports/2026-10-31-oauth-lab-restarted.md) | بررسی CA و مسیرهای بدون نشست؛ اعتبارسنجی نامشخص |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ lab متوقف‌شدهٔ OAuth](reports/2026-10-31-oauth-lab-restart.md) | گزارش سرویس‌های متوقف، حفظ CA و عمر مستقل از مرورگر |
 | ۲۰۲۶-۱۰-۳۱ | [بررسی دسترسی Firefox به lab](reports/2026-10-31-oauth-browser-resolution.md) | خطای Server Not Found و تفکیک پروفایل و وضعیت lab |
 | ۲۰۲۶-۱۰-۳۱ | [تشخیص شکست callback واقعی](reports/2026-10-31-oauth-callback-diagnosis.md) | پیام عمومی مالک و تشخیص غیرمحرمانه |
