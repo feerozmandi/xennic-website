@@ -88,6 +88,14 @@ def prepare(env):
                 raise ClientError("unsafe SSH trust or identity file")
         except (OSError, ValueError) as exc:
             raise ClientError("missing or unsafe SSH trust or identity file") from exc
+    try:
+        private_key = Path(key).read_bytes()
+        if (len(private_key) > 16384 or
+                not private_key.startswith(b"-----BEGIN OPENSSH PRIVATE KEY-----\n") or
+                not private_key.rstrip().endswith(b"-----END OPENSSH PRIVATE KEY-----")):
+            raise ClientError("SSH deploy identity is missing or invalid")
+    except OSError as exc:
+        raise ClientError("SSH deploy identity is missing or invalid") from exc
     verify_known_host(known_hosts, env.get("PREVIEW_CONFIRMED_HOST_FINGERPRINT", ""))
     command = [
         "/usr/bin/ssh", "-F", "/dev/null", "-T", "-p", PORT,

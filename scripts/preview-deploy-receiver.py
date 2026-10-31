@@ -15,6 +15,11 @@ spec = importlib.util.spec_from_file_location(
 )
 manifest = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manifest)
+ready_spec = importlib.util.spec_from_file_location(
+    "preview_deploy_readiness", Path(__file__).with_name("preview-deploy-readiness.py")
+)
+readiness = importlib.util.module_from_spec(ready_spec)
+ready_spec.loader.exec_module(readiness)
 
 COMMAND = "xennic-preview-deploy"
 MAX_TOKEN_BYTES = 4096
@@ -48,10 +53,15 @@ def main():
     # Do not deploy it as the authorized_keys forced-command in its current form.
     import os
     try:
-        parse_request(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer.read(MAX_INPUT_BYTES + 1))
+        _, token = parse_request(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer.read(MAX_INPUT_BYTES + 1))
     except InvalidRequest:
         print("Invalid preview deployment request.", file=sys.stderr)
         return 2
+    try:
+        readiness.check(registry_token=token)
+    except readiness.NotReady as exc:
+        print(f"Preview deployment blocked: {exc}.", file=sys.stderr)
+        return 1
     print("Preview deployment receiver is not enabled.", file=sys.stderr)
     return 1
 

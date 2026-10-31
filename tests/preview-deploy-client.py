@@ -27,6 +27,7 @@ class ClientTest(unittest.TestCase):
         self.key = Path(self.tmp.name) / "key"
         self.hosts = Path(self.tmp.name) / "known_hosts"
         self.key.touch(mode=0o600)
+        self.key.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic\n-----END OPENSSH PRIVATE KEY-----\n")
         self.hosts.touch(mode=0o600)
         algorithm = b"ssh-ed25519"
         blob = struct.pack(">I", len(algorithm)) + algorithm + struct.pack(">I", 32) + b"x" * 32
@@ -82,6 +83,12 @@ class ClientTest(unittest.TestCase):
                 with self.assertRaises(client.ClientError):
                     client.prepare(self.env)
 
+    def test_empty_or_invalid_identity_never_accepted(self):
+        for value in ("", "not-a-key"):
+            self.key.write_text(value)
+            with self.assertRaises(client.ClientError):
+                client.prepare(self.env)
+
     def test_rejects_publicly_readable_files_and_symlinks(self):
         self.key.chmod(0o644)
         with self.assertRaises(client.ClientError):
@@ -104,6 +111,15 @@ class ClientTest(unittest.TestCase):
         self.assertEqual(kwargs["stdout"], client.subprocess.DEVNULL)
         self.assertEqual(kwargs["stderr"], client.subprocess.DEVNULL)
         self.assertNotIn(self.env["PREVIEW_GHCR_TOKEN"], stdout.getvalue() + stderr.getvalue())
+
+    @mock.patch.object(client.subprocess, "run")
+    def test_missing_fingerprint_never_starts_ssh(self, run):
+        env = dict(self.env, PREVIEW_CONFIRMED_HOST_FINGERPRINT="")
+        stderr = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(stderr):
+            self.assertEqual(client.main(), 1)
+        self.assertIn("fingerprint", stderr.getvalue())
+        run.assert_not_called()
 
     @mock.patch.object(client.subprocess, "run")
     def test_invalid_input_never_starts_ssh(self, run):

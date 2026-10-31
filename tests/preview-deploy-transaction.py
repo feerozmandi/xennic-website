@@ -61,6 +61,9 @@ class Operations:
     def mark_healthy(self, r):
         self.step("mark_healthy")
         self.state["blocked"] = False
+    def ensure_blocked(self, r):
+        self.step("ensure_blocked")
+        self.state["blocked"] = True
     def rollback_previous(self): self.step("rollback")
     def verify_previous_health(self): self.step("previous_health")
 
@@ -126,9 +129,21 @@ class TransactionTest(unittest.TestCase):
                     ops = Operations(fail=failure, rollback_safe=safe)
                     with self.assertRaises(tx.DeploymentFailed): tx.deploy(release(), ops)
                     self.assertTrue(ops.state["blocked"])
+                    self.assertIn("ensure_blocked", ops.events)
                     self.assertEqual("rollback" in ops.events, safe)
+                    if safe:
+                        self.assertLess(ops.events.index("ensure_blocked"), ops.events.index("rollback"))
                     self.assertEqual("previous_health" in ops.events, safe)
                     self.assertEqual(ops.events[-1], "unlock")
+
+    def test_uncertain_journal_never_attempts_rollback(self):
+        class BrokenJournal(Operations):
+            def verify_health(self, r): raise RuntimeError("health failed")
+            def ensure_blocked(self, r): raise RuntimeError("journal unavailable")
+        ops = BrokenJournal()
+        with self.assertRaises(tx.DeploymentFailed) as exc: tx.deploy(release(), ops)
+        self.assertIn("state uncertain", str(exc.exception))
+        self.assertNotIn("rollback", ops.events)
 
     def test_failed_rollback_stays_blocked(self):
         class BadRollback(Operations):

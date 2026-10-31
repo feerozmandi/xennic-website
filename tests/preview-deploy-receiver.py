@@ -43,6 +43,7 @@ class ReceiverTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             key, hosts = Path(directory) / "key", Path(directory) / "known_hosts"
             key.touch(mode=0o600)
+            key.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic\n-----END OPENSSH PRIVATE KEY-----\n")
             hosts.touch(mode=0o600)
             algorithm = b"ssh-ed25519"
             blob = struct.pack(">I", len(algorithm)) + algorithm + struct.pack(">I", 32) + b"x" * 32
@@ -84,7 +85,7 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout, b"")
         self.assertNotIn(b"synthetic-only-token", proc.stderr)
-        self.assertIn(b"not enabled", proc.stderr)
+        self.assertTrue(b"blocked" in proc.stderr or b"not enabled" in proc.stderr)
         proc = subprocess.run([sys.executable, script], input=request(token=b"bad token"), env=env, capture_output=True)
         self.assertEqual(proc.returncode, 2)
         self.assertNotIn(b"bad token", proc.stderr)
