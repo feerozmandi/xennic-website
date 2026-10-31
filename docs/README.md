@@ -20,6 +20,30 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ سلامت و بازگشت پیش‌نمایش](reports/2026-10-31-deploy-health-rollback.md) | سلامت داخلی، منطق تراکنش و محدودیت‌ها |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ پروتکل و قفل استقرار](reports/2026-10-31-deploy-protocol-lock.md) | receiver غیرفعال و آزمون قفل انحصاری |
+| ۲۰۲۶-۱۰-۳۱ | [آماده‌سازی client استقرار SSH](reports/2026-10-31-ssh-deploy-client.md) | انتقال ورودی اعتبارسنجی‌شده و موانع |
+| ۲۰۲۶-۱۰-۳۱ | [پیش‌پرواز VPS و manifest](reports/2026-10-31-vps-inventory-and-manifest.md) | گزارش مالک و اعتبارسنجی ورودی deploy |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ تحویل پیش‌نمایش](reports/2026-10-31-preview-delivery-continuation.md) | مسئولیت یکپارچه، آزمون digest و پیش‌نیازهای باز |
+| ۲۰۲۶-۱۰-۳۱ | [طرح پیش‌نمایش اینترنتی و استقرار خودکار](reports/2026-10-31-internet-preview-delivery-plan.md) | تصمیم‌های جدید، workflow ایمیج و هماهنگی زیرساخت |
+| ۲۰۲۶-۱۰-۳۱ | [گزارش نهایی مدیرکل](reports/2026-10-31-executive-decision.md) | شواهد، ریسک‌ها و تصمیم‌های باز |
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ تنظیم read:org محلی](reports/2026-10-31-read-org-local-result.md) | نتیجهٔ گزارش‌شدهٔ مالک و انتظار برای consent |
+| ۲۰۲۶-۱۰-۳۱ | [تأیید محدود read:org محلی](reports/2026-10-31-read-org-local-approval.md) | مجوز App مستقل، کنترل هویت و rollback |
+| ۲۰۲۶-۱۰-۳۱ | [خطای 403 در غنی‌سازی OAuth](reports/2026-10-31-oauth-enrichment-403.md) | تشخیص مرحله، محدودیت شواهد و دامنهٔ احتمالی read:org |
+| ۲۰۲۶-۱۰-۳۱ | [HTTP 500 و self-test تشخیصی OAuth](reports/2026-10-31-oauth-callback-500.md) | status گزارش‌شده و کنترل مسیر مشاهدهٔ خطا |
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ listener تشخیصی OAuth](reports/2026-10-31-oauth-listener-result.md) | خطای تکراری و نیاز به status بدون replay |
+| ۲۰۲۶-۱۰-۳۱ | [تأیید خطای callback و issuer آزمایشی](reports/2026-10-31-oauth-callback-confirmed.md) | نتیجهٔ گزارش‌شده و تشخیص غیرمحرمانه |
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ راه‌اندازی مجدد lab OAuth](reports/2026-10-31-oauth-lab-restarted.md) | بررسی CA و مسیرهای بدون نشست؛ اعتبارسنجی نامشخص |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ lab متوقف‌شدهٔ OAuth](reports/2026-10-31-oauth-lab-restart.md) | گزارش سرویس‌های متوقف، حفظ CA و عمر مستقل از مرورگر |
+| ۲۰۲۶-۱۰-۳۱ | [بررسی دسترسی Firefox به lab](reports/2026-10-31-oauth-browser-resolution.md) | خطای Server Not Found و تفکیک پروفایل و وضعیت lab |
+| ۲۰۲۶-۱۰-۳۱ | [تشخیص شکست callback واقعی](reports/2026-10-31-oauth-callback-diagnosis.md) | پیام عمومی مالک و تشخیص غیرمحرمانه |
+| ۲۰۲۶-۱۰-۳۱ | [اصلاح prompt و ادامهٔ lab واقعی](reports/2026-10-31-real-oauth-resume.md) | نتیجهٔ مالک، تست PTY و ادامه بدون migration و seed |
+| ۲۰۲۶-۱۰-۳۱ | [تحویل lab مستقل OAuth واقعی](reports/2026-10-31-real-oauth-local-lab.md) | پیش‌نیازهای مالک، طراحی ایزوله و حدود آزمون |
+| ۲۰۲۶-۱۰-۳۱ | [ثبت App آزمایشی OAuth](reports/2026-10-31-oauth-app-registered.md) | تأیید مالک و پیش‌نیازهای مرورگر و egress |
+| ۲۰۲۶-۱۰-۳۱ | [آماده‌سازی OAuth واقعی محلی](reports/2026-10-31-real-oauth-preparation.md) | تأیید App آزمایشی مستقل و پیش‌نیازهای باز |
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ آزمایش gate مصنوعی](reports/2026-10-31-synthetic-preview-test-result.md) | نتیجهٔ گزارش‌شدهٔ مالک، محدودیت‌ها و پیش‌نیاز OAuth واقعی |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ آزمایش ایزوله بدون پورت میزبان](reports/2026-10-31-isolated-preview-resume.md) | بررسی توقف Docker و ادامه با شبکهٔ داخلی |
+| ۲۰۲۶-۱۰-۳۱ | [تحویل اسکریپت آزمایش ایزوله](reports/2026-10-31-isolated-preview-handoff.md) | مسیر دریافت، پیش‌نیازها و محدودیت‌های آزمون gate مصنوعی |
 | ۲۰۲۶-۱۰-۳۰ | [محدودسازی origin و کوکی پیش‌نمایش](reports/2026-10-30-preview-origin-cookie-hardening.md) | اصلاح‌های مستقل از proxy، آزمون‌های محلی و ریسک‌های باقی‌مانده |
 | ۲۰۲۶-۱۰-۳۰ | [بررسی بازیابی و امنیت پیش‌نمایش](reports/2026-10-30-preview-recovery-security.md) | بازیابی آزمایشی DB/media، بررسی CSRF و کوکی، لاگ و الزامات زیرساخت |
 | ۲۰۲۶-۱۰-۳۰ | [بستهٔ آزمایشی production](reports/2026-10-30-production-preview-package.md) | migration، ایمیج، seed، آزمون و ریسک‌های استقرار |

@@ -1,7 +1,10 @@
-name: PR checks
+name: Website checks and preview image
 
 on:
   pull_request:
+  push:
+    branches:
+      - dev
 
 permissions:
   contents: read
@@ -32,6 +35,14 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
+      - name: Deployment protocol tests
+        run: |
+          python3 tests/preview-deploy-manifest.py
+          python3 tests/preview-deploy-client.py
+          python3 tests/preview-deploy-receiver.py
+          python3 tests/preview-deploy-lock.py
+          python3 tests/preview-deploy-transaction.py
+          python3 tests/preview-internal-health.py
       - name: Build
         run: npm run build
 
@@ -101,3 +112,69 @@ jobs:
       - run: npm ci
       - name: Build and test isolated production preview
         run: bash scripts/ci-preview.sh
+
+  publish-preview-image:
+    # No package write permission or registry login is given to PR runs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: [checks, compose-smoke, production-preview]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Compute image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish the commit image
+        id: publish
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile.preview
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+      - name: Set up Node.js for the published-image test
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install test dependencies
+        run: npm ci
+      - name: Test the published digest without rebuilding
+        env:
+          COMPOSE_PROJECT_NAME: xennic-preview-ci
+          PREVIEW_POSTGRES_DB: preview_ci
+          PREVIEW_POSTGRES_USER: preview_ci
+          PREVIEW_POSTGRES_PASSWORD: ci-only-preview-password
+          PREVIEW_DATABASE_URL: postgresql://preview_ci:ci-only-preview-password@postgres:5432/preview_ci
+          PREVIEW_PAYLOAD_SECRET: ci-only-preview-secret-not-for-real-use
+          PREVIEW_PORT: '3000'
+          PREVIEW_ORIGIN: https://preview.xennic.ir
+          PREVIEW_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
+        run: bash scripts/ci-preview.sh
+      - name: Record the tested immutable image reference
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          {
+            echo '### Preview image published and tested by digest (not deployed)'
+            echo "- Commit: \`$COMMIT\`"
+            echo "- Tag: \`$IMAGE:sha-$COMMIT\`"
+            echo "- Immutable reference: \`$IMAGE@$DIGEST\`"
+          } >> "$GITHUB_STEP_SUMMARY"

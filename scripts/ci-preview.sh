@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# This script removes its disposable Compose volumes on exit. Never run it elsewhere.
+if [[ "${CI:-}" != true || "${COMPOSE_PROJECT_NAME:-}" != xennic-preview-ci ]]; then
+  echo 'Refusing: production preview tests require the exact disposable CI project.' >&2
+  exit 1
+fi
+if [[ -n "${PREVIEW_TEST_IMAGE:-}" && ! "$PREVIEW_TEST_IMAGE" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]]; then
+  echo 'Refusing: invalid immutable website image reference.' >&2
+  exit 1
+fi
 compose=(docker compose -f compose.preview.yml)
 metrics="${RUNNER_TEMP:-/tmp}/preview-resource-measurements.txt"
 export RESTORE_FIXTURE_PATH="$(mktemp "${RUNNER_TEMP:-/tmp}/preview-fixture.XXXXXX")"
@@ -7,11 +16,20 @@ chmod 600 "$RESTORE_FIXTURE_PATH"
 : > "$metrics"
 cleanup() { "${compose[@]}" down --volumes --remove-orphans; rm -f "$RESTORE_FIXTURE_PATH"; }
 trap cleanup EXIT
-printf '\n--- Build (off VPS) ---\n'
-python3 scripts/measure-preview-build.py | tee -a "$metrics"
-image=$("${compose[@]}" images -q app | head -1)
-# A build-only service may not yet exist; Compose labels the image by project/service.
-if [ -z "$image" ]; then image="${COMPOSE_PROJECT_NAME}-app"; fi
+if [[ -n "${PREVIEW_TEST_IMAGE:-}" ]]; then
+  printf '\n--- Test the published image by digest (no rebuild) ---\n'
+  docker pull --platform linux/amd64 "$PREVIEW_TEST_IMAGE"
+  expected_image_id=$(docker image inspect "$PREVIEW_TEST_IMAGE" --format '{{.Id}}')
+  docker tag "$PREVIEW_TEST_IMAGE" "${COMPOSE_PROJECT_NAME}-app"
+  test "$(docker image inspect "${COMPOSE_PROJECT_NAME}-app" --format '{{.Id}}')" = "$expected_image_id"
+  image="${COMPOSE_PROJECT_NAME}-app"
+else
+  printf '\n--- Build (off VPS) ---\n'
+  python3 scripts/measure-preview-build.py | tee -a "$metrics"
+  image=$("${compose[@]}" images -q app | head -1)
+  # A build-only service may not yet exist; Compose labels the image by project/service.
+  if [ -z "$image" ]; then image="${COMPOSE_PROJECT_NAME}-app"; fi
+fi
 docker image inspect "$image" --format 'Image size bytes: {{.Size}}' | tee -a "$metrics"
 "${compose[@]}" up -d --wait postgres
 printf '\n--- Migration peak sampling (docker stats, 0.2s) ---\n'
@@ -29,7 +47,16 @@ if "${compose[@]}" run --rm --no-deps -e DATABASE_URL="postgresql://${PREVIEW_PO
 fi
 "${compose[@]}" exec -T postgres psql -U "$PREVIEW_POSTGRES_USER" -d legacy_ci -c 'SELECT id FROM shared.customers' | grep -q 1
 "${compose[@]}" run --rm --no-deps app npm run preview:seed
-"${compose[@]}" up -d --wait app
+"${compose[@]}" up -d --wait --no-build app
+if [[ -n "${PREVIEW_TEST_IMAGE:-}" ]]; then
+  actual_image_id=$(docker inspect "$("${compose[@]}" ps -q app)" --format '{{.Image}}')
+  if [[ "$actual_image_id" != "$expected_image_id" ]]; then
+    echo 'ERROR: running app image does not match the digest-pulled image.' >&2
+    exit 1
+  fi
+  printf 'PASS: running app uses the image pulled by the recorded digest\n'
+fi
+python3 tests/preview-internal-health-ci.py
 printf '\n--- Idle app and database memory ---\n'
 docker stats --no-stream --format 'idle {{.Name}} {{.MemUsage}}' "$("${compose[@]}" ps -q app)" "$("${compose[@]}" ps -q postgres)" | tee -a "$metrics"
 node scripts/wait-for-server.mjs
