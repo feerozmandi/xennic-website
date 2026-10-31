@@ -114,7 +114,11 @@ sudo docker build -t xennic-preview-app -f Dockerfile.preview . >/dev/null
 "${compose[@]}" exec -T postgres psql -U preview_ci -d preview_ci -v ON_ERROR_STOP=1 -c "INSERT INTO shared.customers (name, source) VALUES ('CI snapshot fixture', 'ci-only')" >/dev/null
 "${compose[@]}" exec -T app sh -c 'printf synthetic-media > /app/media/ci-snapshot.txt'
 sudo install -o root -g root -m 0600 "$scratch/state-failure.json" /srv/xennic-preview/state/release-state.json
-sudo /usr/local/libexec/xennic-preview/backup-verify < "$scratch/release-failure.json"
+if ! result=$(sudo /usr/local/libexec/xennic-preview/backup-verify < "$scratch/release-failure.json" 2>&1); then
+  printf '::error::Installed backup helper failed: %s\n' "$result"
+  exit 1
+fi
+printf '%s\n' "$result"
 sudo test -s /srv/xennic-preview/state/backup-3.json
 sudo test -s /srv/xennic-preview/work/backup.age
 app_id=$("${compose[@]}" ps --all -q app)
