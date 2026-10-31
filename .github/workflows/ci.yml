@@ -106,7 +106,14 @@ jobs:
       - name: Install disposable fixture dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age nginx openssl
       - name: Install and exercise the root-owned preview helpers
-        run: bash tests/preview-sftp-installed-ci.sh
+        run: |
+          if ! bash tests/preview-sftp-installed-ci.sh > "$RUNNER_TEMP/installed-preview-ci.log" 2>&1; then
+            tail -n 40 "$RUNNER_TEMP/installed-preview-ci.log"
+            details=$(tail -n 25 "$RUNNER_TEMP/installed-preview-ci.log" | tr '\n' ';' | cut -c1-5000)
+            echo "::error::Disposable fixture failure: $details"
+            exit 1
+          fi
+          tail -n 15 "$RUNNER_TEMP/installed-preview-ci.log"
 
   production-preview:
     runs-on: ubuntu-latest
