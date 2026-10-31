@@ -12,9 +12,6 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       # Build-only placeholders; no database is contacted or real secret used.
@@ -54,30 +51,6 @@ jobs:
           python3 tests/preview-deploy-backend.py
           python3 tests/preview-compose-operations.py
           python3 tests/preview-internal-health.py
-      # One-time check of the completed, trusted dev publication. This does not
-      # give the PR a package-write token or any operational credential.
-      - name: Verify completed dev release evidence
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'arena/7368b8da-xennic-website'
-        env:
-          GH_VERIFIER_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY'
-          import importlib.util, os
-          spec = importlib.util.spec_from_file_location('verifier', 'scripts/preview-release-verifier.py')
-          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
-          release = {'repository':'feerozmandi/xennic-website', 'commit':'28aaa6f445520ffd4d0cf15f02dbc235c92403e8',
-                     'digest':'sha256:e2108bc03a54445201292f31eb3ac448be96a371ac60dc8ab5e2f730c9605cbc',
-                     'platform':'linux/amd64', 'run_number':65}
-          token = os.environ['GH_VERIFIER_TOKEN'].encode('ascii')
-          try:
-              verifier.assert_current(release, token)
-              run_id = verifier.verify(release, token)
-              if run_id != 41222814496: raise RuntimeError('wrong publication run')
-          except (verifier.Unverified, RuntimeError) as exc:
-              print('::error title=Real release verification::' + str(exc))
-              raise SystemExit(1)
-          print('::notice title=Real release verification::PASS: dev commit, successful workflow, artifact, repository, digest and linux/amd64 match the GHCR publication.')
-          PY
       - name: Build
         run: npm run build
 
