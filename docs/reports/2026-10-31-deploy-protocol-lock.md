@@ -12,7 +12,7 @@
 ## محدودیت و گام بعد
 
 - استفادهٔ واقعی از قفل باید در کل توالی backup، migration، health و rollback، هم در deploy خودکار و هم عملیات دستی، در receiver ممتاز و بازبینی‌شده برقرار شود؛ کد حاضر به‌تنهایی این یکپارچگی، ترتیب اجرا یا rollback را تضمین نمی‌کند. Forced-command، کنترل ورودی ممتاز، نگهداری وضعیت ترتیب release و fail-closed در خطا هنوز باید تکمیل و تست شوند.
-- مالک endpoint/IP را تأیید و fingerprint عمومی ارائه کرده، ولی مستقل‌بودن منشأ fingerprint مشخص نشده است. نام/قابلیت فضای backup موجود، restore و دسترسی GitHub Actions به سرور هنوز روشن نیستند. هیچ Secret، تغییر VPS، DNS یا deploy انجام نشده است.
+- مالک endpoint/IP را تأیید و fingerprint عمومی ارائه کرده، ولی مستقل‌بودن منشأ fingerprint مشخص نشده است. **اصلاح ۲۰۲۶-۱۰-۳۱:** هیچ فضای backup موجود یا تأییدشده فرض نمی‌شود؛ مقصد، قابلیت restore و دسترسی GitHub Actions به سرور روشن نیستند. هیچ Secret، تغییر VPS، DNS یا deploy انجام نشده است.
 
 ## Vault
 
