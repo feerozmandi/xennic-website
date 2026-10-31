@@ -1,7 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
 - **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۱
-- **زنجیرهٔ نصب‌شده:** در [CI 41221042815](https://github.com/feerozmandi/xennic-website/actions/runs/41221042815) انتشار با digest متفاوت، شکست پس از activation و rollback با همان helperهای نصب‌شده و دادهٔ دورریختنی موفق بود؛ GitHub و GHCR مصنوعی بودند. حدود شاهد در [گزارش](reports/2026-10-31-installed-preview-chain.md) آمده است.
+- **زنجیرهٔ نصب‌شده:** در [CI 41221524381](https://github.com/feerozmandi/xennic-website/actions/runs/41221524381) انتشار با digest متفاوت، migration افزایشی، شکست پس از activation و rollback با همان helperهای نصب‌شده و حفظ DB/media دورریختنی موفق بود؛ GitHub و GHCR مصنوعی بودند. حدود شاهد در [گزارش](reports/2026-10-31-installed-preview-chain.md) آمده است.
 - **Pull پیش از maintenance:** helper محدود و verifier در زنجیرهٔ نصب‌شده حضور دارند؛ آزمون مستقل GHCR و artifact واقعی پس از انتشار مجاز به `dev` باز است؛ [گزارش تاریخی](reports/2026-10-31-pull-before-maintenance.md).
 - **backup نصب‌شده:** helperهای backup و SFTP در [CI 41216964464](https://github.com/feerozmandi/xennic-website/actions/runs/41216964464) با توقف app، DB/media مصنوعی، انتقال و restore DB ایزوله موفق شدند. بررسی کامل نویسنده‌های میزبان و مقصد عملیاتی باز است؛ [گزارش تاریخی](reports/2026-10-31-installed-sftp.md).
 - **فرمت age:** بستهٔ DB/media با کلید آزمایشی در [CI 41214259133](https://github.com/feerozmandi/xennic-website/actions/runs/41214259133) آزموده شد. اتصال عملیاتی backup/restore و اصالت فرستنده همچنان اثبات نشده‌اند؛ [گزارش ادامه](reports/2026-10-31-age-backup-continuation.md).
@@ -50,7 +50,7 @@
 | فرم‌ها، تحلیل و اتصال‌ها | فرم عمومی، Zod/honeypot در مسیر فرم، Umami و اتصال n8n/CRM هنوز پیاده‌سازی نشده‌اند |
 | OAuth واقعی محلی | مالک پس از تغییر scope محدود آزمایشی گزارش کرد سایت محلی باز شده است؛ ورود کامل، هویت، حساب دوم و API با gate واقعی هنوز پذیرش نشده‌اند؛ [گزارش مدیرکل](reports/2026-10-31-executive-decision.md) |
 | امنیت پیش‌نمایش | [گزارش اصلاح origin و کوکی](reports/2026-10-30-preview-origin-cookie-hardening.md): کنترل‌های مستقل از proxy افزوده و محلی آزموده شدند، ولی خطر CSRF جامعاً رفع‌شده فرض نمی‌شود؛ طرح Caddy، OAuth2 Proxy و GitHub OAuth طبق دستور مالک انتخاب شده؛ پذیرش کامل gate واقعی، مرورگر و TLS عمومی معوق است |
-| پیش‌نمایش و استقرار | طبق تصمیم جدید مالک، `META-INT-140` v0.7.0 مرجع اجرای کنترل‌شده است؛ [گزارش ادامه](reports/2026-10-31-preview-delivery-continuation.md). آزمون digest قابل استقرار در PR افزوده شد، اما اتصال deploy، قفل، backup/restore، پذیرش gate و پیش‌پرواز VPS/DNS بازند. هیچ تغییر VPS یا DNS و هیچ استقراری انجام نشده است |
+| پیش‌نمایش و استقرار | طبق تصمیم جدید مالک، `META-INT-140` v0.7.0 مرجع اجرای کنترل‌شده است؛ [گزارش ادامه](reports/2026-10-31-preview-delivery-continuation.md). قفل و backup/restore دورریختنی آزموده شدند، اما اتصال deploy و backup/restore عملیاتی، پذیرش gate و پیش‌پرواز VPS/DNS بازند. هیچ تغییر VPS یا DNS و هیچ استقراری انجام نشده است |
 
 ## موارد موردنیاز از مدیرکل
 
