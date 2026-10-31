@@ -163,7 +163,7 @@ if sudo test -e /etc/docker/certs.d/ghcr.io || sudo test -e /usr/local/share/ca-
 fi
 touch "$scratch/chain-created"
 sudo /usr/sbin/sshd -f "$scratch/sshd_config"
-sudo docker run -d --rm --name xennic-ci-fixture-registry -p 127.0.0.1:55000:5000 registry:2 >/dev/null
+sudo docker run -d --rm --name xennic-ci-fixture-registry -p 127.0.0.1:55000:5000 registry:2@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 >/dev/null
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=CI fixture only' \
   -addext 'subjectAltName=DNS:ghcr.io,DNS:api.github.com' -keyout "$scratch/fixture.key" -out "$scratch/fixture.crt" >/dev/null 2>&1
 sudo install -d -m 0755 /etc/docker/certs.d/ghcr.io
@@ -201,6 +201,14 @@ sudo cp /etc/hosts "$scratch/hosts.original"
 printf '\n127.0.0.1 ghcr.io # xennic-ci-fixture\n' | sudo tee -a /etc/hosts >/dev/null
 cp /etc/hosts "$scratch/namespace-hosts"
 printf '\n127.0.0.1 api.github.com # xennic-ci-fixture\n' >> "$scratch/namespace-hosts"
+# Allow the Docker daemon's hosts-file cache to refresh; a synthetic login must
+# succeed against the anonymous local registry before any push is attempted.
+sleep 6
+if ! printf 'synthetic-token\n' | docker login ghcr.io --username feerozmandi --password-stdin > "$scratch/fixture-login.log" 2>&1; then
+  cat "$scratch/fixture-login.log"
+  echo '::error::Disposable GHCR endpoint did not accept the synthetic login; no fixture image pushed'
+  exit 1
+fi
 # Fake GHCR repo: these digests are not evidence of the real registry.
 docker tag xennic-preview-app ghcr.io/feerozmandi/xennic-website:ci-good
 docker push ghcr.io/feerozmandi/xennic-website:ci-good > "$scratch/good-push.log"
