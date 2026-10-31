@@ -139,14 +139,33 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
-      - name: Record immutable image reference
+      - name: Set up Node.js for the published-image test
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install test dependencies
+        run: npm ci
+      - name: Test the published digest without rebuilding
+        env:
+          COMPOSE_PROJECT_NAME: xennic-preview-ci
+          PREVIEW_POSTGRES_DB: preview_ci
+          PREVIEW_POSTGRES_USER: preview_ci
+          PREVIEW_POSTGRES_PASSWORD: ci-only-preview-password
+          PREVIEW_DATABASE_URL: postgresql://preview_ci:ci-only-preview-password@postgres:5432/preview_ci
+          PREVIEW_PAYLOAD_SECRET: ci-only-preview-secret-not-for-real-use
+          PREVIEW_PORT: '3000'
+          PREVIEW_ORIGIN: https://preview.xennic.ir
+          PREVIEW_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
+        run: bash scripts/ci-preview.sh
+      - name: Record the tested immutable image reference
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.publish.outputs.digest }}
           COMMIT: ${{ github.sha }}
         run: |
           {
-            echo '### Preview image published (not deployed)'
+            echo '### Preview image published and tested by digest (not deployed)'
             echo "- Commit: \`$COMMIT\`"
             echo "- Tag: \`$IMAGE:sha-$COMMIT\`"
             echo "- Immutable reference: \`$IMAGE@$DIGEST\`"
