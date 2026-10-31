@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [آماده‌سازی client استقرار SSH](reports/2026-10-31-ssh-deploy-client.md) | انتقال ورودی اعتبارسنجی‌شده و موانع |
 | ۲۰۲۶-۱۰-۳۱ | [پیش‌پرواز VPS و manifest](reports/2026-10-31-vps-inventory-and-manifest.md) | گزارش مالک و اعتبارسنجی ورودی deploy |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ تحویل پیش‌نمایش](reports/2026-10-31-preview-delivery-continuation.md) | مسئولیت یکپارچه، آزمون digest و پیش‌نیازهای باز |
 | ۲۰۲۶-۱۰-۳۱ | [طرح پیش‌نمایش اینترنتی و استقرار خودکار](reports/2026-10-31-internet-preview-delivery-plan.md) | تصمیم‌های جدید، workflow ایمیج و هماهنگی زیرساخت |
