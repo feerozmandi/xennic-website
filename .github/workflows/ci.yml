@@ -40,6 +40,7 @@ jobs:
       - name: Deployment protocol tests
         run: |
           python3 tests/preview-deploy-manifest.py
+          python3 tests/preview-release-evidence.py
           python3 tests/preview-deploy-client.py
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py
@@ -176,6 +177,17 @@ jobs:
           PREVIEW_ORIGIN: https://preview.xennic.ir
           PREVIEW_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
         run: bash scripts/ci-preview.sh
+      - name: Prepare same-run release evidence
+        env:
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: python3 scripts/preview-release-evidence.py > "$RUNNER_TEMP/xennic-preview-release.json"
+      - name: Preserve same-run release evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: xennic-preview-release-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/xennic-preview-release.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Record the tested immutable image reference
         env:
           IMAGE: ${{ steps.image.outputs.name }}

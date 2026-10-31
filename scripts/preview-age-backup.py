@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Age-encrypted DB/media bundle format. No privileged CLI or transport.
 
-Callers must quiesce writers and use a trusted private working directory. The
-bundle is NOT an offsite backup implementation. Plaintext temporary files are
-created in that directory during packing and authenticated restoration. A caller
-must not apply either restored file unless restore_bundle returns successfully.
+Not an operational backup helper: no authenticated sender provenance, offsite
+transport or snapshot coordination is implemented. Age authenticates ciphertext
+integrity, not who created it: anyone with the recipient can create a bundle.
+Callers must quiesce writers and use a trusted private working directory.
+Plaintext temporary files are created during packing and restoration. A caller
+must not apply either restored file unless restore_bundle returns successfully
+and its provenance and trusted release metadata have been independently verified.
 """
 import hashlib
 import json
