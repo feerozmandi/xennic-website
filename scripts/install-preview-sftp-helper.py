@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Install only the fixed SFTP helper and its trusted modules; deployment remains disabled.
+"""Install the fixed backup/SFTP helpers and trusted modules; deployment remains disabled.
 
 A root administrator must stage these exact files under the fixed private
 /root/xennic-preview-install directory. This intentionally refuses upgrades and
@@ -14,7 +14,9 @@ import sys
 SOURCE = Path('/root/xennic-preview-install')
 PARENT = Path('/usr/local/libexec')
 TARGET = PARENT / 'xennic-preview'
-FILES = ('preview-backup-sftp.py', 'preview-deploy-readiness.py', 'preview-deploy-state.py', 'preview-deploy-manifest.py')
+FILES = ('preview-backup-sftp.py', 'preview-backup-operation.py', 'preview-age-backup.py',
+         'preview-deploy-readiness.py', 'preview-deploy-state.py', 'preview-deploy-manifest.py')
+EXECUTABLES = {'preview-backup-sftp.py': 'sftp-transfer', 'preview-backup-operation.py': 'backup-verify'}
 
 
 def check_dir(path):
@@ -42,8 +44,8 @@ def main():
         TARGET.mkdir(mode=0o700)
         try:
             for name, fd in staged:
-                destination = TARGET / ('sftp-transfer' if name == 'preview-backup-sftp.py' else name)
-                out = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o700 if name == 'preview-backup-sftp.py' else 0o600)
+                destination = TARGET / EXECUTABLES.get(name, name)
+                out = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o700 if name in EXECUTABLES else 0o600)
                 with os.fdopen(os.dup(fd), 'rb') as src, os.fdopen(out, 'wb') as dst:
                     shutil.copyfileobj(src, dst)
                     dst.flush()
@@ -58,7 +60,7 @@ def main():
             raise
     finally:
         for _, fd in staged: os.close(fd)
-    print('Fixed SFTP helper installed; no deploy or SSH access enabled.')
+    print('Fixed backup and SFTP helpers installed; no deploy or SSH access enabled.')
 
 
 if __name__ == '__main__':
