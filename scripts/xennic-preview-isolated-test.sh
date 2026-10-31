@@ -47,14 +47,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for cmd in docker git curl unzip python3 sha256sum ss; do command -v "$cmd" >/dev/null || { echo "STOP: missing $cmd"; exit 1; }; done
+for cmd in docker git curl unzip python3 sha256sum; do command -v "$cmd" >/dev/null || { echo "STOP: missing $cmd"; exit 1; }; done
 [[ $(uname -s) == Linux ]] || { echo 'STOP: Linux required.'; exit 1; }
 [[ $(docker info --format '{{.Architecture}}') == x86_64 ]] || { echo 'STOP: expected linux/amd64.'; exit 1; }
 if [[ -n ${DOCKER_HOST:-} ]]; then host=$DOCKER_HOST; else host=$(docker context inspect "$(docker context show)" --format '{{(index .Endpoints "docker").Host}}'); fi
 [[ $host == unix://* ]] || { echo 'STOP: Docker daemon must be local (unix socket).'; exit 1; }
 docker compose version --short >/dev/null
-listeners=$(ss -H -ltn 'sport = :443') || { echo 'STOP: could not check TCP 443.'; exit 1; }
-[[ -z $listeners ]] || { echo 'STOP: TCP 443 is in use; no existing service will be stopped.'; exit 1; }
 
 ROOT=$(mktemp -d "$HOME/xennic-preview-lab.XXXXXXXX")
 SITE="$ROOT/website"
@@ -104,7 +102,7 @@ p = Path(sys.argv[1]); content = p.read_text()
 old = 'FROM node:22.22.3-bookworm-slim AS '
 assert content.count(old) == 2, 'Unexpected Dockerfile; stop'
 p.write_text(content.replace(old, 'FROM ' + sys.argv[2] + ' AS '))
-Path(sys.argv[3]).write_text('services:\n  postgres:\n    image: ' + sys.argv[4] + '\n')
+Path(sys.argv[3]).write_text('services:\n  postgres:\n    image: ' + sys.argv[4] + '\n  caddy:\n    ports: !reset []\n')
 PY
 printf 'Pinned index references in this disposable copy only:\n  %s\n  %s\n' "$NODE" "$POSTGRES"
 
@@ -128,15 +126,12 @@ python3 - "$ROOT/effective-private.json" <<'PY'
 import json, sys
 with open(sys.argv[1]) as f: c = json.load(f)
 s = c['services']
-for name in ('app', 'postgres', 'gate'):
+for name in ('app', 'postgres', 'gate', 'caddy'):
     if s[name].get('ports'): raise SystemExit('STOP: unexpected host port on ' + name)
-p = s['caddy'].get('ports', [])
-if len(p) != 1 or p[0].get('host_ip') != '127.0.0.1' or str(p[0].get('published')) != '443' or int(p[0].get('target', 0)) != 443:
-    raise SystemExit('STOP: unexpected Caddy port mapping')
 if not c['networks']['preview_gate_lab'].get('internal'): raise SystemExit('STOP: lab network not internal')
 for name in ('app', 'postgres', 'gate', 'caddy'):
     if set(s[name].get('networks', {})) != {'preview_gate_lab'}: raise SystemExit('STOP: unexpected network on ' + name)
-print('PASS: merged Compose has loopback-only Caddy, no app/DB/gate published ports, one internal network')
+print('PASS: merged Compose has no published ports and one internal network')
 PY
 rm -f "$ROOT/effective-private.json"
 
@@ -165,19 +160,21 @@ echo 'PASS: migration ledger and shared schema'
 
 step='start disposable app, Caddy and synthetic gate'
 compose up -d --wait app caddy gate
-step='verify actual published port bindings'
+step='verify no actual or configured published ports'
 for service in app postgres gate caddy; do
   id=$(compose ps -q "$service")
   [[ -n $id ]] || { echo "STOP: missing lab service $service"; exit 1; }
-  docker inspect --format '{{json .NetworkSettings.Ports}}' "$id" | python3 -c '
+  docker inspect --format '{{json .HostConfig.PortBindings}} {{json .NetworkSettings.Ports}}' "$id" | python3 -c '
 import json,sys
-service=sys.argv[1]; ports=json.load(sys.stdin) or {}; bindings=[(k,v) for k,v in ports.items() if v]
-if service == "caddy":
-    assert len(bindings)==1 and bindings[0][0]=="443/tcp" and bindings[0][1]==[{"HostIp":"127.0.0.1","HostPort":"443"}], "unexpected Caddy binding"
-else: assert not bindings, "unexpected published service port"
-print("PASS: runtime port bindings",service)
+service=sys.argv[1]; line=sys.stdin.read(); decoder=json.JSONDecoder()
+config,end=decoder.raw_decode(line); actual=json.loads(line[end:].strip())
+for ports in (config or {}, actual or {}):
+    if any(ports.values()): raise SystemExit("STOP: unexpected host port on " + service)
+print("PASS: no published ports",service)
 ' "$service"
 done
+NETWORK_ID=$(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT" --filter 'label=com.docker.compose.network=preview_gate_lab')
+[[ $(printf '%s\n' "$NETWORK_ID" | grep -c .) == 1 ]] || { echo 'STOP: expected exactly one lab network.'; exit 1; }
 step='test Payload Staff, Origin, sessions, GraphQL and media'
 caddy_id=$(compose ps -q caddy)
 docker cp "$caddy_id:/data/caddy/pki/authorities/local/root.crt" "$ROOT/lab-root.crt"
@@ -186,6 +183,14 @@ python3 - "$BUNDLE/test_payload_caddy.mjs" "$ROOT/test-payload-local.mjs" <<'PY'
 from pathlib import Path
 import sys
 source = Path(sys.argv[1]).read_text()
+source = source.replace("import https from 'node:https'", "import https from 'node:https'\nimport dns from 'node:dns'")
+old_lookup = '''      lookup(_host, options, cb) {
+        if (options?.all) cb(null, [{address:'127.0.0.1', family:4}])
+        else cb(null, '127.0.0.1', 4)
+      },'''
+new_lookup = "      lookup(_host, options, cb) { dns.lookup('caddy', options, cb) },"
+assert source.count(old_lookup) == 1, 'Unexpected resolver source; stop'
+source = source.replace(old_lookup, new_lookup)
 needle = "  check(r.status === 200 && Boolean(cookieMe.user?.email), 'Payload Cookie session works through Caddy')\n"
 assert source.count(needle) == 1, 'Unexpected test source; stop'
 extra = '''\n  r = await request('/api/staff/me', {headers:{Cookie:payloadCookie, 'Sec-Fetch-Site':'same-origin'}})
@@ -195,8 +200,8 @@ extra = '''\n  r = await request('/api/staff/me', {headers:{Cookie:payloadCookie
 '''
 Path(sys.argv[2]).write_text(source.replace(needle, needle + extra))
 PY
-printf 'Test-copy diff: added Origin-absent checks; source bundle remains unchanged.\n'
-docker run --rm --network host --user "$(id -u):$(id -g)" \
+printf 'Test-copy diff: resolve Caddy only inside lab network and add Origin-absent checks; source bundle unchanged.\n'
+docker run --rm --network "$NETWORK_ID" --user "$(id -u):$(id -g)" \
   -e LAB_CA_FILE=/lab-root.crt -v "$ROOT/lab-root.crt:/lab-root.crt:ro" \
   -v "$ROOT/test-payload-local.mjs:/test-payload-local.mjs:ro" --entrypoint node "$NODE" /test-payload-local.mjs
 step='seed approved content once in disposable database'

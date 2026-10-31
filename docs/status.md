@@ -20,7 +20,7 @@
 
 | مورد | نتیجهٔ ثبت‌شده | تاریخ و محیط |
 |---|---|---|
-| تحویل آزمایش ایزوله | اسکریپت برای دانلود آماده است؛ Docker/Compose، رجیستری و digestها طبق خروجی مالک بررسی شدند، اما اجرای آزمایش و نتیجهٔ آن هنوز تأیید نشده‌اند؛ [گزارش](reports/2026-10-31-isolated-preview-handoff.md) | ۲۰۲۶-۱۰-۳۱، بررسی ایستا و گزارش مالک؛ نه VPS |
+| آزمایش ایزولهٔ پیش‌نمایش | build، migration و صحت ledger طبق گزارش مالک موفق؛ آزمون در کنترل پورت Caddy متوقف شد و اصلاح مسیر ادامه در [گزارش](reports/2026-10-31-isolated-preview-resume.md) ارائه شد؛ Staff و seed و آزمون نهایی هنوز اجرا نشده‌اند | ۲۰۲۶-۱۰-۳۱، رایانهٔ مالک؛ نه VPS |
 | محدودسازی origin و کوکی | آزمون پیکربندی و production محلی و هر سه job در [CI 41107071485](https://github.com/feerozmandi/xennic-website/actions/runs/41107071485) برای `e2b6755` موفق؛ آزمون gate، مرورگر و TLS واقعی مطابق [گزارش](reports/2026-10-30-preview-origin-cookie-hardening.md) | ۲۰۲۶-۱۰-۳۰، Sandbox؛ نه VPS |
 | بازیابی آزمایشی و لاگ | تست محلی backup سرد و Job `production-preview` در [اجرای 41101679790](https://github.com/feerozmandi/xennic-website/actions/runs/41101679790) برای `969cee5` موفق؛ جزئیات و محدودیت‌ها در [گزارش](reports/2026-10-30-preview-recovery-security.md) | ۲۰۲۶-۱۰-۳۰، Sandbox و GitHub Actions؛ نه VPS |
 | بستهٔ production آزمایشی | هر سه job در [اجرای 41092208169](https://github.com/feerozmandi/xennic-website/actions/runs/41092208169) برای `4aa3978` موفق؛ اعداد و محدودیت‌های نمونه‌برداری در [گزارش](reports/2026-10-30-production-preview-package.md) ثبت شده‌اند | ۲۰۲۶-۱۰-۳۰، GitHub Actions؛ نه VPS |
