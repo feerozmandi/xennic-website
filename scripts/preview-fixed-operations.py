@@ -80,9 +80,12 @@ def approval(previous, candidate):
     if len(matches) != 1:
         raise Rejected('migration transition not reviewed')
     item = matches[0]
-    if (set(item) != {'from_commit', 'to_commit', 'migration_sha256', 'rollback_safe'} or
+    if (set(item) != {'from_commit', 'to_commit', 'migration_sha256', 'previous_migrations', 'rollback_safe'} or
             item['rollback_safe'] is not True or not isinstance(item['migration_sha256'], str) or
-            not re.fullmatch('[0-9a-f]{64}', item['migration_sha256'])):
+            not re.fullmatch('[0-9a-f]{64}', item['migration_sha256']) or
+            not isinstance(item['previous_migrations'], list) or not item['previous_migrations'] or
+            any(not isinstance(name, str) or not re.fullmatch('[A-Za-z0-9_-]{1,200}', name) for name in item['previous_migrations']) or
+            len(set(item['previous_migrations'])) != len(item['previous_migrations'])):
         raise Rejected('migration transition not approved for rollback')
     return item
 
@@ -251,6 +254,11 @@ def execute(phase, release, token):
         snapshot.assert_writers_stopped(app, database, volume)
         user, database_name = snapshot.pg_settings(database)
         snapshot.no_other_database_clients(database, user, database_name)
+        ledger = json.loads(snapshot.sql(database, user, database_name, "SELECT COALESCE(json_agg(json_build_object('name',name,'batch',batch) ORDER BY name),'[]'::json)::text FROM website.payload_migrations"))
+        if (not isinstance(ledger, list) or any(not isinstance(row, dict) or set(row) != {'name', 'batch'} or
+                not isinstance(row['name'], str) or type(row['batch']) is not int or row['batch'] < 0 for row in ledger) or
+                sorted(row['name'] for row in ledger) != sorted(policy['previous_migrations'])):
+            raise Rejected('database migration ledger was not reviewed')
         if migration_tree_hash(release) != policy['migration_sha256']:
             raise Rejected('migration files differ from reviewed transition')
         run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:migrate'], image=image, timeout=600)

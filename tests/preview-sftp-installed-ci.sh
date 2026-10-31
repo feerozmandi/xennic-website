@@ -203,8 +203,10 @@ cp /etc/hosts "$scratch/namespace-hosts"
 printf '\n127.0.0.1 api.github.com # xennic-ci-fixture\n' >> "$scratch/namespace-hosts"
 # Fake GHCR repo: these digests are not evidence of the real registry.
 docker tag xennic-preview-app ghcr.io/feerozmandi/xennic-website:ci-good
-docker push ghcr.io/feerozmandi/xennic-website:ci-good >/dev/null
-oldref=$(docker image inspect ghcr.io/feerozmandi/xennic-website:ci-good --format '{{index .RepoDigests 0}}')
+docker push ghcr.io/feerozmandi/xennic-website:ci-good > "$scratch/good-push.log"
+old_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/good-push.log" | tail -1)
+oldref="ghcr.io/feerozmandi/xennic-website@$old_digest"
+docker pull --platform linux/amd64 "$oldref" >/dev/null
 [[ "$oldref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture image reference' >&2; exit 1; }
 printf '%s\n' "$oldref" > "$scratch/old-image"
 cat > "$scratch/Dockerfile.bad" <<'DOCKERFILE'
@@ -212,8 +214,10 @@ FROM xennic-preview-app
 CMD ["node", "-e", "require('http').createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'bad'}))}).listen(3000,'0.0.0.0')"]
 DOCKERFILE
 docker build -t ghcr.io/feerozmandi/xennic-website:ci-bad -f "$scratch/Dockerfile.bad" . >/dev/null
-docker push ghcr.io/feerozmandi/xennic-website:ci-bad >/dev/null
-badref=$(docker image inspect ghcr.io/feerozmandi/xennic-website:ci-bad --format '{{index .RepoDigests 0}}')
+docker push ghcr.io/feerozmandi/xennic-website:ci-bad > "$scratch/bad-push.log"
+bad_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/bad-push.log" | tail -1)
+badref="ghcr.io/feerozmandi/xennic-website@$bad_digest"
+docker pull --platform linux/amd64 "$badref" >/dev/null
 [[ "$badref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture bad image reference' >&2; exit 1; }
 # Compose is root-owned and fixed; only PREVIEW_IMAGE from the journal is used.
 python3 - <<'PY' > "$scratch/compose-chain.yml"
@@ -246,8 +250,8 @@ p = pathlib.Path(sys.argv[1]); v = json.loads((p/'fixture-values.json').read_tex
 (p/'chain-state.json').write_text(json.dumps({'version':1,'last_run':1,'blocked':False,'current':v['previous'],'previous':[],'pending':None}))
 (p/'chain-github.json').write_text(json.dumps({'current':'first','releases':{'first':v['first'],'second':v['second']}}))
 (p/'chain-transitions.json').write_text(json.dumps({'version':1,'transitions':[
- {'from_commit':v['previous']['commit'],'to_commit':v['first']['commit'],'migration_sha256':v['migration_sha256'],'rollback_safe':True},
- {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'rollback_safe':True}]}))
+ {'from_commit':v['previous']['commit'],'to_commit':v['first']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline'],'rollback_safe':True},
+ {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline'],'rollback_safe':True}]}))
 PY
 sudo install -o root -g root -m 0600 "$scratch/chain-state.json" /srv/xennic-preview/state/release-state.json
 sudo install -o root -g root -m 0600 "$scratch/chain-github.json" /srv/xennic-preview/config/ci-github-fixture.json
