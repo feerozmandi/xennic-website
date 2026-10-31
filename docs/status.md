@@ -1,7 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
 - **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۱
-- **زنجیرهٔ نصب‌شده:** در [CI 41220555856](https://github.com/feerozmandi/xennic-website/actions/runs/41220555856) زنجیرهٔ helperهای نصب‌شده و شکست پس از activation با دادهٔ دورریختنی موفق بود؛ GitHub و GHCR مصنوعی بودند و digest تصویر سالم و قبلی در آن اجرا یکسان بود. آزمون تقویت‌شده و حدود شاهد در [گزارش](reports/2026-10-31-installed-preview-chain.md) آمده است.
+- **زنجیرهٔ نصب‌شده:** در [CI 41221042815](https://github.com/feerozmandi/xennic-website/actions/runs/41221042815) انتشار با digest متفاوت، شکست پس از activation و rollback با همان helperهای نصب‌شده و دادهٔ دورریختنی موفق بود؛ GitHub و GHCR مصنوعی بودند. حدود شاهد در [گزارش](reports/2026-10-31-installed-preview-chain.md) آمده است.
 - **Pull پیش از maintenance:** helper محدود و verifier در زنجیرهٔ نصب‌شده حضور دارند؛ آزمون مستقل GHCR و artifact واقعی پس از انتشار مجاز به `dev` باز است؛ [گزارش تاریخی](reports/2026-10-31-pull-before-maintenance.md).
 - **backup نصب‌شده:** helperهای backup و SFTP در [CI 41216964464](https://github.com/feerozmandi/xennic-website/actions/runs/41216964464) با توقف app، DB/media مصنوعی، انتقال و restore DB ایزوله موفق شدند. بررسی کامل نویسنده‌های میزبان و مقصد عملیاتی باز است؛ [گزارش تاریخی](reports/2026-10-31-installed-sftp.md).
 - **فرمت age:** بستهٔ DB/media با کلید آزمایشی در [CI 41214259133](https://github.com/feerozmandi/xennic-website/actions/runs/41214259133) آزموده شد. اتصال عملیاتی backup/restore و اصالت فرستنده همچنان اثبات نشده‌اند؛ [گزارش ادامه](reports/2026-10-31-age-backup-continuation.md).

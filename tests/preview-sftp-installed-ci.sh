@@ -235,18 +235,37 @@ oldref="ghcr.io/feerozmandi/xennic-website@$old_digest"
 docker pull --platform linux/amd64 "$oldref" >/dev/null
 [[ "$oldref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture image reference' >&2; exit 1; }
 printf '%s\n' "$oldref" > "$scratch/old-image"
-cat > "$scratch/Dockerfile.good" <<'DOCKERFILE'
+# One additive, rollback-compatible migration exists only in the CI image.
+mkdir -p "$scratch/good-context"
+cp -a migrations "$scratch/good-context/migrations"
+cat > "$scratch/good-context/migrations/20261031_000000_ci_additive.ts" <<'MIGRATION'
+import { MigrateUpArgs, sql } from '@payloadcms/db-postgres'
+export async function up({ db }: MigrateUpArgs): Promise<void> {
+  await db.execute(sql`CREATE TABLE website.ci_compatibility_probe (id integer PRIMARY KEY)`)
+}
+export async function down(): Promise<void> { throw new Error('CI migration is not automatically reversed') }
+MIGRATION
+python3 - "$scratch/good-context/migrations/index.ts" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]); text = p.read_text()
+text = "import * as ci_additive from './20261031_000000_ci_additive';\n" + text
+text = text.replace('];', "  { up: ci_additive.up, down: ci_additive.down, name: '20261031_000000_ci_additive' },\n];")
+p.write_text(text)
+PY
+cat > "$scratch/good-context/Dockerfile" <<'DOCKERFILE'
 FROM xennic-preview-app
+COPY --chown=node:node migrations/ /app/migrations/
 LABEL xennic.ci.release="good"
 DOCKERFILE
-docker build -t ghcr.io/feerozmandi/xennic-website:ci-good -f "$scratch/Dockerfile.good" . >/dev/null
+docker build -t ghcr.io/feerozmandi/xennic-website:ci-good "$scratch/good-context" >/dev/null
 docker push ghcr.io/feerozmandi/xennic-website:ci-good > "$scratch/good-push.log"
 good_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/good-push.log" | tail -1)
 goodref="ghcr.io/feerozmandi/xennic-website@$good_digest"
 docker pull --platform linux/amd64 "$goodref" >/dev/null
 [[ "$goodref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ && "$goodref" != "$oldref" ]] || { echo 'Invalid or unchanged good fixture image reference' >&2; exit 1; }
 cat > "$scratch/Dockerfile.bad" <<'DOCKERFILE'
-FROM xennic-preview-app
+FROM ghcr.io/feerozmandi/xennic-website:ci-good
 CMD ["node", "-e", "require('http').createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'bad'}))}).listen(3000,'0.0.0.0')"]
 DOCKERFILE
 docker build -t ghcr.io/feerozmandi/xennic-website:ci-bad -f "$scratch/Dockerfile.bad" . >/dev/null
@@ -268,13 +287,13 @@ compose=(sudo env PREVIEW_IMAGE="$oldref" docker compose -p xennic-preview --env
 "${compose[@]}" up -d --wait --no-build app
 # Only disposable files created by this CI fixture are reset; operational data is untouched.
 sudo rm -f /srv/xennic-preview/work/backup.age /srv/xennic-preview/state/backup-2.json /srv/xennic-preview/state/backup-3.json
-python3 - "$oldref" "$goodref" "$badref" <<'PY' > "$scratch/fixture-values.json"
+python3 - "$oldref" "$goodref" "$badref" "$scratch/good-context/migrations" <<'PY' > "$scratch/fixture-values.json"
 import hashlib, json, pathlib, sys
-old, good, bad = (x.split('@', 1)[1] for x in sys.argv[1:])
+old, good, bad = (x.split('@', 1)[1] for x in sys.argv[1:4])
 def r(n, digest):
  return {'repository':'feerozmandi/xennic-website','commit':f'{n:040x}','digest':digest,'platform':'linux/amd64','run_number':n}
 h = hashlib.sha256()
-root = pathlib.Path('migrations')
+root = pathlib.Path(sys.argv[4])
 for path in sorted(p for p in root.rglob('*') if p.is_file()):
  name = path.relative_to(root).as_posix(); data = path.read_bytes()
  h.update(name.encode() + b'\0' + str(len(data)).encode() + b'\0' + data)
@@ -287,7 +306,7 @@ p = pathlib.Path(sys.argv[1]); v = json.loads((p/'fixture-values.json').read_tex
 (p/'chain-github.json').write_text(json.dumps({'current':'first','releases':{'first':v['first'],'second':v['second']}}))
 (p/'chain-transitions.json').write_text(json.dumps({'version':1,'transitions':[
  {'from_commit':v['previous']['commit'],'to_commit':v['first']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline'],'rollback_safe':True},
- {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline'],'rollback_safe':True}]}))
+ {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline','20261031_000000_ci_additive'],'rollback_safe':True}]}))
 PY
 sudo install -o root -g root -m 0600 "$scratch/chain-state.json" /srv/xennic-preview/state/release-state.json
 sudo install -o root -g root -m 0600 "$scratch/chain-github.json" /srv/xennic-preview/config/ci-github-fixture.json
