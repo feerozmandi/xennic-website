@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ پروتکل و قفل استقرار](reports/2026-10-31-deploy-protocol-lock.md) | receiver غیرفعال و آزمون قفل انحصاری |
 | ۲۰۲۶-۱۰-۳۱ | [آماده‌سازی client استقرار SSH](reports/2026-10-31-ssh-deploy-client.md) | انتقال ورودی اعتبارسنجی‌شده و موانع |
 | ۲۰۲۶-۱۰-۳۱ | [پیش‌پرواز VPS و manifest](reports/2026-10-31-vps-inventory-and-manifest.md) | گزارش مالک و اعتبارسنجی ورودی deploy |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ تحویل پیش‌نمایش](reports/2026-10-31-preview-delivery-continuation.md) | مسئولیت یکپارچه، آزمون digest و پیش‌نیازهای باز |

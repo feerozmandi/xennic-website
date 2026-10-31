@@ -35,10 +35,12 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
-      - name: Deployment manifest and SSH transport tests
+      - name: Deployment protocol tests
         run: |
           python3 tests/preview-deploy-manifest.py
           python3 tests/preview-deploy-client.py
+          python3 tests/preview-deploy-receiver.py
+          python3 tests/preview-deploy-lock.py
       - name: Build
         run: npm run build
 
