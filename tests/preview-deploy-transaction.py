@@ -49,6 +49,7 @@ class Operations:
             return None
         return {"initial": not self.rollback_safe, "rollback_safe": self.rollback_safe}
 
+    def pull_image(self, r): self.step("pull")
     def backup_and_verify(self, r): self.step("backup")
     def assert_current(self, r): self.step("assert_current")
     def mark_inflight(self, r):
@@ -72,7 +73,7 @@ class TransactionTest(unittest.TestCase):
     def test_success_order_under_lock(self):
         ops = Operations()
         tx.deploy(release(), ops)
-        self.assertEqual(ops.events, ["lock", "read_state", "preflight", "assert_current", "mark_inflight", "backup",
+        self.assertEqual(ops.events, ["lock", "read_state", "preflight", "assert_current", "pull", "assert_current", "mark_inflight", "backup",
                                       "assert_current", "migrate", "assert_current", "activate", "health", "mark_healthy", "unlock"])
         self.assertEqual(ops.state, {"blocked": False, "last_run": 6})
 
@@ -88,13 +89,16 @@ class TransactionTest(unittest.TestCase):
                 self.assertNotIn("migrate", ops.events)
 
     def test_preflight_backup_and_journal_fail_before_migration(self):
-        for failure in ("preflight", "backup", "assert_current", "mark_inflight"):
+        for failure in ("preflight", "pull", "backup", "assert_current", "mark_inflight"):
             with self.subTest(failure=failure):
                 ops = Operations(fail=failure)
                 with self.assertRaises(RuntimeError): tx.deploy(release(), ops)
                 self.assertNotIn("migrate", ops.events)
                 self.assertEqual(ops.events[-1], "unlock")
                 self.assertEqual(ops.state["blocked"], failure == "backup")
+                if failure == "pull":
+                    self.assertNotIn("mark_inflight", ops.events)
+                    self.assertNotIn("backup", ops.events)
                 if failure == "backup":
                     self.assertLess(ops.events.index("mark_inflight"), ops.events.index("backup"))
                     self.assertIn("ensure_blocked", ops.events)

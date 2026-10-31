@@ -54,11 +54,18 @@ sudo /usr/sbin/sshd -t -f "$scratch/sshd_config"
 sudo /usr/sbin/sshd -f "$scratch/sshd_config"
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install /srv/xennic-preview /srv/xennic-preview/config /srv/xennic-preview/secrets /srv/xennic-preview/work /srv/xennic-preview/state
 sudo install -d -o root -g root -m 0755 /usr/local/libexec
-for f in preview-backup-sftp.py preview-backup-operation.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py; do
+for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/$f"
 done
 sudo install -o root -g root -m 0700 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/install-preview-sftp-helper.py
 sudo /usr/bin/python3 /root/xennic-preview-install/install-preview-sftp-helper.py
+# Negative parser checks execute the installed pull code without any network.
+if printf '%s\n%s\n' '{"repository":"other/repo"}' 'synthetic-token' | sudo /usr/local/libexec/xennic-preview/pull-image >/dev/null 2>&1; then
+  echo 'Invalid pull manifest was accepted' >&2; exit 1
+fi
+if sudo /usr/local/libexec/xennic-preview/pull-image --arbitrary </dev/null >/dev/null 2>&1; then
+  echo 'Arbitrary pull argument was accepted' >&2; exit 1
+fi
 sudo install -o root -g root -m 0600 "$scratch/client" /srv/xennic-preview/secrets/backup-ssh-key
 age-keygen -o "$scratch/age-identity" >/dev/null 2>&1
 sudo install -o root -g root -m 0600 "$scratch/age-identity" /srv/xennic-preview/secrets/backup-identity

@@ -96,6 +96,7 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(self.journal.read()["current"], release(2))
         self.assertFalse(self.journal.read()["blocked"])
         phases = [x[0] for x in self.runner.events]
+        self.assertLess(phases.index("pull-image"), phases.index("backup-verify"))
         self.assertLess(phases.index("backup-verify"), phases.index("migrate"))
         self.assertLess(phases.index("migrate"), phases.index("activate"))
 
@@ -121,6 +122,16 @@ class BackendTest(unittest.TestCase):
                 self.assertFalse(self.lock_path.exists())
                 self.assertEqual(self.journal.read(), before)
                 self.assertEqual(self.runner.events, [])
+
+    def test_pull_failure_does_not_block_or_stop_existing_release(self):
+        self.runner.fail = "pull-image"
+        with mock.patch.object(backend.readiness, "check", side_effect=self.ready):
+            with self.assertRaises(backend.BackendError):
+                backend.run_checked(raw(2), b"synthetic-token", self.ops)
+        self.assertFalse(self.journal.read()["blocked"])
+        self.assertEqual(self.runner.running, release(1))
+        self.assertNotIn(("backup-verify", 2), self.runner.events)
+        self.assertNotIn(("migrate", 2), self.runner.events)
 
     def test_backup_failure_never_migrates_or_changes_release(self):
         self.runner.fail = "backup-verify"

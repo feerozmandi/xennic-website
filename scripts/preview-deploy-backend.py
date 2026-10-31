@@ -143,14 +143,13 @@ class Backend:
             raise BackendError("release verification does not match local state")
         return {"initial": decision["initial"], "rollback_safe": decision["rollback_safe"]}
 
+    def pull_image(self, release): self.runner.call("pull-image", release, self.token)
     def backup_and_verify(self, release): self.runner.call("backup-verify", release)
     def assert_current(self, release): self.runner.call("current-check", release)
     def mark_inflight(self, release): self.journal.mark_inflight(release)
     def ensure_blocked(self, release): self.journal.ensure_blocked(release)
 
-    def migrate(self, release):
-        self.runner.call("pull-image", release, self.token)
-        self.runner.call("migrate", release)
+    def migrate(self, release): self.runner.call("migrate", release)
 
     def activate(self, release): self.runner.call("activate", release)
     def verify_health(self, release): self.runner.call("health", release)

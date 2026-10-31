@@ -67,6 +67,10 @@ with tempfile.TemporaryDirectory(prefix='xennic-rollback-', dir=os.environ['RUNN
         def lock(self): return lock.acquire_lock(directory / 'lock', owner_uid=os.geteuid())
         def read_state(self): return journal.read()
         def preflight(self, item): return {'initial': False, 'rollback_safe': True}
+        def pull_image(self, item):
+            # Local fixture only, not a registry pull or release verifier.
+            subprocess.run(['/usr/bin/docker', 'image', 'inspect', f'{project}-bad'],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         def backup_and_verify(self, item): pass
         def assert_current(self, item): pass
         def mark_inflight(self, item): journal.mark_inflight(item)

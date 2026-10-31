@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Install the fixed backup/SFTP helpers and trusted modules; deployment remains disabled.
+"""Install the fixed pull/backup/SFTP helpers and trusted modules; deployment remains disabled.
 
 A root administrator must stage these exact files under the fixed private
 /root/xennic-preview-install directory. This intentionally refuses upgrades and
@@ -14,9 +14,10 @@ import sys
 SOURCE = Path('/root/xennic-preview-install')
 PARENT = Path('/usr/local/libexec')
 TARGET = PARENT / 'xennic-preview'
-FILES = ('preview-backup-sftp.py', 'preview-backup-operation.py', 'preview-age-backup.py',
+FILES = ('preview-backup-sftp.py', 'preview-backup-operation.py', 'preview-pull-image.py', 'preview-age-backup.py',
          'preview-deploy-readiness.py', 'preview-deploy-state.py', 'preview-deploy-manifest.py')
-EXECUTABLES = {'preview-backup-sftp.py': 'sftp-transfer', 'preview-backup-operation.py': 'backup-verify'}
+EXECUTABLES = {'preview-backup-sftp.py': 'sftp-transfer', 'preview-backup-operation.py': 'backup-verify',
+               'preview-pull-image.py': 'pull-image'}
 
 
 def check_dir(path):

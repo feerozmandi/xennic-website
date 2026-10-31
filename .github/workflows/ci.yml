@@ -186,6 +186,11 @@ jobs:
           PREVIEW_ORIGIN: https://preview.xennic.ir
           PREVIEW_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
         run: bash scripts/ci-preview.sh
+      - name: Test installed GHCR pull helper with published digest
+        env:
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tests/preview-ghcr-pull-published-ci.sh
       - name: Prepare same-run release evidence
         env:
           IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}

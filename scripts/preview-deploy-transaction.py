@@ -29,7 +29,7 @@ def deploy(raw_manifest, ops):
     """Run one transaction while the trusted backend holds the shared host lock.
 
     Required backend operations: lock(), read_state(), preflight(manifest),
-    backup_and_verify(manifest), assert_current(manifest), mark_inflight(manifest),
+    pull_image(manifest), backup_and_verify(manifest), assert_current(manifest), mark_inflight(manifest),
     migrate(manifest), activate(manifest), verify_health(manifest), mark_healthy(manifest),
     ensure_blocked(manifest), rollback_previous(), verify_previous_health(). preflight returns a dict with
     boolean initial and rollback_safe fields, based on trusted server state.
@@ -56,9 +56,13 @@ def deploy(raw_manifest, ops):
                 (readiness["initial"] and readiness["rollback_safe"])):
             raise DeploymentRejected("release or rollback compatibility not established")
         rollback_safe = readiness["rollback_safe"]
-        # Maintenance can stop the app, so block durably before any such action.
-        # The backend must then prove an offsite backup and restore before migration.
+        # Pull while the previous app is still running. A network failure must
+        # neither enter maintenance nor change the journal.
         ops.assert_current(release)
+        ops.pull_image(release)
+        # Dev can advance during a lengthy pull; check again before blocking.
+        ops.assert_current(release)
+        # Block durably before maintenance can stop app writers.
         ops.mark_inflight(release)
         switch_attempted = False
         try:
