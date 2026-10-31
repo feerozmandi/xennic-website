@@ -35,13 +35,21 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
+      - name: Age backup format tests
+        run: python3 tests/preview-age-backup.py
       - name: Deployment protocol tests
         run: |
           python3 tests/preview-deploy-manifest.py
+          python3 tests/preview-release-evidence.py
+          python3 tests/preview-release-verifier.py
           python3 tests/preview-deploy-client.py
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py
+          python3 tests/preview-deploy-state.py
+          python3 tests/preview-deploy-readiness.py
           python3 tests/preview-deploy-transaction.py
+          python3 tests/preview-deploy-backend.py
+          python3 tests/preview-compose-operations.py
           python3 tests/preview-internal-health.py
       - name: Build
         run: npm run build
@@ -92,6 +100,22 @@ jobs:
           if test -f "$RUNNER_TEMP/xennic-next.pid"; then kill "$(cat "$RUNNER_TEMP/xennic-next.pid")" || true; fi
           docker compose down --volumes --remove-orphans
 
+  installed-sftp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install disposable fixture dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age nginx openssl
+      - name: Install and exercise the root-owned preview helpers
+        run: |
+          if ! bash tests/preview-sftp-installed-ci.sh > "$RUNNER_TEMP/installed-preview-ci.log" 2>&1; then
+            tail -n 40 "$RUNNER_TEMP/installed-preview-ci.log"
+            details=$(tail -n 25 "$RUNNER_TEMP/installed-preview-ci.log" | tr '\n' ';' | cut -c1-5000)
+            echo "::error::Disposable fixture failure: $details"
+            exit 1
+          fi
+          tail -n 15 "$RUNNER_TEMP/installed-preview-ci.log"
+
   production-preview:
     runs-on: ubuntu-latest
     env:
@@ -110,13 +134,15 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Install age for disposable backup test
+        run: sudo apt-get update -qq && sudo apt-get install -y age
       - name: Build and test isolated production preview
         run: bash scripts/ci-preview.sh
 
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: [checks, compose-smoke, production-preview]
+    needs: [checks, compose-smoke, production-preview, installed-sftp]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -154,6 +180,8 @@ jobs:
           cache: npm
       - name: Install test dependencies
         run: npm ci
+      - name: Install age for disposable backup test
+        run: sudo apt-get update -qq && sudo apt-get install -y age
       - name: Test the published digest without rebuilding
         env:
           COMPOSE_PROJECT_NAME: xennic-preview-ci
@@ -166,6 +194,22 @@ jobs:
           PREVIEW_ORIGIN: https://preview.xennic.ir
           PREVIEW_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.publish.outputs.digest }}
         run: bash scripts/ci-preview.sh
+      - name: Test installed GHCR pull helper with published digest
+        env:
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash tests/preview-ghcr-pull-published-ci.sh
+      - name: Prepare same-run release evidence
+        env:
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: python3 scripts/preview-release-evidence.py > "$RUNNER_TEMP/xennic-preview-release.json"
+      - name: Preserve same-run release evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: xennic-preview-release-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/xennic-preview-release.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Record the tested immutable image reference
         env:
           IMAGE: ${{ steps.image.outputs.name }}

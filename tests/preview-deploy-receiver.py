@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import base64
+import hashlib
 import importlib.util
+import struct
 import json
 import os
 from pathlib import Path
@@ -40,12 +43,17 @@ class ReceiverTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             key, hosts = Path(directory) / "key", Path(directory) / "known_hosts"
             key.touch(mode=0o600)
+            key.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nsynthetic\n-----END OPENSSH PRIVATE KEY-----\n")
             hosts.touch(mode=0o600)
+            algorithm = b"ssh-ed25519"
+            blob = struct.pack(">I", len(algorithm)) + algorithm + struct.pack(">I", 32) + b"x" * 32
+            fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+            hosts.write_text(f"[{client.HOST}]:{client.PORT} ssh-ed25519 {base64.b64encode(blob).decode()}\n")
             env = {
                 "GITHUB_REPOSITORY": data()["repository"], "GITHUB_SHA": data()["commit"],
                 "GITHUB_RUN_NUMBER": str(data()["run_number"]), "PREVIEW_IMAGE_DIGEST": data()["digest"],
                 "PREVIEW_GHCR_TOKEN": "synthetic-only-token", "PREVIEW_SSH_KEY_FILE": str(key),
-                "PREVIEW_KNOWN_HOSTS_FILE": str(hosts),
+                "PREVIEW_KNOWN_HOSTS_FILE": str(hosts), "PREVIEW_CONFIRMED_HOST_FINGERPRINT": fingerprint,
             }
             command, payload = client.prepare(env)
             parsed, token = receiver.parse_request(command[-1], payload)
@@ -77,7 +85,7 @@ class ReceiverTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout, b"")
         self.assertNotIn(b"synthetic-only-token", proc.stderr)
-        self.assertIn(b"not enabled", proc.stderr)
+        self.assertTrue(b"blocked" in proc.stderr or b"not enabled" in proc.stderr)
         proc = subprocess.run([sys.executable, script], input=request(token=b"bad token"), env=env, capture_output=True)
         self.assertEqual(proc.returncode, 2)
         self.assertNotIn(b"bad token", proc.stderr)

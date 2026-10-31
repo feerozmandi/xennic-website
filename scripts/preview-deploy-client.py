@@ -4,8 +4,13 @@
 This client does not provision the server, configure trust, or enable deployment.
 The receiving forced-command wrapper must validate all input independently.
 """
+import base64
+import binascii
+import hashlib
+import hmac
 import importlib.util
 import json
+import struct
 import os
 from pathlib import Path
 import re
@@ -27,6 +32,32 @@ REMOTE_COMMAND = "xennic-preview-deploy"
 
 class ClientError(ValueError):
     pass
+
+
+def verify_known_host(path, expected):
+    # The expected fingerprint must be supplied only after independent validation;
+    # a fingerprint merely observed through SSH is not a trust decision.
+    if not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", expected):
+        raise ClientError("independently confirmed host fingerprint is missing or invalid")
+    try:
+        raw = Path(path).read_bytes()
+        if len(raw) > 1024:
+            raise ValueError
+        fields = raw.decode("ascii").strip().split()
+        if len(fields) != 3 or fields[:2] != [f"[{HOST}]:{PORT}", "ssh-ed25519"]:
+            raise ValueError
+        blob = base64.b64decode(fields[2], validate=True)
+        algorithm = b"ssh-ed25519"
+        if (len(blob) != 4 + len(algorithm) + 4 + 32 or
+                blob[:4] != struct.pack(">I", len(algorithm)) or
+                blob[4:4 + len(algorithm)] != algorithm or
+                blob[4 + len(algorithm):8 + len(algorithm)] != struct.pack(">I", 32)):
+            raise ValueError
+        actual = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode("ascii").rstrip("=")
+    except (OSError, ValueError, UnicodeError, binascii.Error) as exc:
+        raise ClientError("known_hosts must contain the exact pinned ED25519 host key") from exc
+    if not hmac.compare_digest(actual, expected):
+        raise ClientError("known_hosts does not match the independently confirmed fingerprint")
 
 
 def prepare(env):
@@ -57,6 +88,15 @@ def prepare(env):
                 raise ClientError("unsafe SSH trust or identity file")
         except (OSError, ValueError) as exc:
             raise ClientError("missing or unsafe SSH trust or identity file") from exc
+    try:
+        private_key = Path(key).read_bytes()
+        if (len(private_key) > 16384 or
+                not private_key.startswith(b"-----BEGIN OPENSSH PRIVATE KEY-----\n") or
+                not private_key.rstrip().endswith(b"-----END OPENSSH PRIVATE KEY-----")):
+            raise ClientError("SSH deploy identity is missing or invalid")
+    except OSError as exc:
+        raise ClientError("SSH deploy identity is missing or invalid") from exc
+    verify_known_host(known_hosts, env.get("PREVIEW_CONFIRMED_HOST_FINGERPRINT", ""))
     command = [
         "/usr/bin/ssh", "-F", "/dev/null", "-T", "-p", PORT,
         "-i", key, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
@@ -75,7 +115,10 @@ def main():
             command, input=payload, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             env={"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "LANG": "C"}, check=False,
         )
-    except (ClientError, UnicodeError, OSError):
+    except ClientError as exc:
+        print(f"Preview deployment blocked: {exc}.", file=sys.stderr)
+        return 1
+    except (UnicodeError, OSError):
         print("Preview deployment transport failed; no sensitive output is shown.", file=sys.stderr)
         return 1
     if result.returncode:

@@ -20,6 +20,13 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [زنجیرهٔ helperهای نصب‌شده](reports/2026-10-31-installed-preview-chain.md) | نتیجهٔ CI دورریختنی، rollback و آزمون GHCR پس از merge |
+| ۲۰۲۶-۱۰-۳۱ | [Pull پیش از maintenance](reports/2026-10-31-pull-before-maintenance.md) | helper محدود GHCR و مانع زنجیره |
+| ۲۰۲۶-۱۰-۳۱ | [helper نصب‌شدهٔ SFTP](reports/2026-10-31-installed-sftp.md) | نصب محدود، انتقال و حدود زنجیره |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ فرمت age](reports/2026-10-31-age-backup-continuation.md) | فرمت رمزنگاری و موانع مشخص مسیر عملیاتی |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ مسیر اجرایی](reports/2026-10-31-executable-path.md) | رمزنگاری آزمایشی، تعویض Compose و محدودیت‌های backend |
+| ۲۰۲۶-۱۰-۳۱ | [backend محدود پیش‌نمایش](reports/2026-10-31-restricted-deploy-backend.md) | عملیات ثابت، آزمون مصنوعی و موانع |
+| ۲۰۲۶-۱۰-۳۱ | [ادامهٔ backend و بازیابی پیش‌نمایش](reports/2026-10-31-deploy-backend-continuation.md) | آزمون digest و آمادگی ایمن استقرار |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ سلامت و بازگشت پیش‌نمایش](reports/2026-10-31-deploy-health-rollback.md) | سلامت داخلی، منطق تراکنش و محدودیت‌ها |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ پروتکل و قفل استقرار](reports/2026-10-31-deploy-protocol-lock.md) | receiver غیرفعال و آزمون قفل انحصاری |
 | ۲۰۲۶-۱۰-۳۱ | [آماده‌سازی client استقرار SSH](reports/2026-10-31-ssh-deploy-client.md) | انتقال ورودی اعتبارسنجی‌شده و موانع |

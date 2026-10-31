@@ -29,9 +29,9 @@ def deploy(raw_manifest, ops):
     """Run one transaction while the trusted backend holds the shared host lock.
 
     Required backend operations: lock(), read_state(), preflight(manifest),
-    backup_and_verify(manifest), assert_current(manifest), mark_inflight(manifest),
+    pull_image(manifest), backup_and_verify(manifest), assert_current(manifest), mark_inflight(manifest),
     migrate(manifest), activate(manifest), verify_health(manifest), mark_healthy(manifest),
-    rollback_previous(), verify_previous_health(). preflight returns a dict with
+    ensure_blocked(manifest), rollback_previous(), verify_previous_health(). preflight returns a dict with
     boolean initial and rollback_safe fields, based on trusted server state.
     mark_inflight must durably block later releases before migration begins;
     mark_healthy must atomically record success and clear that block. A backend
@@ -56,13 +56,18 @@ def deploy(raw_manifest, ops):
                 (readiness["initial"] and readiness["rollback_safe"])):
             raise DeploymentRejected("release or rollback compatibility not established")
         rollback_safe = readiness["rollback_safe"]
-        # The backend must back up DB and media off-host and prove restore before
-        # any migration; a failed or unavailable backup must raise here.
-        ops.backup_and_verify(release)
+        # Pull while the previous app is still running. A network failure must
+        # neither enter maintenance nor change the journal.
         ops.assert_current(release)
+        ops.pull_image(release)
+        # Dev can advance during a lengthy pull; check again before blocking.
+        ops.assert_current(release)
+        # Block durably before maintenance can stop app writers.
         ops.mark_inflight(release)
         switch_attempted = False
         try:
+            ops.backup_and_verify(release)
+            ops.assert_current(release)
             ops.migrate(release)
             # An old run must not switch traffic if dev advanced during migration.
             # The durable block stays in place if this check fails.
@@ -73,6 +78,12 @@ def deploy(raw_manifest, ops):
             ops.verify_health(release)
             ops.mark_healthy(release)
         except Exception:
+            # A failed durable success write can have partially committed. Ensure
+            # a durable blocked state before any rollback or subsequent release.
+            try:
+                ops.ensure_blocked(release)
+            except Exception:
+                raise DeploymentFailed("release state uncertain; stop and review") from None
             rollback_ok = False
             if switch_attempted and rollback_safe:
                 try:
