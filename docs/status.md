@@ -1,7 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
 - **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۱
-- **انتقال backup:** helper محدود و installer جزئی SFTP اضافه شده و CI اختصاصی در حال پیگیری است؛ زنجیرهٔ استقرار و توقف واقعی نویسنده‌ها همچنان ناقص است؛ [گزارش](reports/2026-10-31-installed-sftp.md).
+- **backup نصب‌شده:** helperهای backup و SFTP در [CI 41216964464](https://github.com/feerozmandi/xennic-website/actions/runs/41216964464) با توقف app، DB/media مصنوعی، انتقال و restore DB ایزوله موفق شدند؛ زنجیرهٔ استقرار، verifier و بررسی کامل نویسنده‌های میزبان هنوز ناقص‌اند؛ [گزارش](reports/2026-10-31-installed-sftp.md).
 - **فرمت age:** بستهٔ DB/media با کلید آزمایشی در [CI 41214259133](https://github.com/feerozmandi/xennic-website/actions/runs/41214259133) آزموده شد. اتصال عملیاتی backup/restore، اصالت فرستنده، helperهای ممتاز، verifier انتشار و سازگاری migration همچنان ناقص‌اند؛ [گزارش ادامه](reports/2026-10-31-age-backup-continuation.md).
 - **ادامهٔ مسیر اجرایی:** رمزنگاری و restore دادهٔ مصنوعی و شکست/بازگشت Compose در محیط دورریختنی [CI 41213163176](https://github.com/feerozmandi/xennic-website/actions/runs/41213163176) برای `d307f4c` موفق شدند. backend ممتاز، تأیید مستقل release و backup عملیاتی همچنان ناقص‌اند؛ adapterهای CI جای آنها را نمی‌گیرند؛ [جزئیات و محدودیت‌ها](reports/2026-10-31-executable-path.md).
 - **مبنای بررسی:** `dev` در merge commit `397d505e4214f8c5c2270189ae8e7384905609ec` پس از [PR شمارهٔ ۱۱](https://github.com/feerozmandi/xennic-website/pull/11) و خروجی‌های گزارش‌شدهٔ مالک در این نشست.

@@ -190,8 +190,9 @@ def verify_restored_database(image_id, dump, expected_migrations):
             raise BackupFailed('restored migration ledger differs')
     finally:
         if started:
-            try: run([DOCKER, 'rm', '-f', name], timeout=60)
-            except BackupFailed: pass  # report separately in host maintenance review
+            # Cleanup failure is itself a failed backup: never proceed to migration
+            # with a disposable restore container left in an uncertain state.
+            run([DOCKER, 'rm', '-f', name], timeout=60)
 
 
 def backup(raw):
@@ -250,10 +251,10 @@ def main():
     try:
         backup(sys.stdin.buffer.read(manifest.MAX_MANIFEST_BYTES + 1).strip())
     except BackupFailed as exc:
-        print(f'Preview backup failed: {exc}; app remains stopped and release blocked', file=sys.stderr)
+        print(f'Preview backup failed: {exc}; release blocked; inspect app status', file=sys.stderr)
         return 1
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, KeyError) as exc:
-        print(f'Preview backup failed ({type(exc).__name__}); app remains stopped and release blocked', file=sys.stderr)
+        print(f'Preview backup failed ({type(exc).__name__}); release blocked; inspect app status', file=sys.stderr)
         return 1
     print('Stopped-app encrypted backup, SFTP readback and isolated DB restore passed')
     return 0

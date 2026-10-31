@@ -95,6 +95,10 @@ class TransactionTest(unittest.TestCase):
                 self.assertNotIn("migrate", ops.events)
                 self.assertEqual(ops.events[-1], "unlock")
                 self.assertEqual(ops.state["blocked"], failure == "backup")
+                if failure == "backup":
+                    self.assertLess(ops.events.index("mark_inflight"), ops.events.index("backup"))
+                    self.assertIn("ensure_blocked", ops.events)
+                    self.assertNotIn("rollback", ops.events)
         ops = Operations(rollback_safe=None)
         with self.assertRaises(tx.DeploymentRejected): tx.deploy(release(), ops)
         self.assertNotIn("backup", ops.events)
