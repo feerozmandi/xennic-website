@@ -125,19 +125,19 @@ class BackendTest(unittest.TestCase):
     def test_backup_failure_never_migrates_or_changes_release(self):
         self.runner.fail = "backup-verify"
         with mock.patch.object(backend.readiness, "check", side_effect=self.ready):
-            with self.assertRaises(backend.BackendError):
+            with self.assertRaises(backend.transaction.DeploymentFailed):
                 backend.run_checked(raw(2), b"synthetic-token", self.ops)
         self.assertEqual(self.runner.running, release(1))
-        self.assertFalse(self.journal.read()["blocked"])
+        self.assertTrue(self.journal.read()["blocked"])
         self.assertNotIn(("migrate", 2), self.runner.events)
 
     def test_corrupt_synthetic_backup_stops_before_migration(self):
         self.runner.fail = "corrupt-backup"
         with mock.patch.object(backend.readiness, "check", side_effect=self.ready):
-            with self.assertRaises(backend.BackendError):
+            with self.assertRaises(backend.transaction.DeploymentFailed):
                 backend.run_checked(raw(2), b"synthetic-token", self.ops)
         self.assertEqual(self.runner.running, release(1))
-        self.assertFalse(self.journal.read()["blocked"])
+        self.assertTrue(self.journal.read()["blocked"])
         self.assertNotIn(("migrate", 2), self.runner.events)
 
     def test_failed_rollback_keeps_release_blocked(self):

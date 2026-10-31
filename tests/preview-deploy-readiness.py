@@ -34,7 +34,7 @@ class ReadinessTest(unittest.TestCase):
         self.put("secrets/preview.env", "PREVIEW_POSTGRES_USER=test\nPREVIEW_POSTGRES_DB=test\n"
                  "PREVIEW_POSTGRES_PASSWORD=synthetic\nPREVIEW_DATABASE_URL=synthetic\nPREVIEW_PAYLOAD_SECRET=synthetic\n")
         self.put("secrets/oauth2-proxy.cfg", 'client_id="synthetic"\nclient_secret="synthetic"\ncookie_secret="synthetic"\n')
-        self.put("config/backup.json", json.dumps({"approved": True, "transport": "sftp", "host": "backup.example.org",
+        self.put("config/backup.json", json.dumps({"approved": True, "transport": "sftp", "host": "backup.example.org", "port": 22, "user": "backup",
                  "remote_directory": "/private/preview", "age_recipient": "age1" + "q" * 58}))
         for p in ("secrets/backup-ssh-key", "secrets/backup-identity", "config/backup-known-hosts"):
             self.put(p, "synthetic-only")
@@ -65,7 +65,7 @@ class ReadinessTest(unittest.TestCase):
                  'PREVIEW_POSTGRES_PASSWORD=""\nPREVIEW_DATABASE_URL=test\nPREVIEW_PAYLOAD_SECRET=test\n')
         with self.assertRaises(readiness.NotReady): self.check()
         self.valid()
-        self.put("config/backup.json", json.dumps({"approved": False, "transport": "sftp", "host": "localhost",
+        self.put("config/backup.json", json.dumps({"approved": False, "transport": "sftp", "host": "localhost", "port": 22, "user": "backup",
                  "remote_directory": "/backup", "age_recipient": "age1" + "q" * 58}))
         with self.assertRaises(readiness.NotReady): self.check()
         self.valid()
@@ -76,8 +76,18 @@ class ReadinessTest(unittest.TestCase):
         self.valid()
         for host in ("127.5.4.3", "0.0.0.0", "169.254.1.2", "185.192.113.85"):
             with self.subTest(host=host):
-                self.put("config/backup.json", json.dumps({"approved": True, "transport": "sftp", "host": host,
+                self.put("config/backup.json", json.dumps({"approved": True, "transport": "sftp", "host": host, "port": 22, "user": "backup",
                          "remote_directory": "/private/preview", "age_recipient": "age1" + "q" * 58}))
+                with self.assertRaises(readiness.NotReady): self.check()
+
+    def test_sftp_input_cannot_inject_options_or_batch_commands(self):
+        self.valid()
+        original = json.loads((self.root / 'config/backup.json').read_text())
+        for field, bad in [('user', '-oProxyCommand'), ('user', 'user@host'), ('port', True), ('port', 0),
+                           ('host', '-invalid'), ('remote_directory', '/backup/../etc'),
+                           ('remote_directory', '/backup\nrm /')]:
+            with self.subTest(field=field, bad=bad):
+                self.put('config/backup.json', json.dumps(dict(original, **{field: bad})))
                 with self.assertRaises(readiness.NotReady): self.check()
 
     def test_only_local_syntactic_checks_pass_for_complete_synthetic_fixture(self):

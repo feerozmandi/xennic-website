@@ -72,8 +72,8 @@ class TransactionTest(unittest.TestCase):
     def test_success_order_under_lock(self):
         ops = Operations()
         tx.deploy(release(), ops)
-        self.assertEqual(ops.events, ["lock", "read_state", "preflight", "backup", "assert_current", "mark_inflight",
-                                      "migrate", "assert_current", "activate", "health", "mark_healthy", "unlock"])
+        self.assertEqual(ops.events, ["lock", "read_state", "preflight", "assert_current", "mark_inflight", "backup",
+                                      "assert_current", "migrate", "assert_current", "activate", "health", "mark_healthy", "unlock"])
         self.assertEqual(ops.state, {"blocked": False, "last_run": 6})
 
     def test_bad_state_old_run_and_manifest_fail_before_mutation(self):
@@ -94,6 +94,7 @@ class TransactionTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError): tx.deploy(release(), ops)
                 self.assertNotIn("migrate", ops.events)
                 self.assertEqual(ops.events[-1], "unlock")
+                self.assertEqual(ops.state["blocked"], failure == "backup")
         ops = Operations(rollback_safe=None)
         with self.assertRaises(tx.DeploymentRejected): tx.deploy(release(), ops)
         self.assertNotIn("backup", ops.events)

@@ -99,6 +99,15 @@ jobs:
           if test -f "$RUNNER_TEMP/xennic-next.pid"; then kill "$(cat "$RUNNER_TEMP/xennic-next.pid")" || true; fi
           docker compose down --volumes --remove-orphans
 
+  installed-sftp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install disposable fixture dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age
+      - name: Install and exercise the root-owned SFTP helper
+        run: bash tests/preview-sftp-installed-ci.sh
+
   production-preview:
     runs-on: ubuntu-latest
     env:
@@ -125,7 +134,7 @@ jobs:
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: [checks, compose-smoke, production-preview]
+    needs: [checks, compose-smoke, production-preview, installed-sftp]
     runs-on: ubuntu-latest
     permissions:
       contents: read

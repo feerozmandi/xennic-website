@@ -68,6 +68,40 @@ def _object_pairs(pairs):
     return result
 
 
+def backup_config(root=ROOT, owner_uid=0):
+    try:
+        backup_raw = _read(Path(root), "config/backup.json", owner_uid)
+        backup = json.loads(backup_raw, object_pairs_hook=_object_pairs)
+    except (NotReady, ValueError, UnicodeError) as exc:
+        raise NotReady("backup configuration is missing or invalid") from exc
+    keys = {"approved", "transport", "host", "port", "user", "remote_directory", "age_recipient"}
+    if (not isinstance(backup, dict) or set(backup) != keys or backup.get("approved") is not True or
+            backup.get("transport") != "sftp" or
+            not isinstance(backup.get("host"), str) or
+            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", backup["host"]) or
+            backup["host"].lower() in ("localhost", "127.0.0.1", "185.192.113.85", "185.192.113.199") or
+            type(backup.get("port")) is not int or not 1 <= backup["port"] <= 65535 or
+            not isinstance(backup.get("user"), str) or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", backup["user"]) or
+            not isinstance(backup.get("remote_directory"), str) or
+            not re.fullmatch(r"/[A-Za-z0-9_./-]{1,240}", backup["remote_directory"]) or
+            ".." in backup["remote_directory"].split("/") or
+            not isinstance(backup.get("age_recipient"), str) or
+            not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}", backup["age_recipient"])):
+        raise NotReady("approved off-site encrypted backup configuration is missing or invalid")
+    try:
+        address = ipaddress.ip_address(backup["host"])
+    except ValueError:
+        address = None
+    if address is not None and (address.is_loopback or address.is_unspecified or address.is_link_local):
+        raise NotReady("backup host must not be local or unspecified")
+    for path in ("secrets/backup-ssh-key", "secrets/backup-identity", "config/backup-known-hosts"):
+        try:
+            _read(Path(root), path, owner_uid)
+        except NotReady as exc:
+            raise NotReady("backup credentials or pinned backup host key are missing or unsafe") from exc
+    return backup
+
+
 def check(root=ROOT, owner_uid=0, registry_token=b""):
     root = Path(root)
     if not root.is_absolute():
@@ -90,37 +124,7 @@ def check(root=ROOT, owner_uid=0, registry_token=b""):
         raise NotReady("OAuth configuration is invalid") from exc
     if any(not isinstance(oauth.get(key), str) or not oauth[key] for key in ("client_id", "client_secret", "cookie_secret")):
         raise NotReady("required OAuth secret or client ID is missing")
-    try:
-        backup_raw = _read(root, "config/backup.json", owner_uid)
-    except NotReady as exc:
-        raise NotReady("approved off-site backup configuration is missing or unsafe") from exc
-    try:
-        backup = json.loads(backup_raw, object_pairs_hook=_object_pairs)
-    except (ValueError, UnicodeError) as exc:
-        raise NotReady("backup configuration is invalid") from exc
-    keys = {"approved", "transport", "host", "remote_directory", "age_recipient"}
-    if (not isinstance(backup, dict) or set(backup) != keys or backup.get("approved") is not True or
-            backup.get("transport") != "sftp" or
-            not isinstance(backup.get("host"), str) or
-            not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", backup["host"]) or
-            backup["host"].lower() in ("localhost", "127.0.0.1", "185.192.113.85", "185.192.113.199") or
-            not isinstance(backup.get("remote_directory"), str) or
-            not re.fullmatch(r"/[A-Za-z0-9_./-]{1,240}", backup["remote_directory"]) or
-            ".." in backup["remote_directory"].split("/") or
-            not isinstance(backup.get("age_recipient"), str) or
-            not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}", backup["age_recipient"])):
-        raise NotReady("approved off-site encrypted backup configuration is missing or invalid")
-    try:
-        address = ipaddress.ip_address(backup["host"])
-    except ValueError:
-        address = None
-    if address is not None and (address.is_loopback or address.is_unspecified or address.is_link_local):
-        raise NotReady("backup host must not be local or unspecified")
-    for path in ("secrets/backup-ssh-key", "secrets/backup-identity", "config/backup-known-hosts"):
-        try:
-            _read(root, path, owner_uid)
-        except NotReady as exc:
-            raise NotReady("backup credentials or pinned backup host key are missing or unsafe") from exc
+    backup_config(root, owner_uid)
     # Existence is not proof: the backend must verify endpoint identity, off-site
     # allocation, write/read, encryption and an isolated restore before mutation.
 

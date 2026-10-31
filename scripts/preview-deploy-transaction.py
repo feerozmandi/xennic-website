@@ -56,13 +56,14 @@ def deploy(raw_manifest, ops):
                 (readiness["initial"] and readiness["rollback_safe"])):
             raise DeploymentRejected("release or rollback compatibility not established")
         rollback_safe = readiness["rollback_safe"]
-        # The backend must back up DB and media off-host and prove restore before
-        # any migration; a failed or unavailable backup must raise here.
-        ops.backup_and_verify(release)
+        # Maintenance can stop the app, so block durably before any such action.
+        # The backend must then prove an offsite backup and restore before migration.
         ops.assert_current(release)
         ops.mark_inflight(release)
         switch_attempted = False
         try:
+            ops.backup_and_verify(release)
+            ops.assert_current(release)
             ops.migrate(release)
             # An old run must not switch traffic if dev advanced during migration.
             # The durable block stays in place if this check fails.
