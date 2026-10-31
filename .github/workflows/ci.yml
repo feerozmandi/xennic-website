@@ -41,6 +41,8 @@ jobs:
           python3 tests/preview-deploy-client.py
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py
+          python3 tests/preview-deploy-transaction.py
+          python3 tests/preview-internal-health.py
       - name: Build
         run: npm run build
 

@@ -56,6 +56,7 @@ if [[ -n "${PREVIEW_TEST_IMAGE:-}" ]]; then
   fi
   printf 'PASS: running app uses the image pulled by the recorded digest\n'
 fi
+python3 tests/preview-internal-health-ci.py
 printf '\n--- Idle app and database memory ---\n'
 docker stats --no-stream --format 'idle {{.Name}} {{.MemUsage}}' "$("${compose[@]}" ps -q app)" "$("${compose[@]}" ps -q postgres)" | tee -a "$metrics"
 node scripts/wait-for-server.mjs
