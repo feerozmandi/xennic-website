@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [بررسی دسترسی Firefox به lab](reports/2026-10-31-oauth-browser-resolution.md) | خطای Server Not Found و تفکیک پروفایل و وضعیت lab |
 | ۲۰۲۶-۱۰-۳۱ | [تشخیص شکست callback واقعی](reports/2026-10-31-oauth-callback-diagnosis.md) | پیام عمومی مالک و تشخیص غیرمحرمانه |
 | ۲۰۲۶-۱۰-۳۱ | [اصلاح prompt و ادامهٔ lab واقعی](reports/2026-10-31-real-oauth-resume.md) | نتیجهٔ مالک، تست PTY و ادامه بدون migration و seed |
 | ۲۰۲۶-۱۰-۳۱ | [تحویل lab مستقل OAuth واقعی](reports/2026-10-31-real-oauth-local-lab.md) | پیش‌نیازهای مالک، طراحی ایزوله و حدود آزمون |
