@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [زنجیرهٔ helperهای نصب‌شده](reports/2026-10-31-installed-preview-chain.md) | verifier، migration سازگار و آزمون CI |
 | ۲۰۲۶-۱۰-۳۱ | [Pull پیش از maintenance](reports/2026-10-31-pull-before-maintenance.md) | helper محدود GHCR و مانع زنجیره |
 | ۲۰۲۶-۱۰-۳۱ | [helper نصب‌شدهٔ SFTP](reports/2026-10-31-installed-sftp.md) | نصب محدود، انتقال و حدود زنجیره |
 | ۲۰۲۶-۱۰-۳۱ | [ادامهٔ فرمت age](reports/2026-10-31-age-backup-continuation.md) | فرمت رمزنگاری و موانع مشخص مسیر عملیاتی |

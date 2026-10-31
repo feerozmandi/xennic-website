@@ -77,11 +77,12 @@ class FixedRunner:
                 raise BackendError("preview operation is unsafe")
 
     def call(self, phase, release, token=None):
-        if phase not in PHASES or (token is not None and phase != "pull-image"):
+        token_phases = {"release-check", "current-check", "pull-image"}
+        if phase not in PHASES or (token is not None and phase not in token_phases):
             raise BackendError("invalid preview operation")
         release = _validated_release(release)
         payload = json.dumps(release, separators=(",", ":"), sort_keys=True).encode("ascii") + b"\n"
-        if phase == "pull-image":
+        if phase in token_phases:
             if not isinstance(token, bytes) or not token or len(token) > 4096 or any(x < 33 or x > 126 for x in token):
                 raise BackendError("GHCR token is missing")
             payload += token + b"\n"
@@ -94,7 +95,8 @@ class FixedRunner:
         except OSError as exc:
             raise BackendError("preview operation failed") from exc
         if result.returncode != 0:
-            raise BackendError("preview operation failed")
+            # The phase name is a fixed constant; never expose helper stderr.
+            raise BackendError(f"preview operation failed: {phase}")
         if phase == "release-check":
             try:
                 if len(result.stdout) > 1024:
@@ -135,7 +137,7 @@ class Backend:
         readiness.check(registry_token=self.token)
         self.runner.verify_helpers()
         self.active_release = _validated_release(release)
-        decision = self.runner.call("release-check", release)
+        decision = self.runner.call("release-check", release, self.token)
         if (decision["initial"] != (self.previous is None) or
                 decision["verified_commit"] != release["commit"] or
                 decision["verified_digest"] != release["digest"] or
@@ -145,7 +147,7 @@ class Backend:
 
     def pull_image(self, release): self.runner.call("pull-image", release, self.token)
     def backup_and_verify(self, release): self.runner.call("backup-verify", release)
-    def assert_current(self, release): self.runner.call("current-check", release)
+    def assert_current(self, release): self.runner.call("current-check", release, self.token)
     def mark_inflight(self, release): self.journal.mark_inflight(release)
     def ensure_blocked(self, release): self.journal.ensure_blocked(release)
 

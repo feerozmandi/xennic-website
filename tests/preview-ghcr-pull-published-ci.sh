@@ -16,7 +16,7 @@ cleanup() {
 trap cleanup EXIT
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install
 sudo install -d -o root -g root -m 0755 /usr/local/libexec
-for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py; do
+for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py preview-deploy-backend.py preview-deploy-transaction.py preview-deploy-lock.py preview-internal-health.py preview-compose-operations.py preview-release-verifier.py preview-fixed-operations.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/$f"
 done
 sudo install -o root -g root -m 0700 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/install-preview-sftp-helper.py

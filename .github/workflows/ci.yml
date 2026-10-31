@@ -104,8 +104,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install disposable fixture dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age
-      - name: Install and exercise the root-owned SFTP helper
+        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age nginx openssl
+      - name: Install and exercise the root-owned preview helpers
         run: bash tests/preview-sftp-installed-ci.sh
 
   production-preview:

@@ -1,0 +1,6 @@
+# زنجیرهٔ helperهای نصب‌شدهٔ پیش‌نمایش
+
+- **تاریخ/مبنا:** ۲۰۲۶-۱۰-۳۱، [PR #13](https://github.com/feerozmandi/xennic-website/pull/13). SSH و deploy واقعی غیرفعال‌اند؛ VPS، DNS و دادهٔ عملیاتی تغییر نکردند.
+- **کد:** installer فهرست ثابت helperهای کنترل‌کننده را root-owned نصب می‌کند. verifier فقط run موفق push به `dev` و artifact همان run/commit/digest را می‌پذیرد؛ pull پیش از maintenance است. migration به transition سازگار root-reviewed و hash فایل‌های migration تصویر محدود است؛ rollback در صورت همان تأیید و بدون restore خودکار انجام می‌شود. backup/SFTP حفظ شد؛ برای حفظ backup قبلی در انتشار تکراری، ciphertext قبلی پس از تطبیق با رکورد خود بدون حذف نگهداری می‌شود.
+- **آزمون:** job دورریختنی در حال پیگیری است. fixture آن GitHub API و GHCR محلی را شبیه‌سازی می‌کند؛ controller و همهٔ helperها، Docker، PostgreSQL، SFTP، age، migration، activation و health واقعی و نصب‌شده هستند. fixture شاهد واقعی GHCR نیست؛ آزمون واقعی GHCR با token job فقط پس از انتشار push به `dev` قابل اجراست. تا نتیجهٔ CI، موفقیت زنجیره ادعا نمی‌شود.
+- **حدود:** preflight اتصالات جاری DB و کانتینرهای شبکه را بررسی می‌کند، نه اثبات نبود تمام writerهای آینده روی میزبان؛ تنظیمات و ایزولاسیون واقعی باید جداگانه تأیید شوند. release نخست و نصب/ارتقای VPS خودکار فعال نشده است. fingerprint مستقل، مقصد offsite و ورود امن تنظیمات در زمان مناسب لازم‌اند. مرجع Vault تغییر نکرد.

@@ -1,6 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
 - **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۱
+- **زنجیرهٔ نصب‌شده:** helperهای ثابت و installer کامل به آزمون زنجیرهٔ دورریختنی اضافه شده‌اند؛ fixture انتشار شبیه‌سازی‌شده و نتیجهٔ CI در حال بررسی است؛ [گزارش](reports/2026-10-31-installed-preview-chain.md).
 - **Pull پیش از maintenance:** ترتیب کنترل‌کننده اصلاح و helper محدود GHCR اضافه شد؛ installer و verifier مستقل هنوز کامل نیستند؛ [گزارش](reports/2026-10-31-pull-before-maintenance.md).
 - **backup نصب‌شده:** helperهای backup و SFTP در [CI 41216964464](https://github.com/feerozmandi/xennic-website/actions/runs/41216964464) با توقف app، DB/media مصنوعی، انتقال و restore DB ایزوله موفق شدند؛ زنجیرهٔ استقرار، verifier و بررسی کامل نویسنده‌های میزبان هنوز ناقص‌اند؛ [گزارش](reports/2026-10-31-installed-sftp.md).
 - **فرمت age:** بستهٔ DB/media با کلید آزمایشی در [CI 41214259133](https://github.com/feerozmandi/xennic-website/actions/runs/41214259133) آزموده شد. اتصال عملیاتی backup/restore، اصالت فرستنده، helperهای ممتاز، verifier انتشار و سازگاری migration همچنان ناقص‌اند؛ [گزارش ادامه](reports/2026-10-31-age-backup-continuation.md).

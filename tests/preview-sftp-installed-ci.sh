@@ -14,8 +14,17 @@ fi
 if id xennicbackupci >/dev/null 2>&1; then echo 'Refusing existing fixture user' >&2; exit 1; fi
 scratch=$(mktemp -d "$RUNNER_TEMP/xennic-sftp.XXXXXX")
 cleanup() {
+  if test -f "$scratch/chain-created"; then
+    if sudo test -f "$scratch/nginx.pid"; then sudo kill "$(sudo cat "$scratch/nginx.pid")" 2>/dev/null || true; fi
+    if sudo test -f "$scratch/github-fixture.pid"; then sudo kill "$(sudo cat "$scratch/github-fixture.pid")" 2>/dev/null || true; fi
+    sudo docker rm -f xennic-ci-fixture-registry >/dev/null 2>&1 || true
+    if test -f "$scratch/hosts.original"; then sudo cp "$scratch/hosts.original" /etc/hosts; fi
+    sudo rm -f /usr/local/share/ca-certificates/xennic-ci-fixture.crt
+    sudo rm -rf /etc/docker/certs.d/ghcr.io
+    sudo update-ca-certificates >/dev/null 2>&1 || true
+  fi
   if sudo test -f /srv/xennic-preview/config/compose.yml && sudo test -f /srv/xennic-preview/secrets/preview.env; then
-    sudo docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml down --volumes --remove-orphans >/dev/null 2>&1 || true
+    sudo env PREVIEW_IMAGE="$(cat "$scratch/old-image" 2>/dev/null || echo fixture-only)" docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml down --volumes --remove-orphans >/dev/null 2>&1 || true
   fi
   if sudo test -f "$scratch/sshd.pid"; then sudo kill "$(sudo cat "$scratch/sshd.pid")" 2>/dev/null || true; fi
   sudo userdel -r xennicbackupci >/dev/null 2>&1 || true
@@ -54,7 +63,7 @@ sudo /usr/sbin/sshd -t -f "$scratch/sshd_config"
 sudo /usr/sbin/sshd -f "$scratch/sshd_config"
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install /srv/xennic-preview /srv/xennic-preview/config /srv/xennic-preview/secrets /srv/xennic-preview/work /srv/xennic-preview/state
 sudo install -d -o root -g root -m 0755 /usr/local/libexec
-for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py; do
+for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py preview-deploy-backend.py preview-deploy-transaction.py preview-deploy-lock.py preview-internal-health.py preview-compose-operations.py preview-release-verifier.py preview-fixed-operations.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/$f"
 done
 sudo install -o root -g root -m 0700 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/install-preview-sftp-helper.py
@@ -144,3 +153,114 @@ test "$(sudo docker inspect -f '{{.State.Running}}' "$app_id")" = false
 "${compose[@]}" exec -T postgres psql -U preview_ci -d preview_ci -tAc "SELECT count(*) FROM shared.customers WHERE name='CI snapshot fixture'" | grep -qx 1
 sudo grep -q '"blocked": true' /srv/xennic-preview/state/release-state.json
 printf 'PASS: installed backup helper stopped app, backed up DB/media, transferred and restored; failure stayed blocked\n'
+
+# Full installed transaction, with an isolated *simulated* GHCR and GitHub API.
+# The application, PostgreSQL, age, SFTP, Docker pull, installed controller,
+# helpers, migration, activation, health and rollback are all real. The
+# registry and release-evidence server below are explicitly CI fixtures.
+if sudo test -e /etc/docker/certs.d/ghcr.io || sudo test -e /usr/local/share/ca-certificates/xennic-ci-fixture.crt || docker inspect xennic-ci-fixture-registry >/dev/null 2>&1; then
+  echo 'Refusing existing registry fixture paths' >&2; exit 1
+fi
+touch "$scratch/chain-created"
+sudo /usr/sbin/sshd -f "$scratch/sshd_config"
+sudo docker run -d --rm --name xennic-ci-fixture-registry -p 127.0.0.1:55000:5000 registry:2 >/dev/null
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=CI fixture only' \
+  -addext 'subjectAltName=DNS:ghcr.io,DNS:api.github.com' -keyout "$scratch/fixture.key" -out "$scratch/fixture.crt" >/dev/null 2>&1
+sudo install -d -m 0755 /etc/docker/certs.d/ghcr.io
+sudo install -o root -g root -m 0644 "$scratch/fixture.crt" /etc/docker/certs.d/ghcr.io/ca.crt
+sudo install -o root -g root -m 0644 "$scratch/fixture.crt" /usr/local/share/ca-certificates/xennic-ci-fixture.crt
+sudo update-ca-certificates >/dev/null
+cat > "$scratch/nginx.conf" <<NGINX
+worker_processes 1;
+pid $scratch/nginx.pid;
+error_log $scratch/nginx-error.log;
+events { worker_connections 256; }
+http {
+  client_max_body_size 0;
+  server {
+    listen 127.0.0.1:443 ssl;
+    server_name ghcr.io;
+    ssl_certificate $scratch/fixture.crt;
+    ssl_certificate_key $scratch/fixture.key;
+    location / { proxy_pass http://127.0.0.1:55000; proxy_set_header Host \$host; proxy_set_header X-Forwarded-Proto https; proxy_read_timeout 300; }
+  }
+  server {
+    listen 127.0.0.1:443 ssl;
+    server_name api.github.com;
+    ssl_certificate $scratch/fixture.crt;
+    ssl_certificate_key $scratch/fixture.key;
+    location / { proxy_pass http://127.0.0.1:58001; proxy_set_header Host \$host; }
+  }
+}
+NGINX
+sudo nginx -t -c "$scratch/nginx.conf"
+sudo nginx -c "$scratch/nginx.conf"
+sudo install -o root -g root -m 0700 tests/preview-github-fixture-ci.py /root/xennic-preview-install/ci-github-fixture.py
+sudo sh -c '/usr/bin/python3 /root/xennic-preview-install/ci-github-fixture.py >/dev/null 2>&1 & echo $! > "$1"' sh "$scratch/github-fixture.pid"
+sudo cp /etc/hosts "$scratch/hosts.original"
+printf '\n127.0.0.1 ghcr.io # xennic-ci-fixture\n' | sudo tee -a /etc/hosts >/dev/null
+cp /etc/hosts "$scratch/namespace-hosts"
+printf '\n127.0.0.1 api.github.com # xennic-ci-fixture\n' >> "$scratch/namespace-hosts"
+# Fake GHCR repo: these digests are not evidence of the real registry.
+docker tag xennic-preview-app ghcr.io/feerozmandi/xennic-website:ci-good
+docker push ghcr.io/feerozmandi/xennic-website:ci-good >/dev/null
+oldref=$(docker image inspect ghcr.io/feerozmandi/xennic-website:ci-good --format '{{index .RepoDigests 0}}')
+[[ "$oldref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture image reference' >&2; exit 1; }
+printf '%s\n' "$oldref" > "$scratch/old-image"
+cat > "$scratch/Dockerfile.bad" <<'DOCKERFILE'
+FROM xennic-preview-app
+CMD ["node", "-e", "require('http').createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'bad'}))}).listen(3000,'0.0.0.0')"]
+DOCKERFILE
+docker build -t ghcr.io/feerozmandi/xennic-website:ci-bad -f "$scratch/Dockerfile.bad" . >/dev/null
+docker push ghcr.io/feerozmandi/xennic-website:ci-bad >/dev/null
+badref=$(docker image inspect ghcr.io/feerozmandi/xennic-website:ci-bad --format '{{index .RepoDigests 0}}')
+[[ "$badref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture bad image reference' >&2; exit 1; }
+# Compose is root-owned and fixed; only PREVIEW_IMAGE from the journal is used.
+python3 - <<'PY' > "$scratch/compose-chain.yml"
+from pathlib import Path
+s = Path('compose.preview.yml').read_text()
+old = '    build:\n      context: .\n      dockerfile: Dockerfile.preview\n'
+assert old in s
+print(s.replace(old, '    image: ${PREVIEW_IMAGE:?required}\n    pull_policy: never\n'), end='')
+PY
+sudo install -o root -g root -m 0600 "$scratch/compose-chain.yml" /srv/xennic-preview/config/compose.yml
+compose=(sudo env PREVIEW_IMAGE="$oldref" docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml)
+"${compose[@]}" up -d --wait --no-build app
+# Only disposable files created by this CI fixture are reset; operational data is untouched.
+sudo rm -f /srv/xennic-preview/work/backup.age /srv/xennic-preview/state/backup-2.json /srv/xennic-preview/state/backup-3.json
+python3 - "$oldref" "$badref" <<'PY' > "$scratch/fixture-values.json"
+import hashlib, json, pathlib, sys
+old, bad = (x.split('@', 1)[1] for x in sys.argv[1:])
+def r(n, digest):
+ return {'repository':'feerozmandi/xennic-website','commit':f'{n:040x}','digest':digest,'platform':'linux/amd64','run_number':n}
+h = hashlib.sha256()
+root = pathlib.Path('migrations')
+for path in sorted(p for p in root.rglob('*') if p.is_file()):
+ name = path.relative_to(root).as_posix(); data = path.read_bytes()
+ h.update(name.encode() + b'\0' + str(len(data)).encode() + b'\0' + data)
+print(json.dumps({'previous':r(1,old),'first':r(2,old),'second':r(3,bad),'migration_sha256':h.hexdigest()}))
+PY
+python3 - "$scratch" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1]); v = json.loads((p/'fixture-values.json').read_text())
+(p/'chain-state.json').write_text(json.dumps({'version':1,'last_run':1,'blocked':False,'current':v['previous'],'previous':[],'pending':None}))
+(p/'chain-github.json').write_text(json.dumps({'current':'first','releases':{'first':v['first'],'second':v['second']}}))
+(p/'chain-transitions.json').write_text(json.dumps({'version':1,'transitions':[
+ {'from_commit':v['previous']['commit'],'to_commit':v['first']['commit'],'migration_sha256':v['migration_sha256'],'rollback_safe':True},
+ {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'rollback_safe':True}]}))
+PY
+sudo install -o root -g root -m 0600 "$scratch/chain-state.json" /srv/xennic-preview/state/release-state.json
+sudo install -o root -g root -m 0600 "$scratch/chain-github.json" /srv/xennic-preview/config/ci-github-fixture.json
+sudo install -o root -g root -m 0600 "$scratch/chain-transitions.json" /srv/xennic-preview/config/compatible-transitions.json
+printf 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' | sudo tee /srv/xennic-preview/config/verified-host-fingerprint >/dev/null
+printf 'client_id="ci"\nclient_secret="ci"\ncookie_secret="ci"\n' | sudo tee /srv/xennic-preview/secrets/oauth2-proxy.cfg >/dev/null
+sudo chmod 0600 /srv/xennic-preview/config/verified-host-fingerprint /srv/xennic-preview/secrets/oauth2-proxy.cfg
+sudo install -o root -g root -m 0700 tests/preview-installed-chain-ci.py /root/xennic-preview-install/ci-installed-chain.py
+# Only the test subprocess sees the fake api.github.com hosts file; the runner
+# itself keeps its real GitHub API. Docker sees the fake ghcr.io on this VM.
+if ! chain_result=$(sudo unshare -m --propagation private /bin/sh -c 'mount --bind "$1" /etc/hosts; exec /usr/bin/python3 "$2"' sh "$scratch/namespace-hosts" /root/xennic-preview-install/ci-installed-chain.py 2>&1); then
+  printf '%s\n' "$chain_result"
+  printf '::error::Installed chain failed: %s\n' "${chain_result//$'\n'/; }"
+  exit 1
+fi
+printf '%s\n' "$chain_result"

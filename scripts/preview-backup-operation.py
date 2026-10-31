@@ -196,6 +196,7 @@ def verify_restored_database(image_id, dump, expected_migrations):
 
 
 def backup(raw):
+    global ENV
     if os.geteuid() != 0:
         raise BackupFailed('root required')
     release = manifest.validate_manifest(raw)
@@ -203,12 +204,37 @@ def backup(raw):
     state = states.Journal().read()
     if not state['blocked'] or state['pending'] != release or state['current'] is None:
         raise BackupFailed('a prior healthy release and blocked pending release are required')
+    # Compose may interpolate the currently running pinned image. The value is
+    # derived only from the root-owned journal, never from the caller's env.
+    ENV = dict(ENV, PREVIEW_IMAGE=f"ghcr.io/{manifest.REPOSITORY}@{state['current']['digest']}")
     for relative in ('config/compose.yml', 'secrets/preview.env'):
         readiness._read(ROOT, relative, 0)
     config = readiness.backup_config(ROOT, 0)
     encrypted = WORK / 'backup.age'
     if os.path.lexists(encrypted):
-        raise BackupFailed('previous encrypted snapshot still present; review required')
+        # Preserve (never delete) the last verified ciphertext for repeat releases.
+        # A crash between link/unlink causes a fail-closed nlink check next time.
+        try:
+            record = json.loads(readiness._read(ROOT, f"state/backup-{state['current']['run_number']}.json", 0))
+            st = os.lstat(encrypted)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or st.st_mode & 0o077 or
+                    record.get('release') != state['current']):
+                raise BackupFailed('previous backup cannot be safely preserved')
+            import hashlib
+            h = hashlib.sha256()
+            with open(encrypted, 'rb') as old:
+                for chunk in iter(lambda: old.read(1024 * 1024), b''): h.update(chunk)
+            if h.hexdigest() != record.get('sha256'):
+                raise BackupFailed('previous backup does not match record')
+            archive = WORK / 'retained'
+            try: archive.mkdir(mode=0o700)
+            except FileExistsError: pass
+            safe_directory(archive)
+            retained = archive / f"backup-{state['current']['run_number']}-{secrets.token_hex(12)}.age"
+            os.link(encrypted, retained, follow_symlinks=False)
+            os.unlink(encrypted)
+        except (OSError, ValueError, readiness.NotReady) as exc:
+            raise BackupFailed('previous backup cannot be safely preserved') from exc
     app, database, volume = single_app_and_database()
     run(COMPOSE + ['stop', '-t', '30', 'app'], timeout=60)
     # Never restart automatically on any failure: the durable journal remains blocked.
