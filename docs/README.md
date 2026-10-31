@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ تنظیم read:org محلی](reports/2026-10-31-read-org-local-result.md) | نتیجهٔ گزارش‌شدهٔ مالک و انتظار برای consent |
 | ۲۰۲۶-۱۰-۳۱ | [تأیید محدود read:org محلی](reports/2026-10-31-read-org-local-approval.md) | مجوز App مستقل، کنترل هویت و rollback |
 | ۲۰۲۶-۱۰-۳۱ | [خطای 403 در غنی‌سازی OAuth](reports/2026-10-31-oauth-enrichment-403.md) | تشخیص مرحله، محدودیت شواهد و دامنهٔ احتمالی read:org |
 | ۲۰۲۶-۱۰-۳۱ | [HTTP 500 و self-test تشخیصی OAuth](reports/2026-10-31-oauth-callback-500.md) | status گزارش‌شده و کنترل مسیر مشاهدهٔ خطا |
