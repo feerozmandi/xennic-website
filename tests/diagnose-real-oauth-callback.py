@@ -40,11 +40,12 @@ class ClassificationTest(unittest.TestCase):
 
 
 class SyntheticStreamTest(unittest.TestCase):
-    def test_stream_never_exposes_raw_synthetic_logs(self):
+    def test_stream_selftest_and_no_raw_output(self):
         with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'probe-called'
             fake = Path(directory) / 'docker'
             fake.write_text("""#!/usr/bin/python3
-import sys, time
+import os, sys, time
 args = sys.argv[1:]
 if args[0] == 'ps':
     print('123456789abc')
@@ -52,20 +53,81 @@ elif args[0] == 'inspect':
     print('true xennic-real-oauth-73c028764aa6 gate none quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916')
 elif args[0] == 'attach':
     assert args[1:] == ['--no-stdin', '--sig-proxy=false', '123456789abc']
+    while not os.path.exists(os.environ['FAKE_PROBE_MARKER']): time.sleep(.01)
     print('unclassified synthetic-private-token', flush=True)
+    print('Error while parsing OAuth2 state: invalid length', flush=True)
+    time.sleep(.3)
     print('Error creating session during OAuth2 callback: unexpected status "403": synthetic-private-body', flush=True)
     time.sleep(20)
 else:
     raise SystemExit(1)
 """)
             fake.chmod(0o700)
+            curl = Path(directory) / 'curl'
+            curl.write_text("""#!/usr/bin/python3
+import os, sys
+assert sys.argv[1] == '-q' and '--noproxy' in sys.argv and '--cacert' in sys.argv
+assert '--cookie' not in sys.argv and '--user' not in sys.argv
+assert sys.argv[-1] == 'https://preview.xennic.ir/oauth2/callback?state=x'
+open(os.environ['FAKE_PROBE_MARKER'], 'w').close()
+print('500', end='')
+""")
+            curl.chmod(0o700)
+            env = dict(os.environ, PATH=directory + ':' + os.environ['PATH'], DOCKER_HOST='unix:///synthetic',
+                       FAKE_PROBE_MARKER=str(marker))
+            env.pop('DOCKER_CONTEXT', None)
+            result = subprocess.run([sys.executable, str(path)], env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=12)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn(b'PASS: listener received the expected synthetic state-error', result.stdout)
+            self.assertIn(b'DIAGNOSIS: SESSION_ENRICHMENT_ERROR UPSTREAM_HTTP_403', result.stdout)
+            self.assertNotIn(b'synthetic-private', result.stdout + result.stderr)
+
+    def test_bad_local_probe_stops_without_revealing_raw_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory) / 'docker'
+            fake.write_text("""#!/usr/bin/python3
+import sys, time
+a = sys.argv[1:]
+if a[0] == 'ps': print('123456789abc')
+elif a[0] == 'inspect': print('true xennic-real-oauth-73c028764aa6 gate none quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916')
+elif a[0] == 'attach': time.sleep(20)
+else: raise SystemExit(1)
+""")
+            fake.chmod(0o700)
+            curl = Path(directory) / 'curl'
+            curl.write_text("#!/bin/sh\nprintf 403\n")
+            curl.chmod(0o700)
             env = dict(os.environ, PATH=directory + ':' + os.environ['PATH'], DOCKER_HOST='unix:///synthetic')
             env.pop('DOCKER_CONTEXT', None)
             result = subprocess.run([sys.executable, str(path)], env=env, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-            self.assertEqual(result.returncode, 0)
-            self.assertIn(b'DIAGNOSIS: SESSION_ENRICHMENT_ERROR UPSTREAM_HTTP_403', result.stdout)
-            self.assertNotIn(b'synthetic-private', result.stdout + result.stderr)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'STOP: synthetic local callback check failed', result.stdout)
+            self.assertNotIn(b'READY:', result.stdout)
+
+    def test_no_stream_event_fails_closed_before_ready(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake = Path(directory) / 'docker'
+            fake.write_text("""#!/usr/bin/python3
+import sys, time
+a = sys.argv[1:]
+if a[0] == 'ps': print('123456789abc')
+elif a[0] == 'inspect': print('true xennic-real-oauth-73c028764aa6 gate none quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916')
+elif a[0] == 'attach': time.sleep(20)
+else: raise SystemExit(1)
+""")
+            fake.chmod(0o700)
+            curl = Path(directory) / 'curl'
+            curl.write_text("#!/bin/sh\nprintf 500\n")
+            curl.chmod(0o700)
+            env = dict(os.environ, PATH=directory + ':' + os.environ['PATH'], DOCKER_HOST='unix:///synthetic')
+            env.pop('DOCKER_CONTEXT', None)
+            result = subprocess.run([sys.executable, str(path)], env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b'STOP: listener did not observe its synthetic state-error check', result.stdout)
+            self.assertNotIn(b'READY:', result.stdout)
 
 
 if __name__ == '__main__':

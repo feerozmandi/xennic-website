@@ -79,32 +79,21 @@ def observe(gate_id):
     selector.register(proc.stdout, selectors.EVENT_READ)
     buffer = bytearray()
     discard = False
-    start = time.monotonic()
-    try:
-        # Docker CLI has no attach-ready event; this checks only that the client did
-        # not immediately fail, not that a future callback will produce a log line.
-        while time.monotonic() - start < 2:
-            if proc.poll() is not None:
-                print('STOP: could not attach to the running lab gate; no raw output shown', flush=True)
-                return 1
-            time.sleep(0.1)
-        print('READY: retry sign-in from the lab Firefox; waiting up to four minutes.', flush=True)
-        deadline = time.monotonic() + TIMEOUT
+
+    def next_event(deadline):
+        nonlocal discard
         while time.monotonic() < deadline:
-            for key, _ in selector.select(timeout=0.5):
+            for key, _ in selector.select(timeout=0.2):
                 chunk = os.read(key.fd, 4096)
                 if not chunk:
-                    print('STOP: diagnostic stream ended; no raw output shown', flush=True)
-                    return 1
+                    raise OSError('diagnostic stream ended')
                 for byte in chunk:
                     if byte == 10:
-                        if not discard:
-                            result = classify(buffer)
-                            if result:
-                                print(result, flush=True)
-                                return 0
+                        result = classify(buffer) if not discard else None
                         buffer.clear()
                         discard = False
+                        if result:
+                            return result
                     elif not discard:
                         if len(buffer) >= MAX_LINE:
                             buffer.clear()
@@ -112,10 +101,42 @@ def observe(gate_id):
                         else:
                             buffer.append(byte)
             if proc.poll() is not None:
-                print('STOP: diagnostic stream ended; no raw output shown', flush=True)
-                return 1
-        print('DIAGNOSIS: NO_CLASSIFIED_STANDARD_ERROR_OBSERVED', flush=True)
+                raise OSError('diagnostic stream ended')
+        return None
+
+    try:
+        # Attach has no CLI ready handshake. An intentionally invalid, cookie-free
+        # local callback verifies the *live* stream before any real retry. It fails
+        # at state decoding, before OAuth code redemption or GitHub requests.
+        time.sleep(2)
+        if proc.poll() is not None:
+            print('STOP: could not attach to the running lab gate; no raw output shown', flush=True)
+            return 1
+        ca = os.path.expanduser('~/xennic-real-oauth-lab.UJInfVse/lab-root.crt')
+        print('CHECK: testing the listener with one synthetic, cookie-free local callback.', flush=True)
+        # -q must be the first curl argument: do not load a user's curlrc,
+        # which could otherwise add cookies, credentials or extra requests.
+        probe = subprocess.run(['curl', '-q', '--silent', '--max-time', '5', '--noproxy', '*',
+                                '--resolve', 'preview.xennic.ir:443:127.0.0.1', '--cacert', ca,
+                                '--output', '/dev/null', '--write-out', '%{http_code}',
+                                'https://preview.xennic.ir/oauth2/callback?state=x'],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=8)
+        if probe.returncode != 0 or probe.stdout != b'500':
+            print('STOP: synthetic local callback check failed; no raw output shown', flush=True)
+            return 1
+        event = next_event(time.monotonic() + 8)
+        if event != 'DIAGNOSIS: STATE_ERROR':
+            print('STOP: listener did not observe its synthetic state-error check; no raw output shown', flush=True)
+            return 1
+        print('PASS: listener received the expected synthetic state-error event (not a real login).', flush=True)
+        print('READY: now start a NEW sign-in in the lab Firefox; waiting up to four minutes.', flush=True)
+        event = next_event(time.monotonic() + TIMEOUT)
+        print(event or 'DIAGNOSIS: NO_CLASSIFIED_STANDARD_ERROR_OBSERVED', flush=True)
         return 0
+    except OSError:
+        print('STOP: diagnostic stream ended or local probe failed; no raw output shown', flush=True)
+        return 1
     finally:
         selector.close()
         if proc.poll() is None:
