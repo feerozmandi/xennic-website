@@ -20,7 +20,10 @@ STARTED=0
 FIREFOX_PID=''
 
 compose() {
-  docker compose --project-directory "$ROOT" --env-file "$ROOT/lab.env" -p "$PROJECT" -f "$ROOT/compose.yml" "$@"
+  # Shell variables otherwise override --env-file and could redirect the DB or image.
+  env -u APP_IMAGE -u LAB_UID -u LAB_GID -u DB_PASSWORD -u DATABASE_URL -u PAYLOAD_SECRET \
+    -u COMPOSE_FILE -u COMPOSE_PROFILES -u COMPOSE_PROJECT_NAME -u COMPOSE_ENV_FILES \
+    docker compose --project-directory "$ROOT" --env-file "$ROOT/lab.env" -p "$PROJECT" -f "$ROOT/compose.yml" "$@"
 }
 cleanup() {
   local status=$?

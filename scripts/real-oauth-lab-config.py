@@ -62,7 +62,9 @@ def main() -> int:
     # Refuse to fall back to an echoing password prompt, including with redirected stdin.
     warnings.simplefilter('error', getpass.GetPassWarning)
     try:
-        with open('/dev/tty', 'r+', encoding='utf-8') as tty:
+        # A tty is not seekable; text-mode r+ uses a seekable buffer and fails.
+        # getpass opens /dev/tty separately for input and disables echo itself.
+        with open('/dev/tty', 'w', encoding='utf-8') as tty:
             client_id = getpass.getpass('Local GitHub OAuth App Client ID (hidden): ', stream=tty).strip()
             client_secret = getpass.getpass('Local GitHub OAuth App Client Secret (hidden): ', stream=tty).strip()
         key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('ascii')

@@ -2,6 +2,14 @@
 """Offline checks only; no Docker, OAuth credentials or network required."""
 import base64
 import importlib.util
+import os
+import pty
+import select
+import signal
+import subprocess
+import sys
+import tempfile
+import time
 from pathlib import Path
 import tomllib
 import unittest
@@ -36,6 +44,71 @@ class OAuthConfigTest(unittest.TestCase):
             with self.subTest(cid=cid, secret=secret, ip=ip):
                 with self.assertRaises(ValueError):
                     config.render_config(cid, secret, ip, self.key)
+
+
+class PromptTest(unittest.TestCase):
+    def test_private_prompt_on_real_pty_does_not_echo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'config.toml'
+            pid, master = pty.fork()
+            if pid == 0:
+                os.execv(sys.executable, [sys.executable, str(path), str(target), '172.28.0.9'])
+            output = bytearray()
+            pending = [(b'Client ID (hidden): ', b'synthetic-client-id\n'),
+                       (b'Client Secret (hidden): ', b'synthetic-client-secret\n')]
+            deadline = time.monotonic() + 10
+            status = None
+            try:
+                while time.monotonic() < deadline:
+                    ready, _, _ = select.select([master], [], [], 0.1)
+                    if ready:
+                        try:
+                            chunk = os.read(master, 8192)
+                        except OSError:
+                            chunk = b''
+                        output.extend(chunk)
+                        if pending and pending[0][0] in output:
+                            _, reply = pending.pop(0)
+                            os.write(master, reply)
+                    done, wait_status = os.waitpid(pid, os.WNOHANG)
+                    if done:
+                        status = wait_status
+                        while select.select([master], [], [], 0)[0]:
+                            try:
+                                output.extend(os.read(master, 8192))
+                            except OSError:
+                                break
+                        break
+                else:
+                    self.fail('prompt test timed out')
+                self.assertTrue(os.WIFEXITED(status))
+                self.assertEqual(os.WEXITSTATUS(status), 0)
+                self.assertFalse(pending)
+                self.assertNotIn(b'synthetic-client-id', output)
+                self.assertNotIn(b'synthetic-client-secret', output)
+                self.assertIn(b'PASS: private OAuth configuration', output)
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+                contents = tomllib.loads(target.read_text())
+                self.assertEqual(contents['client_id'], 'synthetic-client-id')
+                self.assertEqual(contents['client_secret'], 'synthetic-client-secret')
+            finally:
+                if status is None:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                        os.waitpid(pid, 0)
+                    except (ChildProcessError, ProcessLookupError):
+                        pass
+                os.close(master)
+
+    def test_no_controlling_terminal_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'config.toml'
+            result = subprocess.run([sys.executable, str(path), str(target), '172.28.0.9'],
+                                    stdin=subprocess.DEVNULL, capture_output=True,
+                                    start_new_session=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(target.exists())
+            self.assertIn(b'STOP:', result.stderr)
 
 
 if __name__ == '__main__':
