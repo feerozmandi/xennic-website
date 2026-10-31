@@ -17,10 +17,11 @@ trap cleanup_restore EXIT
 "${source[@]}" exec -T postgres pg_dump -U "$PREVIEW_POSTGRES_USER" -d "$PREVIEW_POSTGRES_DB" --format=custom --no-owner --no-privileges > "$scratch/db.dump"
 "${source[@]}" exec -T app tar -C /app/media -czf - . > "$scratch/media.tar.gz"
 test -s "$scratch/db.dump" && test -s "$scratch/media.tar.gz"
-# The fixtures are disposable CI data. A test-only in-memory key encrypts both
-# files; authentication must succeed before any plaintext is sent to restore.
-node tests/preview-encrypted-backup-ci.mjs "$scratch"
-test -s "$scratch/db.enc" && test -s "$scratch/media.enc"
+# Collect the actual migration ledger and use the shared age bundle code with
+# disposable CI keys. No plaintext is applied until age and metadata validate.
+"${source[@]}" exec -T postgres psql -U "$PREVIEW_POSTGRES_USER" -d "$PREVIEW_POSTGRES_DB" -v ON_ERROR_STOP=1 -tAc "SELECT COALESCE(json_agg(json_build_object('name', name, 'batch', batch) ORDER BY name), '[]'::json)::text FROM website.payload_migrations" > "$scratch/migrations.json"
+python3 tests/preview-age-backup-ci.py "$scratch"
+test -s "$scratch/backup.age" && test -s "$scratch/db.restored" && test -s "$scratch/media.restored"
 docker tag "${COMPOSE_PROJECT_NAME}-app" "$project-app"
 "${restore[@]}" up -d --wait postgres
 "${restore[@]}" exec -T postgres pg_restore -U restore_ci -d restore_ci --exit-on-error --no-owner --no-privileges < "$scratch/db.restored"

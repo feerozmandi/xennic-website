@@ -35,8 +35,8 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
-      - name: Authenticated backup encryption tests
-        run: node --test tests/preview-backup-crypto.mjs
+      - name: Age backup format tests
+        run: python3 tests/preview-age-backup.py
       - name: Deployment protocol tests
         run: |
           python3 tests/preview-deploy-manifest.py
@@ -116,6 +116,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Install age for disposable backup test
+        run: sudo apt-get update -qq && sudo apt-get install -y age
       - name: Build and test isolated production preview
         run: bash scripts/ci-preview.sh
 
@@ -160,6 +162,8 @@ jobs:
           cache: npm
       - name: Install test dependencies
         run: npm ci
+      - name: Install age for disposable backup test
+        run: sudo apt-get update -qq && sudo apt-get install -y age
       - name: Test the published digest without rebuilding
         env:
           COMPOSE_PROJECT_NAME: xennic-preview-ci
