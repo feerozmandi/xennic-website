@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۳۱ | [خطای 403 در غنی‌سازی OAuth](reports/2026-10-31-oauth-enrichment-403.md) | تشخیص مرحله، محدودیت شواهد و دامنهٔ احتمالی read:org |
 | ۲۰۲۶-۱۰-۳۱ | [HTTP 500 و self-test تشخیصی OAuth](reports/2026-10-31-oauth-callback-500.md) | status گزارش‌شده و کنترل مسیر مشاهدهٔ خطا |
 | ۲۰۲۶-۱۰-۳۱ | [نتیجهٔ listener تشخیصی OAuth](reports/2026-10-31-oauth-listener-result.md) | خطای تکراری و نیاز به status بدون replay |
 | ۲۰۲۶-۱۰-۳۱ | [تأیید خطای callback و issuer آزمایشی](reports/2026-10-31-oauth-callback-confirmed.md) | نتیجهٔ گزارش‌شده و تشخیص غیرمحرمانه |
