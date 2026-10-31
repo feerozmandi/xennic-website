@@ -35,6 +35,8 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
+      - name: Authenticated backup encryption tests
+        run: node --test tests/preview-backup-crypto.mjs
       - name: Deployment protocol tests
         run: |
           python3 tests/preview-deploy-manifest.py
@@ -45,6 +47,7 @@ jobs:
           python3 tests/preview-deploy-readiness.py
           python3 tests/preview-deploy-transaction.py
           python3 tests/preview-deploy-backend.py
+          python3 tests/preview-compose-operations.py
           python3 tests/preview-internal-health.py
       - name: Build
         run: npm run build
