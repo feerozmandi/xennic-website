@@ -101,6 +101,15 @@ echo continuation
         with self.assertRaises(ValueError):
             self.check()
 
+    def test_retained_ca_requires_owned_regular_file(self):
+        with self.assertRaises((ValueError, OSError)):
+            verifier.verify(self.root, self.original, self.bundle, self.continuation, self.image, retained_ca=True)
+        other = self.root / 'other'
+        other.write_text('synthetic CA')
+        (self.root / 'lab-root.crt').symlink_to(other)
+        with self.assertRaises(ValueError):
+            verifier.verify(self.root, self.original, self.bundle, self.continuation, self.image, retained_ca=True)
+
     def test_refuses_wrong_image_or_changed_original(self):
         with self.assertRaises(ValueError):
             verifier.verify(self.root, self.original, self.bundle, self.continuation, 'sha256:' + 'f' * 64)
