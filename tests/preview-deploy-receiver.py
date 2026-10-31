@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import base64
+import hashlib
 import importlib.util
+import struct
 import json
 import os
 from pathlib import Path
@@ -41,11 +44,15 @@ class ReceiverTest(unittest.TestCase):
             key, hosts = Path(directory) / "key", Path(directory) / "known_hosts"
             key.touch(mode=0o600)
             hosts.touch(mode=0o600)
+            algorithm = b"ssh-ed25519"
+            blob = struct.pack(">I", len(algorithm)) + algorithm + struct.pack(">I", 32) + b"x" * 32
+            fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+            hosts.write_text(f"[{client.HOST}]:{client.PORT} ssh-ed25519 {base64.b64encode(blob).decode()}\n")
             env = {
                 "GITHUB_REPOSITORY": data()["repository"], "GITHUB_SHA": data()["commit"],
                 "GITHUB_RUN_NUMBER": str(data()["run_number"]), "PREVIEW_IMAGE_DIGEST": data()["digest"],
                 "PREVIEW_GHCR_TOKEN": "synthetic-only-token", "PREVIEW_SSH_KEY_FILE": str(key),
-                "PREVIEW_KNOWN_HOSTS_FILE": str(hosts),
+                "PREVIEW_KNOWN_HOSTS_FILE": str(hosts), "PREVIEW_CONFIRMED_HOST_FINGERPRINT": fingerprint,
             }
             command, payload = client.prepare(env)
             parsed, token = receiver.parse_request(command[-1], payload)

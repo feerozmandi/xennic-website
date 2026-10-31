@@ -113,6 +113,29 @@ jobs:
       - name: Build and test isolated production preview
         run: bash scripts/ci-preview.sh
 
+  recover-tested-image-digest:
+    # One-time, read-only recovery for this session branch; no checkout or deploy secrets.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'arena/7368b8da-xennic-website'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Recover digest from the successful published-image test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run view --repo feerozmandi/xennic-website 41194829543 --job 124519658773 --log > "$RUNNER_TEMP/verified-image-job.log"
+          python3 - "$RUNNER_TEMP/verified-image-job.log" <<'PY'
+          import re, sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text()
+          matches = set(re.findall(r'Digest:\s*(sha256:[0-9a-f]{64})', text))
+          if len(matches) != 1:
+              raise SystemExit('Cannot establish a unique image digest from the pull output.')
+          print('::notice title=Tested preview image digest::' + matches.pop())
+          PY
+
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'

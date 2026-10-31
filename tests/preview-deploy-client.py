@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import base64
+import hashlib
+import struct
 import contextlib
 import importlib.util
 import io
@@ -25,6 +28,10 @@ class ClientTest(unittest.TestCase):
         self.hosts = Path(self.tmp.name) / "known_hosts"
         self.key.touch(mode=0o600)
         self.hosts.touch(mode=0o600)
+        algorithm = b"ssh-ed25519"
+        blob = struct.pack(">I", len(algorithm)) + algorithm + struct.pack(">I", 32) + b"x" * 32
+        fingerprint = "SHA256:" + base64.b64encode(hashlib.sha256(blob).digest()).decode().rstrip("=")
+        self.hosts.write_text(f"[{client.HOST}]:{client.PORT} ssh-ed25519 {base64.b64encode(blob).decode()}\n")
         self.env = {
             "GITHUB_REPOSITORY": "feerozmandi/xennic-website",
             "GITHUB_SHA": "a" * 40,
@@ -33,6 +40,7 @@ class ClientTest(unittest.TestCase):
             "PREVIEW_GHCR_TOKEN": "synthetic-only-token",
             "PREVIEW_SSH_KEY_FILE": str(self.key),
             "PREVIEW_KNOWN_HOSTS_FILE": str(self.hosts),
+            "PREVIEW_CONFIRMED_HOST_FINGERPRINT": fingerprint,
         }
 
     def test_strict_ssh_and_token_only_on_stdin(self):
@@ -56,12 +64,23 @@ class ClientTest(unittest.TestCase):
             ("PREVIEW_IMAGE_DIGEST", "latest"), ("PREVIEW_GHCR_TOKEN", "token\ninjection"),
             ("PREVIEW_GHCR_TOKEN", ""), ("PREVIEW_SSH_KEY_FILE", "relative"),
             ("PREVIEW_KNOWN_HOSTS_FILE", "/nonexistent/known_hosts"),
+            ("PREVIEW_CONFIRMED_HOST_FINGERPRINT", ""),
+            ("PREVIEW_CONFIRMED_HOST_FINGERPRINT", "SHA256:" + "A" * 43),
         ]:
             with self.subTest(key=key):
                 env = dict(self.env)
                 env[key] = value
                 with self.assertRaises(client.ClientError):
                     client.prepare(env)
+
+    def test_rejects_extra_wildcard_and_invalid_host_keys(self):
+        valid = self.hosts.read_text()
+        for contents in (valid + valid, valid.replace(f"[{client.HOST}]:{client.PORT}", "*"),
+                         valid.replace("ssh-ed25519", "ssh-rsa"), valid.replace("ssh-ed25519", "ssh-ed25519 bad")):
+            with self.subTest(contents=contents):
+                self.hosts.write_text(contents)
+                with self.assertRaises(client.ClientError):
+                    client.prepare(self.env)
 
     def test_rejects_publicly_readable_files_and_symlinks(self):
         self.key.chmod(0o644)
