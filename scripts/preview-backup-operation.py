@@ -232,7 +232,13 @@ def backup(raw):
             safe_directory(archive)
             retained = archive / f"backup-{state['current']['run_number']}-{secrets.token_hex(12)}.age"
             os.link(encrypted, retained, follow_symlinks=False)
+            archive_fd = os.open(archive, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try: os.fsync(archive_fd)
+            finally: os.close(archive_fd)
             os.unlink(encrypted)
+            work_fd = os.open(WORK, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try: os.fsync(work_fd)
+            finally: os.close(work_fd)
         except (OSError, ValueError, readiness.NotReady) as exc:
             raise BackupFailed('previous backup cannot be safely preserved') from exc
     app, database, volume = single_app_and_database()

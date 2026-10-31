@@ -68,6 +68,24 @@ for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.p
 done
 sudo install -o root -g root -m 0700 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/install-preview-sftp-helper.py
 sudo /usr/bin/python3 /root/xennic-preview-install/install-preview-sftp-helper.py
+# The same production check must reject both a permissive helper and module.
+sudo /usr/bin/python3 - <<'PY'
+import importlib.util, os, sys
+sys.dont_write_bytecode = True
+root = '/usr/local/libexec/xennic-preview'
+spec = importlib.util.spec_from_file_location('installed_backend', root + '/preview-deploy-backend.py')
+module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+runner = module.FixedRunner(); runner.verify_helpers()
+for name, safe in [('release-check', 0o700), ('preview-release-verifier.py', 0o600)]:
+    path = root + '/' + name
+    os.chmod(path, 0o644)
+    try:
+        try: runner.verify_helpers()
+        except module.BackendError: pass
+        else: raise RuntimeError('unsafe installed file was accepted')
+    finally: os.chmod(path, safe)
+runner.verify_helpers()
+PY
 # Negative parser checks execute the installed pull code without any network.
 if printf '%s\n%s\n' '{"repository":"other/repo"}' 'synthetic-token' | sudo /usr/local/libexec/xennic-preview/pull-image >/dev/null 2>&1; then
   echo 'Invalid pull manifest was accepted' >&2; exit 1
@@ -210,13 +228,23 @@ if ! printf 'synthetic-token\n' | docker login ghcr.io --username feerozmandi --
   exit 1
 fi
 # Fake GHCR repo: these digests are not evidence of the real registry.
-docker tag xennic-preview-app ghcr.io/feerozmandi/xennic-website:ci-good
-docker push ghcr.io/feerozmandi/xennic-website:ci-good > "$scratch/good-push.log"
-old_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/good-push.log" | tail -1)
+docker tag xennic-preview-app ghcr.io/feerozmandi/xennic-website:ci-old
+docker push ghcr.io/feerozmandi/xennic-website:ci-old > "$scratch/old-push.log"
+old_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/old-push.log" | tail -1)
 oldref="ghcr.io/feerozmandi/xennic-website@$old_digest"
 docker pull --platform linux/amd64 "$oldref" >/dev/null
 [[ "$oldref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture image reference' >&2; exit 1; }
 printf '%s\n' "$oldref" > "$scratch/old-image"
+cat > "$scratch/Dockerfile.good" <<'DOCKERFILE'
+FROM xennic-preview-app
+LABEL xennic.ci.release="good"
+DOCKERFILE
+docker build -t ghcr.io/feerozmandi/xennic-website:ci-good -f "$scratch/Dockerfile.good" . >/dev/null
+docker push ghcr.io/feerozmandi/xennic-website:ci-good > "$scratch/good-push.log"
+good_digest=$(awk '$2 == "digest:" && $3 ~ /^sha256:/ {print $3}' "$scratch/good-push.log" | tail -1)
+goodref="ghcr.io/feerozmandi/xennic-website@$good_digest"
+docker pull --platform linux/amd64 "$goodref" >/dev/null
+[[ "$goodref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ && "$goodref" != "$oldref" ]] || { echo 'Invalid or unchanged good fixture image reference' >&2; exit 1; }
 cat > "$scratch/Dockerfile.bad" <<'DOCKERFILE'
 FROM xennic-preview-app
 CMD ["node", "-e", "require('http').createServer((req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'bad'}))}).listen(3000,'0.0.0.0')"]
@@ -240,9 +268,9 @@ compose=(sudo env PREVIEW_IMAGE="$oldref" docker compose -p xennic-preview --env
 "${compose[@]}" up -d --wait --no-build app
 # Only disposable files created by this CI fixture are reset; operational data is untouched.
 sudo rm -f /srv/xennic-preview/work/backup.age /srv/xennic-preview/state/backup-2.json /srv/xennic-preview/state/backup-3.json
-python3 - "$oldref" "$badref" <<'PY' > "$scratch/fixture-values.json"
+python3 - "$oldref" "$goodref" "$badref" <<'PY' > "$scratch/fixture-values.json"
 import hashlib, json, pathlib, sys
-old, bad = (x.split('@', 1)[1] for x in sys.argv[1:])
+old, good, bad = (x.split('@', 1)[1] for x in sys.argv[1:])
 def r(n, digest):
  return {'repository':'feerozmandi/xennic-website','commit':f'{n:040x}','digest':digest,'platform':'linux/amd64','run_number':n}
 h = hashlib.sha256()
@@ -250,7 +278,7 @@ root = pathlib.Path('migrations')
 for path in sorted(p for p in root.rglob('*') if p.is_file()):
  name = path.relative_to(root).as_posix(); data = path.read_bytes()
  h.update(name.encode() + b'\0' + str(len(data)).encode() + b'\0' + data)
-print(json.dumps({'previous':r(1,old),'first':r(2,old),'second':r(3,bad),'migration_sha256':h.hexdigest()}))
+print(json.dumps({'previous':r(1,old),'first':r(2,good),'second':r(3,bad),'migration_sha256':h.hexdigest()}))
 PY
 python3 - "$scratch" <<'PY'
 import json, pathlib, sys
@@ -276,3 +304,4 @@ if ! chain_result=$(sudo unshare -m --propagation private /bin/sh -c 'mount --bi
   exit 1
 fi
 printf '%s\n' "$chain_result"
+echo '::notice title=Installed preview chain::Root-owned helpers completed release, pull, SFTP backup, migration, activation, health, and an intentional post-activation failure with schema-compatible rollback; all endpoints and data were synthetic.'

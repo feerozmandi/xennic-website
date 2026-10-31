@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Install the fixed pull/backup/SFTP helpers and trusted modules; deployment remains disabled.
+"""Install all fixed preview helpers and trusted modules; deployment remains disabled.
 
 A root administrator must stage these exact files under the fixed private
 /root/xennic-preview-install directory. This intentionally refuses upgrades and
@@ -67,7 +67,7 @@ def main():
             raise
     finally:
         for _, fd in staged: os.close(fd)
-    print('Fixed backup and SFTP helpers installed; no deploy or SSH access enabled.')
+    print('Fixed preview helpers installed; no deploy or SSH access enabled.')
 
 
 if __name__ == '__main__':

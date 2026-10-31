@@ -41,6 +41,7 @@ jobs:
         run: |
           python3 tests/preview-deploy-manifest.py
           python3 tests/preview-release-evidence.py
+          python3 tests/preview-release-verifier.py
           python3 tests/preview-deploy-client.py
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py

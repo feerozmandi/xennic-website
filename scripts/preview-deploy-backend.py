@@ -67,13 +67,21 @@ class FixedRunner:
                 raise BackendError("required preview helper directory is missing") from exc
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
                 raise BackendError("preview helper directory is unsafe")
-        for path in PHASES.values():
+        if os.lstat(HELPER_DIR).st_mode & 0o077:
+            raise BackendError("preview helper directory is not private")
+        executables = (*PHASES.values(), HELPER_DIR / "sftp-transfer")
+        modules = tuple(HELPER_DIR / name for name in (
+            "preview-deploy-backend.py", "preview-deploy-transaction.py", "preview-deploy-lock.py",
+            "preview-deploy-readiness.py", "preview-deploy-state.py", "preview-deploy-manifest.py",
+            "preview-release-verifier.py", "preview-internal-health.py", "preview-compose-operations.py",
+            "preview-age-backup.py", "preview-backup-operation.py"))
+        for path in (*executables, *modules):
             try:
                 info = os.lstat(path)
             except OSError as exc:
                 raise BackendError("required preview operation is not installed") from exc
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or
-                    info.st_mode & 0o022 or not info.st_mode & stat.S_IXUSR):
+                    info.st_mode & 0o077 or (path in executables and not info.st_mode & stat.S_IXUSR)):
                 raise BackendError("preview operation is unsafe")
 
     def call(self, phase, release, token=None):

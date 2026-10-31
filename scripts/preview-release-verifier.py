@@ -79,7 +79,8 @@ def verify(release, token):
     runs = get_json('/actions/workflows/ci.yml/runs?branch=dev&event=push&per_page=100', token)
     if not isinstance(runs, dict) or not isinstance(runs.get('workflow_runs'), list):
         raise Unverified('invalid workflow runs')
-    matches = [r for r in runs['workflow_runs'] if isinstance(r, dict) and r.get('run_number') == release['run_number']]
+    matches = [r for r in runs['workflow_runs'] if isinstance(r, dict) and type(r.get('run_number')) is int and
+               r['run_number'] == release['run_number']]
     if len(matches) != 1:
         raise Unverified('release run unavailable')
     run = matches[0]
