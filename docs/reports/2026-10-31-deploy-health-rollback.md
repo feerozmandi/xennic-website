@@ -18,3 +18,7 @@
 ## Vault
 
 قرارداد مرجع در Vault تغییر نکرد؛ شواهد بعدی در نشست Vault جداگانه پیگیری می‌شوند.
+
+### نتیجهٔ اجرای GitHub در همین نشست
+
+[PR #11](https://github.com/feerozmandi/xennic-website/pull/11) پس از موفقیت هر سه job در [CI 41194570589](https://github.com/feerozmandi/xennic-website/actions/runs/41194570589) با merge commit `397d505e4214f8c5c2270189ae8e7384905609ec` در `dev` ادغام شد. هر سه job همان commit و job انتشار در [CI 41194829543](https://github.com/feerozmandi/xennic-website/actions/runs/41194829543) موفق شدند: انتشار GHCR، دریافت digest منتشرشده بدون rebuild، آزمون production و کنترل سلامت داخلی در runner، و ثبت مرجع در Summary موفق بود. `GITHUB_TOKEN` کافی بود؛ Secret جدید برای این انتشار لازم نشد. API package برای این integration مجوز خواندن نداد؛ digest را از Summary همان اجرا ببینید و دسترسی pull سرور را جداگانه بررسی کنید. هیچ اتصال یا استقرار VPS انجام نشد.
