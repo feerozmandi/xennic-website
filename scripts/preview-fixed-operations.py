@@ -209,6 +209,13 @@ def verify_backup(release):
         backup = json.loads(ready._read(ROOT, path, 0), object_pairs_hook=ready._object_pairs)
         if not isinstance(backup, dict) or set(backup) != {'version', 'release', 'remote_path', 'sha256'} or backup['version'] != 1 or backup['release'] != release:
             raise Rejected('verified backup record missing')
+        policy = ready.backup_config(ROOT, 0)
+        remote = backup['remote_path']
+        if policy['transport'] == 'manual-local':
+            if remote != 'manual-offsite-pending': raise Rejected('local-only backup record mismatch')
+        elif not isinstance(remote, str) or not re.fullmatch(
+                re.escape(policy['remote_directory'].rstrip('/')) + r'/xennic-' + str(release['run_number']) + r'-[0-9a-f]{32}\.age', remote):
+            raise Rejected('offsite backup record mismatch')
         fd = os.open(ROOT / 'work/backup.age', os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
         try:
             info = os.fstat(fd)

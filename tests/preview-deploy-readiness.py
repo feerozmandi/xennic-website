@@ -94,6 +94,28 @@ class ReadinessTest(unittest.TestCase):
         self.valid()
         self.assertIsNone(self.check())
 
+    def test_manual_local_is_explicitly_limited_to_test_only_preview(self):
+        self.valid()
+        env = self.root / 'secrets/preview.env'
+        env.write_text(env.read_text() + 'PREVIEW_ORIGIN=https://preview.xennic.ir\n')
+        config = {'approved': True, 'transport': 'manual-local', 'environment': 'preview-staging-only',
+                  'no_real_customer_data': True, 'age_recipient': 'age1' + 'q' * 58}
+        self.put('config/backup.json', json.dumps(config))
+        (self.root / 'secrets/backup-ssh-key').unlink()
+        (self.root / 'config/backup-known-hosts').unlink()
+        self.assertIsNone(self.check())
+        for patch in ({'approved': False}, {'environment': 'production'}, {'no_real_customer_data': False},
+                      {'no_real_customer_data': 1}, {'unexpected': True}):
+            with self.subTest(patch=patch):
+                self.put('config/backup.json', json.dumps(dict(config, **patch)))
+                with self.assertRaises(readiness.NotReady): self.check()
+        self.put('config/backup.json', json.dumps(config))
+        env.write_text(env.read_text().replace('https://preview.xennic.ir', 'https://xennic.ir'))
+        with self.assertRaises(readiness.NotReady): self.check()
+        env.write_text(env.read_text().replace('https://xennic.ir', 'https://preview.xennic.ir'))
+        (self.root / 'secrets/backup-identity').unlink()
+        with self.assertRaises(readiness.NotReady): self.check()
+
     def test_symlink_secret_fails(self):
         self.valid()
         path = self.root / "secrets/preview.env"

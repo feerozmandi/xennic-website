@@ -1,6 +1,7 @@
 # وضعیت جاری توسعهٔ وب‌سایت Xennic
 
-- **آخرین بازبینی گزارش:** ۲۰۲۶-۱۰-۳۱
+- **آخرین بازبینی گزارش:** ۲۰۲۶-۱۱-۰۱
+- **backup موقت staging آزمایشی:** طبق دستور مالک، حالت محلی age و انتقال دستی در نقاط مهم فقط برای preview فاقد دادهٔ واقعی مشتری اضافه شده است؛ انتقال خارج VPS خودکار نیست و هنوز واقعاً آزموده نشده. آزمون CI و محدودیت‌ها در [گزارش](reports/2026-11-01-temporary-staging-backup.md). برای استفادهٔ عملیاتی مقصد خودکار خارج VPS لازم است.
 - **زنجیرهٔ نصب‌شده:** در [CI 41221524381](https://github.com/feerozmandi/xennic-website/actions/runs/41221524381) انتشار با digest متفاوت، migration افزایشی، شکست پس از activation و rollback با همان helperهای نصب‌شده و حفظ DB/media دورریختنی موفق بود؛ GitHub و GHCR مصنوعی بودند. حدود شاهد در [گزارش](reports/2026-10-31-installed-preview-chain.md) آمده است.
 - **Pull پیش از maintenance:** helper محدود و verifier در زنجیرهٔ نصب‌شده حضور دارند؛ آزمون مستقل GHCR و artifact واقعی پس از انتشار مجاز به `dev` باز است؛ [گزارش تاریخی](reports/2026-10-31-pull-before-maintenance.md).
 - **backup نصب‌شده:** helperهای backup و SFTP در [CI 41216964464](https://github.com/feerozmandi/xennic-website/actions/runs/41216964464) با توقف app، DB/media مصنوعی، انتقال و restore DB ایزوله موفق شدند. بررسی کامل نویسنده‌های میزبان و مقصد عملیاتی باز است؛ [گزارش تاریخی](reports/2026-10-31-installed-sftp.md).
