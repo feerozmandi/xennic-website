@@ -203,16 +203,20 @@ def backup(raw):
     release = manifest.validate_manifest(raw)
     for path in (ROOT, WORK, ROOT / 'state'): safe_directory(path)
     state = states.Journal().read()
-    if not state['blocked'] or state['pending'] != release or state['current'] is None:
-        raise BackupFailed('a prior healthy release and blocked pending release are required')
-    # Compose may interpolate the currently running pinned image. The value is
-    # derived only from the root-owned journal, never from the caller's env.
-    ENV = dict(ENV, PREVIEW_IMAGE=f"ghcr.io/{manifest.REPOSITORY}@{state['current']['digest']}")
+    if not state['blocked'] or state['pending'] != release or 'failure' in state:
+        raise BackupFailed('a non-failed blocked pending release is required')
+    initial = state['current'] is None
+    snapshot_release = release if initial else state['current']
+    # The initial app has passed internal health but is not yet recorded healthy.
+    # Upgrades continue to snapshot only the prior healthy release.
+    ENV = dict(ENV, PREVIEW_IMAGE=f"ghcr.io/{manifest.REPOSITORY}@{snapshot_release['digest']}")
     for relative in ('config/compose.yml', 'secrets/preview.env'):
         readiness._read(ROOT, relative, 0)
     config = readiness.backup_config(ROOT, 0)
     encrypted = WORK / 'backup.age'
     if os.path.lexists(encrypted):
+        if initial:
+            raise BackupFailed('unexpected prior ciphertext in initial installation')
         # Preserve (never delete) the last verified ciphertext for repeat releases.
         # A crash between link/unlink causes a fail-closed nlink check next time.
         try:
@@ -242,6 +246,12 @@ def backup(raw):
         except (OSError, ValueError, readiness.NotReady) as exc:
             raise BackupFailed('previous backup cannot be safely preserved') from exc
     app, database, volume = single_app_and_database()
+    if initial:
+        # Do not snapshot an unrelated app as the first release.
+        image = json.loads(run([DOCKER, 'image', 'inspect', ENV['PREVIEW_IMAGE']]))
+        if (len(image) != 1 or ENV['PREVIEW_IMAGE'] not in (image[0].get('RepoDigests') or []) or
+                inspect(app).get('Image') != image[0].get('Id')):
+            raise BackupFailed('initial app does not match the pending digest')
     run(COMPOSE + ['stop', '-t', '30', 'app'], timeout=60)
     # Never restart automatically on any failure: the durable journal remains blocked.
     assert_writers_stopped(app, database, volume)
@@ -260,7 +270,7 @@ def backup(raw):
         copy_media(app, media)
         no_other_database_clients(database, user, db)
         assert_writers_stopped(app, database, volume)
-        expected = age.create_bundle(dump, media, encrypted, config['age_recipient'], state['current']['commit'], migrations)
+        expected = age.create_bundle(dump, media, encrypted, config['age_recipient'], snapshot_release['commit'], migrations)
         if config['transport'] == 'sftp':
             helper = HELPERS / 'sftp-transfer'
             h = os.lstat(helper)
