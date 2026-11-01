@@ -171,6 +171,23 @@ test "$(sudo docker inspect -f '{{.State.Running}}' "$app_id")" = false
 "${compose[@]}" exec -T postgres psql -U preview_ci -d preview_ci -tAc "SELECT count(*) FROM shared.customers WHERE name='CI snapshot fixture'" | grep -qx 1
 sudo grep -q '"blocked": true' /srv/xennic-preview/state/release-state.json
 printf 'PASS: installed backup helper stopped app, backed up DB/media, transferred and restored; failure stayed blocked\n'
+# A wrong age identity must fail before recording a local backup as verified.
+sudo cp /srv/xennic-preview/config/backup.json "$scratch/sftp-backup.json"
+python3 - "$recipient" <<'PY' | sudo tee /srv/xennic-preview/config/backup.json >/dev/null
+import json, sys
+print(json.dumps({'approved':True,'transport':'manual-local','environment':'preview-staging-only','no_real_customer_data':True,'age_recipient':sys.argv[1]}))
+PY
+sudo chmod 0600 /srv/xennic-preview/config/backup.json
+age-keygen -o "$scratch/wrong-identity" >/dev/null 2>&1
+sudo install -o root -g root -m 0600 "$scratch/wrong-identity" /srv/xennic-preview/secrets/backup-identity
+sudo rm /srv/xennic-preview/work/backup.age
+if sudo /usr/local/libexec/xennic-preview/backup-verify < "$scratch/release-backup-failure.json"; then echo 'Unrestorable local backup was accepted' >&2; exit 1; fi
+sudo test ! -e /srv/xennic-preview/state/backup-4.json
+sudo grep -q '"blocked": true' /srv/xennic-preview/state/release-state.json
+sudo install -o root -g root -m 0600 "$scratch/age-identity" /srv/xennic-preview/secrets/backup-identity
+sudo install -o root -g root -m 0600 "$scratch/sftp-backup.json" /srv/xennic-preview/config/backup.json
+sudo rm /srv/xennic-preview/work/backup.age
+printf 'PASS: unrestorable staging-only local backup blocked without verified record\n'
 
 # Full installed transaction, with an isolated *simulated* GHCR and GitHub API.
 # The application, PostgreSQL, age, SFTP, Docker pull, installed controller,
@@ -323,4 +340,4 @@ if ! chain_result=$(sudo unshare -m --propagation private /bin/sh -c 'mount --bi
   exit 1
 fi
 printf '%s\n' "$chain_result"
-echo '::notice title=Installed preview chain::Root-owned helpers completed release, pull, SFTP backup, migration, activation, health, and an intentional post-activation failure with schema-compatible rollback; all endpoints and data were synthetic.'
+echo '::notice title=Installed preview chain::Root-owned helpers completed staging-only local verified backup and SFTP backup, migration, activation, health, and intentional post-activation failure with compatible rollback; all endpoints and data were synthetic.'

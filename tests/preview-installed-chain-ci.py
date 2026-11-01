@@ -53,6 +53,13 @@ def run_media():
 # injection or test adapter is supplied to Backend.
 runner = backend.FixedRunner()
 runner.verify_helpers()
+# Exercise the explicit temporary staging-only local-backup policy on the
+# successful release; the second release still exercises the original SFTP.
+config_path = ROOT / 'config/backup.json'
+sftp_config = json.loads(config_path.read_text())
+local_config = {'approved': True, 'transport': 'manual-local', 'environment': 'preview-staging-only',
+                'no_real_customer_data': True, 'age_recipient': sftp_config['age_recipient']}
+config_path.write_text(json.dumps(local_config)); config_path.chmod(0o600)
 select('first')
 first_result = backend.run_checked(json.dumps(first).encode(), b'synthetic-token', backend.Backend(b'synthetic-token'))
 if first_result != first:
@@ -60,6 +67,10 @@ if first_result != first:
 journal = backend.states.Journal().read()
 if journal['blocked'] or journal['current'] != first or run_sql() != '1' or run_media() != 'synthetic-media' or run_migration_check() != 't':
     raise AssertionError('successful release or data mismatch')
+local_record = json.loads((ROOT / 'state' / f"backup-{first['run_number']}.json").read_text())
+if local_record.get('remote_path') != 'manual-offsite-pending':
+    raise AssertionError('local backup must not claim offsite transfer')
+config_path.write_text(json.dumps(sftp_config)); config_path.chmod(0o600)
 select('second')
 try:
     backend.run_checked(json.dumps(second).encode(), b'synthetic-token', backend.Backend(b'synthetic-token'))

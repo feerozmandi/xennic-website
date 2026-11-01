@@ -74,8 +74,25 @@ def backup_config(root=ROOT, owner_uid=0):
         backup = json.loads(backup_raw, object_pairs_hook=_object_pairs)
     except (NotReady, ValueError, UnicodeError) as exc:
         raise NotReady("backup configuration is missing or invalid") from exc
+    if not isinstance(backup, dict):
+        raise NotReady("backup configuration is missing or invalid")
+    # This exception is only for the fixed preview staging project, with an
+    # explicit root-owned attestation that it contains no real customer data.
+    if backup.get("transport") == "manual-local":
+        keys = {"approved", "transport", "environment", "no_real_customer_data", "age_recipient"}
+        if (set(backup) != keys or backup.get("approved") is not True or
+                backup.get("environment") != "preview-staging-only" or
+                backup.get("no_real_customer_data") is not True or
+                not isinstance(backup.get("age_recipient"), str) or
+                not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}", backup["age_recipient"])):
+            raise NotReady("temporary staging backup policy is not explicitly approved")
+        env = _env(_read(Path(root), "secrets/preview.env", owner_uid))
+        if env.get("PREVIEW_ORIGIN") != "https://preview.xennic.ir":
+            raise NotReady("temporary backup policy is limited to preview staging")
+        _read(Path(root), "secrets/backup-identity", owner_uid)
+        return backup
     keys = {"approved", "transport", "host", "port", "user", "remote_directory", "age_recipient"}
-    if (not isinstance(backup, dict) or set(backup) != keys or backup.get("approved") is not True or
+    if (set(backup) != keys or backup.get("approved") is not True or
             backup.get("transport") != "sftp" or
             not isinstance(backup.get("host"), str) or
             not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", backup["host"]) or

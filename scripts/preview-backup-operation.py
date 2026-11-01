@@ -5,6 +5,7 @@ Only the root-owned fixed Compose project is inspected or stopped. The caller
 must hold the shared deployment lock and durably mark the release blocked first.
 """
 import gzip
+import hashlib
 import importlib.util
 import json
 import os
@@ -220,7 +221,6 @@ def backup(raw):
             if (not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_nlink != 1 or st.st_mode & 0o077 or
                     record.get('release') != state['current']):
                 raise BackupFailed('previous backup cannot be safely preserved')
-            import hashlib
             h = hashlib.sha256()
             with open(encrypted, 'rb') as old:
                 for chunk in iter(lambda: old.read(1024 * 1024), b''): h.update(chunk)
@@ -261,18 +261,42 @@ def backup(raw):
         no_other_database_clients(database, user, db)
         assert_writers_stopped(app, database, volume)
         expected = age.create_bundle(dump, media, encrypted, config['age_recipient'], state['current']['commit'], migrations)
-        helper = HELPERS / 'sftp-transfer'
-        h = os.lstat(helper)
-        if not stat.S_ISREG(h.st_mode) or h.st_uid != 0 or h.st_nlink != 1 or h.st_mode & 0o077 or not h.st_mode & stat.S_IXUSR:
-            raise BackupFailed('SFTP helper is unsafe')
-        run([str(helper)], data=raw + b'\n', timeout=360)
+        if config['transport'] == 'sftp':
+            helper = HELPERS / 'sftp-transfer'
+            h = os.lstat(helper)
+            if not stat.S_ISREG(h.st_mode) or h.st_uid != 0 or h.st_nlink != 1 or h.st_mode & 0o077 or not h.st_mode & stat.S_IXUSR:
+                raise BackupFailed('SFTP helper is unsafe')
+            run([str(helper)], data=raw + b'\n', timeout=360)
         restored = tmp / 'restored'
         restored.mkdir(mode=0o700)
         actual = age.restore_bundle(encrypted, ROOT / 'secrets/backup-identity', restored)
         if actual != expected:
             raise BackupFailed('restored backup metadata differs')
         verify_restored_database(inspect(database)['Image'], restored / 'db.restored', migrations)
+        if config['transport'] == 'manual-local':
+            # This record certifies local verification only, not owner transfer.
+            info = os.lstat(encrypted)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077 or not info.st_size:
+                raise BackupFailed('unsafe local encrypted backup')
+            digest = hashlib.sha256()
+            with open(encrypted, 'rb') as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b''): digest.update(chunk)
+            directory = os.open(WORK, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try: os.fsync(directory)
+            finally: os.close(directory)
+            record = {'version': 1, 'release': release, 'remote_path': 'manual-offsite-pending', 'sha256': digest.hexdigest()}
+            path = ROOT / 'state' / f"backup-{release['run_number']}.json"
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+            try:
+                with os.fdopen(fd, 'wb', closefd=False) as stream:
+                    stream.write(json.dumps(record, sort_keys=True, separators=(',', ':')).encode() + b'\n')
+                    stream.flush(); os.fsync(stream.fileno())
+            finally: os.close(fd)
+            directory = os.open(ROOT / 'state', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try: os.fsync(directory)
+            finally: os.close(directory)
     # The app remains stopped for migration / activation by the controller.
+    return config['transport']
 
 
 def main():
@@ -281,14 +305,17 @@ def main():
         return 1
     os.umask(0o077)
     try:
-        backup(sys.stdin.buffer.read(manifest.MAX_MANIFEST_BYTES + 1).strip())
+        transport = backup(sys.stdin.buffer.read(manifest.MAX_MANIFEST_BYTES + 1).strip())
     except BackupFailed as exc:
         print(f'Preview backup failed: {exc}; release blocked; inspect app status', file=sys.stderr)
         return 1
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, KeyError) as exc:
         print(f'Preview backup failed ({type(exc).__name__}); release blocked; inspect app status', file=sys.stderr)
         return 1
-    print('Stopped-app encrypted backup, SFTP readback and isolated DB restore passed')
+    if transport == 'manual-local':
+        print('Staging-only encrypted local backup and isolated DB restore passed; manual offsite copy pending')
+    else:
+        print('Stopped-app encrypted backup, SFTP readback and isolated DB restore passed')
     return 0
 
 
