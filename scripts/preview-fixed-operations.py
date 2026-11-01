@@ -380,22 +380,22 @@ def execute(phase, release, token):
             raise Rejected('health release is not current or pending')
         check_health(release)
         return None
+    if phase == 'close-initial':
+        # Fixed failure-only operation. It does not depend on a readable journal:
+        # an interrupted state write must not leave this exact app exposed.
+        image = config_for(release)
+        ids = run(COMPOSE + ['ps', '--all', '-q', 'app'], image=image, output=True).decode('ascii').split()
+        if len(ids) > 1 or any(not re.fullmatch('[0-9a-f]{12,64}', item) for item in ids):
+            raise Rejected('initial app is ambiguous')
+        if ids:
+            info = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
+            if info.get('Image') != image_id(release): raise Rejected('initial app image mismatch')
+            run(COMPOSE + ['stop', '-t', '30', 'app'], image=image, timeout=60)
+            after = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
+            if after.get('State', {}).get('Running'): raise Rejected('initial app still running')
+        return None
     if phase == 'rollback':
         data = state()
-        if data['blocked'] and data['current'] is None and data['pending'] == release:
-            # A first installation has no previous release. Close its app only;
-            # never remove its container, volumes, database or other services.
-            image = config_for(release)
-            ids = run(COMPOSE + ['ps', '--all', '-q', 'app'], image=image, output=True).decode('ascii').split()
-            if len(ids) > 1 or any(not re.fullmatch('[0-9a-f]{12,64}', item) for item in ids):
-                raise Rejected('initial app is ambiguous')
-            if ids:
-                info = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
-                if info.get('Image') != image_id(release): raise Rejected('initial app image mismatch')
-                run(COMPOSE + ['stop', '-t', '30', 'app'], image=image, timeout=60)
-                after = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
-                if after.get('State', {}).get('Running'): raise Rejected('initial app still running')
-            return None
         if not data['blocked'] or data['current'] != release or data['pending'] is None:
             raise Rejected('rollback release is not previous')
         approval(release, data['pending'])
@@ -420,7 +420,11 @@ def main():
             if not token.endswith(b'\n'): raise Rejected('invalid token')
             token = token[:-1]
             if not re.fullmatch(rb'[!-~]{1,4096}', token): raise Rejected('invalid token')
-        if sys.stdin.buffer.read(1): raise Rejected('extra input')
+        extra = sys.stdin.buffer.read(32)
+        if extra:
+            if phase != 'rollback' or extra != b'initial-close\n' or sys.stdin.buffer.read(1):
+                raise Rejected('extra input')
+            phase = 'close-initial'
         result = execute(phase, release, token)
         if result is not None: print(json.dumps(result, separators=(',', ':')))
     except (OSError, ValueError, RuntimeError, KeyError, TypeError, UnicodeError):

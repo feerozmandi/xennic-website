@@ -93,6 +93,15 @@ class TransactionTest(unittest.TestCase):
         self.assertNotIn('rollback', ops.events)
         self.assertNotIn('mark_healthy', ops.events)
 
+    def test_initial_closure_attempted_even_if_journal_is_unreadable(self):
+        class BrokenInitialJournal(Operations):
+            def verify_health(self, r): raise RuntimeError('bad health')
+            def ensure_blocked(self, r): raise RuntimeError('broken journal')
+        ops = BrokenInitialJournal(rollback_safe=False)
+        with self.assertRaises(tx.DeploymentFailed): tx.deploy(release(), ops)
+        self.assertIn('close_initial', ops.events)
+        self.assertNotIn('mark_healthy', ops.events)
+
     def test_bad_state_old_run_and_manifest_fail_before_mutation(self):
         for state, raw in [({"blocked": True, "last_run": 5}, release()),
                            ({"blocked": False, "last_run": 6}, release()),

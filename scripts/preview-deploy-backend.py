@@ -84,6 +84,21 @@ class FixedRunner:
                     info.st_mode & 0o077 or (path in executables and not info.st_mode & stat.S_IXUSR)):
                 raise BackendError("preview operation is unsafe")
 
+    def close_initial(self, release):
+        # A fixed operation, not a caller-controlled path or command. It must
+        # still run when a failed initial journal write cannot be read.
+        release = _validated_release(release)
+        self.verify_helpers()
+        payload = json.dumps(release, separators=(",", ":"), sort_keys=True).encode("ascii") + b"\ninitial-close\n"
+        try:
+            result = subprocess.run([str(PHASES["rollback"])], input=payload,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    env=SAFE_ENV, timeout=180, check=False)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise BackendError("initial app closure failed") from exc
+        if result.returncode:
+            raise BackendError("initial app closure failed")
+
     def call(self, phase, release, token=None):
         token_phases = {"release-check", "current-check", "pull-image"}
         if phase not in PHASES or (token is not None and phase not in token_phases):
@@ -178,7 +193,7 @@ class Backend:
             self.journal.ensure_initial_blocked(release)
         else:
             self.journal.ensure_blocked(release)
-    def close_initial(self, release): self.runner.call("rollback", release)
+    def close_initial(self, release): self.runner.close_initial(release)
 
     def migrate(self, release): self.runner.call("migrate", release)
 

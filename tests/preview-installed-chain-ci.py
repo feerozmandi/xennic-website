@@ -99,6 +99,15 @@ if subprocess.check_output(['/usr/bin/docker', 'inspect', '-f', '{{.State.Runnin
     raise AssertionError('failed initial app was not stopped')
 for volume in ('xennic-preview_preview_db', 'xennic-preview_preview_media'):
     subprocess.check_call(['/usr/bin/docker', 'volume', 'inspect', volume], stdout=subprocess.DEVNULL)
+# A damaged journal must not prevent the installed fixed closure from stopping
+# this exact initial image. This is confined to the disposable CI project.
+subprocess.check_call(compose + ['up', '-d', '--no-deps', '--no-build', 'app'], env=initial_env, stdout=subprocess.DEVNULL)
+state_path = ROOT / 'state/release-state.json'
+state_path.write_text('invalid-ci-journal'); state_path.chmod(0o600)
+runner.close_initial(second)
+if subprocess.check_output(['/usr/bin/docker', 'inspect', '-f', '{{.State.Running}}', app], text=True).strip() != 'false':
+    raise AssertionError('initial closure relied on a readable journal')
+state_path.write_text(json.dumps(journal)); state_path.chmod(0o600)
 query = "SELECT count(*) FROM website.payload_migrations WHERE name='20261030_163225_baseline'"
 count = subprocess.check_output(compose + ['exec', '-T', 'postgres', 'psql', '-U', 'preview_ci', '-d', 'preview_ci', '-tAc', query], env=initial_env, text=True).strip()
 if count != '1': raise AssertionError('failed initial database was not preserved')

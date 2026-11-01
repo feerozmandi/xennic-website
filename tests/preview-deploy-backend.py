@@ -211,6 +211,15 @@ class BackendTest(unittest.TestCase):
         self.assertNotIn(("backup-verify", 2), self.runner.events)
         self.assertFalse(self.journal.read()["blocked"])
 
+    def test_initial_closure_uses_fixed_helper_and_checks_permissions(self):
+        runner = backend.FixedRunner()
+        with mock.patch.object(runner, 'verify_helpers') as verify, mock.patch.object(backend.subprocess, 'run') as run:
+            run.return_value = subprocess.CompletedProcess([], 0)
+            runner.close_initial(release(2))
+            verify.assert_called_once()
+            self.assertEqual(run.call_args.args[0], [str(backend.PHASES['rollback'])])
+            self.assertTrue(run.call_args.kwargs['input'].endswith(b'\ninitial-close\n'))
+
     def test_cli_is_always_disabled(self):
         result = subprocess.run([sys.executable, str(ROOT / "scripts/preview-deploy-backend.py")],
                                 capture_output=True)
