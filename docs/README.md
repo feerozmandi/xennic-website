@@ -20,7 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
-| ۲۰۲۶-۱۱-۰۱ | [backup موقت staging آزمایشی](reports/2026-11-01-temporary-staging-backup.md) | نتیجهٔ CI نصب نخست و پیگیری DNS |
+| ۲۰۲۶-۱۱-۰۱ | [backup موقت staging آزمایشی](reports/2026-11-01-temporary-staging-backup.md) | CI نصب نخست، ثبت خطا و پیگیری DNS |
 | ۲۰۲۶-۱۰-۳۱ | [زنجیرهٔ helperهای نصب‌شده](reports/2026-10-31-installed-preview-chain.md) | نتیجهٔ CI دورریختنی، rollback و آزمون GHCR پس از merge |
 | ۲۰۲۶-۱۰-۳۱ | [Pull پیش از maintenance](reports/2026-10-31-pull-before-maintenance.md) | helper محدود GHCR و مانع زنجیره |
 | ۲۰۲۶-۱۰-۳۱ | [helper نصب‌شدهٔ SFTP](reports/2026-10-31-installed-sftp.md) | نصب محدود، انتقال و حدود زنجیره |

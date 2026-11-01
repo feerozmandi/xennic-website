@@ -131,7 +131,8 @@ def assert_initial_pristine(release, journal_exists=False):
         if (app.get('build') or app.get('pull_policy') != 'never' or
                 len(ports) != 1 or ports[0].get('host_ip') != '127.0.0.1' or
                 ports[0].get('target') != 3000 or ports[0].get('protocol', 'tcp') != 'tcp' or
-                services['postgres'].get('ports')):
+                services['postgres'].get('ports') or
+                services['postgres'].get('image') != 'postgres:16.14-bookworm'):
             raise Rejected('initial application or database ports are unsafe')
         env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
         url = urlsplit(env['PREVIEW_DATABASE_URL'])
@@ -166,6 +167,28 @@ def assert_initial_pristine(release, journal_exists=False):
         if run([DOCKER, kind, 'ls', '-q', '--filter', 'label=com.docker.compose.project=xennic-preview'], output=True).strip():
             raise Rejected('initial project has existing labelled resources')
     return image
+
+
+def assert_initial_database(image):
+    snapshot.ENV = dict(SAFE, PREVIEW_IMAGE=image)
+    database = snapshot.container_id('postgres')
+    info = snapshot.inspect(database)
+    ports = info.get('NetworkSettings', {}).get('Ports') or {}
+    mounts = [m for m in info.get('Mounts', []) if m.get('Destination') == '/var/lib/postgresql/data']
+    if (not info.get('State', {}).get('Running') or info.get('HostConfig', {}).get('NetworkMode') == 'host' or
+            any(ports.values()) or len(mounts) != 1 or mounts[0].get('Type') != 'volume' or
+            mounts[0].get('Name') != 'xennic-preview_preview_db'):
+        raise Rejected('initial database is not isolated')
+    networks = info.get('NetworkSettings', {}).get('Networks') or {}
+    if set(networks) != {'xennic-preview_default'}:
+        raise Rejected('initial database network is unexpected')
+    network_id = networks['xennic-preview_default'].get('NetworkID', '')
+    if not re.fullmatch('[0-9a-f]{12,64}', network_id): raise Rejected('initial network is invalid')
+    entries = json.loads(run([DOCKER, 'network', 'inspect', network_id], output=True))
+    if len(entries) != 1 or set((entries[0].get('Containers') or {}).keys()) != {info['Id']}:
+        raise Rejected('unknown initial database network writer')
+    user, database_name = snapshot.pg_settings(database)
+    snapshot.no_other_database_clients(database, user, database_name)
 
 
 def image_id(release):
@@ -262,8 +285,8 @@ def migration_tree_hash(release):
 
 def pending(release):
     data = state()
-    if not data['blocked'] or data['pending'] != release:
-        raise Rejected('release is not pending')
+    if not data['blocked'] or data['pending'] != release or 'failure' in data:
+        raise Rejected('release is not pending or requires failure review')
     return data
 
 
@@ -326,8 +349,11 @@ def execute(phase, release, token):
             image = assert_initial_pristine(release, journal_exists=True)
             image_id(release)
             run(COMPOSE + ['up', '-d', '--no-build', '--wait', 'postgres'], image=image, timeout=180)
+            assert_initial_database(image)
             run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:migrate'], image=image, timeout=600)
+            assert_initial_database(image)
             run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:seed'], image=image, timeout=600)
+            assert_initial_database(image)
             return None
         policy = approval(current, release)
         verify_backup(release)

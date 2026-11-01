@@ -49,6 +49,8 @@ class StateTest(unittest.TestCase):
         self.journal.ensure_initial_blocked(release(1))
         self.assertIsNone(self.journal.read()['current'])
         self.assertTrue(self.journal.read()['blocked'])
+        self.assertEqual(self.journal.read()['failure'], 'initial-deployment-failed')
+        with self.assertRaises(state.UnsafeState): self.journal.mark_healthy(release(1))
 
     def test_block_before_change_and_keep_two_previous(self):
         for run in (1, 2, 3, 4):

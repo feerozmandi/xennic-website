@@ -203,8 +203,8 @@ def backup(raw):
     release = manifest.validate_manifest(raw)
     for path in (ROOT, WORK, ROOT / 'state'): safe_directory(path)
     state = states.Journal().read()
-    if not state['blocked'] or state['pending'] != release:
-        raise BackupFailed('a blocked pending release is required')
+    if not state['blocked'] or state['pending'] != release or 'failure' in state:
+        raise BackupFailed('a non-failed blocked pending release is required')
     initial = state['current'] is None
     snapshot_release = release if initial else state['current']
     # The initial app has passed internal health but is not yet recorded healthy.

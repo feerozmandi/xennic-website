@@ -86,8 +86,9 @@ try:
 except backend.transaction.DeploymentFailed:
     pass
 journal = backend.states.Journal().read()
-if not journal['blocked'] or journal['current'] is not None or journal['pending'] != second:
-    raise AssertionError('failed initial install recorded a healthy release')
+if (not journal['blocked'] or journal['current'] is not None or journal['pending'] != second or
+        journal.get('failure') != 'initial-deployment-failed'):
+    raise AssertionError('failed initial install did not record a blocked failure')
 marker = ROOT / 'state' / f"activation-{second['run_number']}.json"
 if not marker.is_file(): raise AssertionError('initial failure did not reach activation')
 initial_env = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent',

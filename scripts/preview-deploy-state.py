@@ -31,8 +31,11 @@ def _release(value):
 
 def _validate(data):
     fields = {"version", "last_run", "blocked", "current", "previous", "pending"}
-    if not isinstance(data, dict) or set(data) != fields or type(data["version"]) is not int or data["version"] != 1:
+    if (not isinstance(data, dict) or set(data) not in (fields, fields | {"failure"}) or
+            type(data["version"]) is not int or data["version"] != 1):
         raise UnsafeState("invalid release state")
+    if "failure" in data and data["failure"] != "initial-deployment-failed":
+        raise UnsafeState("invalid failure record")
     if type(data["blocked"]) is not bool or type(data["last_run"]) is not int or data["last_run"] < 0:
         raise UnsafeState("invalid release state")
     if not isinstance(data["previous"], list) or len(data["previous"]) > 2:
@@ -45,7 +48,8 @@ def _validate(data):
     if any(item is None for item in data["previous"]):
         raise UnsafeState("invalid release history")
     if (data["blocked"] != (data["pending"] is not None) or
-            (data["pending"] is not None and data["pending"]["run_number"] != data["last_run"])):
+            (data["pending"] is not None and data["pending"]["run_number"] != data["last_run"]) or
+            ("failure" in data and (not data["blocked"] or data["current"] is not None or data["previous"]))):
         raise UnsafeState("invalid release state")
     return data
 
@@ -184,14 +188,14 @@ class Journal:
                 state["current"] not in (None, release) or
                 state["pending"] not in (None, release)):
             raise UnsafeState("initial release state changed")
-        state.update(blocked=True, current=None, pending=release)
+        state.update(blocked=True, current=None, pending=release, failure="initial-deployment-failed")
         self._write(state)
 
     def mark_healthy(self, release):
         release = _release(release)
         state = self.read()
-        if not state["blocked"] or state["pending"] != release:
-            raise UnsafeState("release is not pending")
+        if not state["blocked"] or state["pending"] != release or "failure" in state:
+            raise UnsafeState("release is not pending or requires failure review")
         previous = ([state["current"]] if state["current"] is not None else []) + state["previous"]
         state.update(blocked=False, current=release, previous=previous[:2], pending=None)
         self._write(state)
