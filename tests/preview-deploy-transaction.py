@@ -65,6 +65,7 @@ class Operations:
     def ensure_blocked(self, r):
         self.step("ensure_blocked")
         self.state["blocked"] = True
+    def close_initial(self, r): self.step("close_initial")
     def rollback_previous(self): self.step("rollback")
     def verify_previous_health(self): self.step("previous_health")
 
@@ -76,6 +77,21 @@ class TransactionTest(unittest.TestCase):
         self.assertEqual(ops.events, ["lock", "read_state", "preflight", "assert_current", "pull", "assert_current", "mark_inflight", "backup",
                                       "assert_current", "migrate", "assert_current", "activate", "health", "mark_healthy", "unlock"])
         self.assertEqual(ops.state, {"blocked": False, "last_run": 6})
+
+    def test_initial_snapshots_after_health_and_closes_on_failure(self):
+        ops = Operations(rollback_safe=False)
+        tx.deploy(release(), ops)
+        self.assertEqual(ops.events.count('activate'), 2)
+        self.assertEqual(ops.events.count('health'), 2)
+        self.assertLess(ops.events.index('migrate'), ops.events.index('health'))
+        self.assertLess(ops.events.index('health'), ops.events.index('backup'))
+        self.assertLess(ops.events.index('backup'), ops.events.index('mark_healthy'))
+        ops = Operations(fail='health', rollback_safe=False)
+        with self.assertRaises(tx.DeploymentFailed): tx.deploy(release(), ops)
+        self.assertTrue(ops.state['blocked'])
+        self.assertIn('close_initial', ops.events)
+        self.assertNotIn('rollback', ops.events)
+        self.assertNotIn('mark_healthy', ops.events)
 
     def test_bad_state_old_run_and_manifest_fail_before_mutation(self):
         for state, raw in [({"blocked": True, "last_run": 5}, release()),

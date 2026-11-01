@@ -67,7 +67,7 @@ def transfer(raw_release):
     release = manifest.validate_manifest(raw_release)
     for directory in (ROOT, WORK, STATE): private_directory(directory)
     state = states.Journal().read()
-    if not state['blocked'] or state['pending'] != release or state['current'] is None:
+    if not state['blocked'] or state['pending'] != release:
         raise TransferFailed('release is not pending')
     config = readiness.backup_config(ROOT, 0)
     before = digest_file(SOURCE)

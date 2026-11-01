@@ -66,7 +66,8 @@ def deploy(raw_manifest, ops):
         ops.mark_inflight(release)
         switch_attempted = False
         try:
-            ops.backup_and_verify(release)
+            if not readiness["initial"]:
+                ops.backup_and_verify(release)
             ops.assert_current(release)
             ops.migrate(release)
             # An old run must not switch traffic if dev advanced during migration.
@@ -76,13 +77,27 @@ def deploy(raw_manifest, ops):
             switch_attempted = True
             ops.activate(release)
             ops.verify_health(release)
+            if readiness["initial"]:
+                # First snapshot follows migration/seed. The backup helper stops
+                # the app; reactivate and recheck before recording any healthy release.
+                ops.backup_and_verify(release)
+                ops.assert_current(release)
+                ops.activate(release)
+                ops.verify_health(release)
             ops.mark_healthy(release)
         except Exception:
-            # A failed durable success write can have partially committed. Ensure
-            # a durable blocked state before any rollback or subsequent release.
+            # Attempt to close the initial app even if the journal update fails.
+            state_ok = True
             try:
                 ops.ensure_blocked(release)
             except Exception:
+                state_ok = False
+            if readiness["initial"] and switch_attempted:
+                try:
+                    ops.close_initial(release)
+                except Exception:
+                    raise DeploymentFailed("initial release blocked; app closure uncertain, review immediately") from None
+            if not state_ok:
                 raise DeploymentFailed("release state uncertain; stop and review") from None
             rollback_ok = False
             if switch_attempted and rollback_safe:

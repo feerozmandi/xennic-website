@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+from urllib.parse import unquote, urlsplit
 
 sys.dont_write_bytecode = True
 ROOT = Path('/srv/xennic-preview')
@@ -101,6 +102,69 @@ def config_for(release):
             raise Rejected('Compose image or services mismatch')
     except (ValueError, KeyError, TypeError) as exc:
         raise Rejected('invalid Compose configuration') from exc
+    return image
+
+
+def assert_initial_pristine(release, journal_exists=False):
+    """Refuse all pre-existing preview data/resources, including unlabelled names."""
+    image = config_for(release)
+    try:
+        obj = json.loads(run(COMPOSE + ['config', '--format', 'json'], image=image, output=True))
+        services, volumes, networks = obj['services'], obj['volumes'], obj['networks']
+        if (set(volumes) != {'preview_db', 'preview_media'} or set(networks) != {'default'} or
+                any(volumes[k].get('external') or volumes[k].get('driver_opts') or
+                    volumes[k].get('driver') not in (None, 'local') or
+                    volumes[k].get('name') != 'xennic-preview_' + k for k in volumes) or
+                networks['default'].get('external') or networks['default'].get('name') != 'xennic-preview_default'):
+            raise Rejected('initial volumes or network are not isolated')
+        for service, volume, destination in (('postgres', 'preview_db', '/var/lib/postgresql/data'),
+                                              ('app', 'preview_media', '/app/media')):
+            item = services[service]
+            mounts = item.get('volumes') or []
+            if (len(mounts) != 1 or mounts[0].get('type') != 'volume' or
+                    mounts[0].get('source') != volume or mounts[0].get('target') != destination or
+                    set(item.get('networks') or {}) != {'default'} or item.get('network_mode') or
+                    item.get('privileged') or item.get('devices') or item.get('pid') or item.get('ipc')):
+                raise Rejected('initial service is not isolated')
+        app = services['app']
+        ports = app.get('ports') or []
+        if (app.get('build') or app.get('pull_policy') != 'never' or
+                len(ports) != 1 or ports[0].get('host_ip') != '127.0.0.1' or
+                ports[0].get('target') != 3000 or ports[0].get('protocol', 'tcp') != 'tcp' or
+                services['postgres'].get('ports')):
+            raise Rejected('initial application or database ports are unsafe')
+        env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
+        url = urlsplit(env['PREVIEW_DATABASE_URL'])
+        if (url.scheme not in ('postgres', 'postgresql') or url.hostname != 'postgres' or
+                url.port not in (None, 5432) or url.query or url.fragment or
+                unquote(url.username or '') != env['PREVIEW_POSTGRES_USER'] or
+                unquote(url.password or '') != env['PREVIEW_POSTGRES_PASSWORD'] or
+                unquote(url.path.removeprefix('/')) != env['PREVIEW_POSTGRES_DB'] or
+                app.get('environment', {}).get('DATABASE_URL') != env['PREVIEW_DATABASE_URL'] or
+                services['postgres'].get('environment', {}).get('POSTGRES_DB') != env['PREVIEW_POSTGRES_DB'] or
+                services['postgres'].get('environment', {}).get('POSTGRES_USER') != env['PREVIEW_POSTGRES_USER'] or
+                services['postgres'].get('environment', {}).get('POSTGRES_PASSWORD') != env['PREVIEW_POSTGRES_PASSWORD']):
+            raise Rejected('initial database is not the isolated Compose database')
+    except (KeyError, ValueError, TypeError, AttributeError) as exc:
+        raise Rejected('initial Compose configuration invalid') from exc
+    for directory in (ROOT, ROOT / 'state', ROOT / 'work'):
+        snapshot.safe_directory(directory)
+    if {p.name for p in ROOT.iterdir()} != {'config', 'secrets', 'state', 'work'}:
+        raise Rejected('initial preview root has unexpected resources')
+    expected = {'release-state.json'} if journal_exists else set()
+    if {p.name for p in (ROOT / 'state').iterdir()} != expected or any((ROOT / 'work').iterdir()):
+        raise Rejected('initial state or work directory is not empty')
+    if run([DOCKER, 'ps', '-aq', '--filter', 'label=com.docker.compose.project=xennic-preview'], output=True).strip():
+        raise Rejected('initial project has existing containers')
+    for command in ([DOCKER, 'ps', '-a', '--format', '{{.Names}}'],
+                    [DOCKER, 'volume', 'ls', '--format', '{{.Name}}'],
+                    [DOCKER, 'network', 'ls', '--format', '{{.Name}}']):
+        names = run(command, output=True).decode('utf-8').splitlines()
+        if any(name.startswith(('xennic-preview_', 'xennic-preview-')) for name in names):
+            raise Rejected('initial project has existing named resources')
+    for kind in ('volume', 'network'):
+        if run([DOCKER, kind, 'ls', '-q', '--filter', 'label=com.docker.compose.project=xennic-preview'], output=True).strip():
+            raise Rejected('initial project has existing labelled resources')
     return image
 
 
@@ -198,7 +262,7 @@ def migration_tree_hash(release):
 
 def pending(release):
     data = state()
-    if not data['blocked'] or data['pending'] != release or data['current'] is None:
+    if not data['blocked'] or data['pending'] != release:
         raise Rejected('release is not pending')
     return data
 
@@ -239,19 +303,32 @@ def check_health(release):
 
 def execute(phase, release, token):
     if phase == 'release-check':
-        previous = state()['current']
-        if previous is None: raise Rejected('initial installation needs separate review')
+        journal = states.Journal()
+        initial = journal.absent()
+        previous = None if initial else journal.read()['current']
+        if not initial and previous is None:
+            raise Rejected('existing journal has no healthy release')
         verifier.verify(release, token)
-        assert_current_host(previous)
-        check_health(previous)
-        approval(previous, release)
-        return {'initial': False, 'rollback_safe': True, 'verified_commit': release['commit'],
+        if initial:
+            assert_initial_pristine(release)
+        else:
+            assert_current_host(previous)
+            check_health(previous)
+            approval(previous, release)
+        return {'initial': initial, 'rollback_safe': not initial, 'verified_commit': release['commit'],
                 'verified_digest': release['digest'], 'verified_run_number': release['run_number']}
     if phase == 'current-check':
         verifier.assert_current(release, token)
         return None
     if phase == 'migrate':
         current = pending(release)['current']
+        if current is None:
+            image = assert_initial_pristine(release, journal_exists=True)
+            image_id(release)
+            run(COMPOSE + ['up', '-d', '--no-build', '--wait', 'postgres'], image=image, timeout=180)
+            run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:migrate'], image=image, timeout=600)
+            run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:seed'], image=image, timeout=600)
+            return None
         policy = approval(current, release)
         verify_backup(release)
         image = config_for(release)
@@ -271,13 +348,22 @@ def execute(phase, release, token):
         run(COMPOSE + ['run', '--rm', '--no-deps', '-T', 'app', 'npm', 'run', 'preview:migrate'], image=image, timeout=600)
         return None
     if phase == 'activate':
-        pending(release)
-        verify_backup(release)
+        current = pending(release)['current']
+        marker = ROOT / 'state' / f"activation-{release['run_number']}.json"
+        reactivation = current is None and os.path.lexists(marker)
+        if current is not None or reactivation:
+            verify_backup(release)
+        if reactivation:
+            try:
+                recorded = json.loads(ready._read(ROOT, f"state/activation-{release['run_number']}.json", 0))
+            except (ValueError, UnicodeError, ready.NotReady) as exc:
+                raise Rejected('initial activation marker invalid') from exc
+            if recorded != release: raise Rejected('initial activation marker mismatch')
         image = config_for(release)
         image_id(release)
         run(COMPOSE + ['up', '-d', '--no-deps', '--no-build', '--force-recreate', '--wait', 'app'], image=image, timeout=180)
         running_app_id(release)
-        marker = ROOT / 'state' / f"activation-{release['run_number']}.json"
+        if reactivation: return None
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
         try:
             with os.fdopen(fd, 'wb', closefd=False) as stream:
@@ -296,6 +382,20 @@ def execute(phase, release, token):
         return None
     if phase == 'rollback':
         data = state()
+        if data['blocked'] and data['current'] is None and data['pending'] == release:
+            # A first installation has no previous release. Close its app only;
+            # never remove its container, volumes, database or other services.
+            image = config_for(release)
+            ids = run(COMPOSE + ['ps', '--all', '-q', 'app'], image=image, output=True).decode('ascii').split()
+            if len(ids) > 1 or any(not re.fullmatch('[0-9a-f]{12,64}', item) for item in ids):
+                raise Rejected('initial app is ambiguous')
+            if ids:
+                info = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
+                if info.get('Image') != image_id(release): raise Rejected('initial app image mismatch')
+                run(COMPOSE + ['stop', '-t', '30', 'app'], image=image, timeout=60)
+                after = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))[0]
+                if after.get('State', {}).get('Running'): raise Rejected('initial app still running')
+            return None
         if not data['blocked'] or data['current'] != release or data['pending'] is None:
             raise Rejected('rollback release is not previous')
         approval(release, data['pending'])

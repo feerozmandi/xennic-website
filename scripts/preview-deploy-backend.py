@@ -132,13 +132,21 @@ class Backend:
         self.journal = journal if journal is not None else states.Journal()
         self.previous = None
         self.active_release = None
+        self.initial = False
 
     def lock(self):
         return locks.acquire_lock()
 
     def read_state(self):
+        self.initial = self.journal.absent()
+        if self.initial:
+            self.previous = None
+            return {"version": 1, "last_run": 0, "blocked": False,
+                    "current": None, "previous": [], "pending": None}
         state = self.journal.read()
         self.previous = state["current"]
+        if self.previous is None and not state["blocked"]:
+            raise BackendError("journal without a healthy release requires review")
         return state
 
     def preflight(self, release):
@@ -146,7 +154,7 @@ class Backend:
         self.runner.verify_helpers()
         self.active_release = _validated_release(release)
         decision = self.runner.call("release-check", release, self.token)
-        if (decision["initial"] != (self.previous is None) or
+        if (decision["initial"] != self.initial or
                 decision["verified_commit"] != release["commit"] or
                 decision["verified_digest"] != release["digest"] or
                 decision["verified_run_number"] != release["run_number"]):
@@ -156,8 +164,21 @@ class Backend:
     def pull_image(self, release): self.runner.call("pull-image", release, self.token)
     def backup_and_verify(self, release): self.runner.call("backup-verify", release)
     def assert_current(self, release): self.runner.call("current-check", release, self.token)
-    def mark_inflight(self, release): self.journal.mark_inflight(release)
-    def ensure_blocked(self, release): self.journal.ensure_blocked(release)
+    def mark_inflight(self, release):
+        if self.initial:
+            # Revalidate both provenance and pristine resources after the pull.
+            decision = self.runner.call("release-check", release, self.token)
+            if decision["initial"] is not True or decision["rollback_safe"] is not False:
+                raise BackendError("initial preflight changed")
+            self.journal.begin_initial(release)
+        else:
+            self.journal.mark_inflight(release)
+    def ensure_blocked(self, release):
+        if self.initial:
+            self.journal.ensure_initial_blocked(release)
+        else:
+            self.journal.ensure_blocked(release)
+    def close_initial(self, release): self.runner.call("rollback", release)
 
     def migrate(self, release): self.runner.call("migrate", release)
 

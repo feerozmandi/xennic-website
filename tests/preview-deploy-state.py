@@ -34,6 +34,22 @@ class StateTest(unittest.TestCase):
         self.path.write_text(json.dumps(obj))
         self.path.chmod(0o600)
 
+    def test_begin_initial_requires_absent_journal_and_never_invents_healthy(self):
+        self.path.unlink()
+        self.assertTrue(self.journal.absent())
+        self.journal.begin_initial(release(1))
+        result = self.journal.read()
+        self.assertEqual(result['pending'], release(1))
+        self.assertIsNone(result['current'])
+        self.assertTrue(result['blocked'])
+        with self.assertRaises(FileExistsError): self.journal.begin_initial(release(2))
+        self.assertEqual(self.journal.read(), result)
+        self.journal.mark_healthy(release(1))
+        self.assertEqual(self.journal.read()['current'], release(1))
+        self.journal.ensure_initial_blocked(release(1))
+        self.assertIsNone(self.journal.read()['current'])
+        self.assertTrue(self.journal.read()['blocked'])
+
     def test_block_before_change_and_keep_two_previous(self):
         for run in (1, 2, 3, 4):
             self.journal.mark_inflight(release(run))
