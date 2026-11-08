@@ -1,0 +1,25 @@
+# Review/lab only: strip ONLY the OAuth2 Proxy session cookie and numbered chunks.
+# Preserve Payload cookies, unrelated cookies, Origin/Fetch Metadata and Authorization.
+# Keep this base cookie name synchronized with cookie_name in the OAuth2 Proxy config.
+reverse_proxy {$APP_ADDR} {
+	header_up Cookie "(^[\t ]*|;[\t ]*)__Host-preview_gate(_[0-9]+)?[\t ]*=[^;]*" "$1"
+	header_up Host {$PUBLIC_AUTHORITY}
+	header_up -Forwarded
+	header_up -X-Forwarded-User
+	header_up -X-Forwarded-Email
+	header_up -X-Forwarded-Groups
+	header_up -X-Forwarded-Access-Token
+	header_up -X-Forwarded-Client-Cert
+	header_up -X-Forwarded-Prefix
+	header_up -X-Forwarded-Uri
+	header_up -X-Forwarded-Method
+	header_up -X-Forwarded-Scheme
+	header_up -X-Auth-Request-*
+	header_up -Remote-User
+	header_up -X-Original-URL
+	header_up -X-Rewrite-URL
+	header_up X-Real-IP {remote_host}
+	header_up X-Forwarded-Host {$PUBLIC_AUTHORITY}
+	header_up X-Forwarded-Proto https
+	header_up X-Forwarded-For {remote_host}
+}

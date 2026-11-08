@@ -1,0 +1,8 @@
+{
+    admin off
+}
+
+# Production must leave CADDY_SITE unset. CI overrides it on an internal network.
+{$CADDY_SITE:https://preview.xennic.ir} {
+    import /etc/caddy/routes.caddy
+}

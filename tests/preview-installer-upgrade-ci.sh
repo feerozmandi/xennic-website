@@ -3,7 +3,8 @@
 set -euo pipefail
 [[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true && -n ${RUNNER_TEMP:-} ]] || exit 1
 for p in /srv/xennic-preview /root/xennic-preview-install /usr/local/libexec/xennic-preview \
-  /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous; do
+  /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous \
+  /usr/local/libexec/.xennic-preview-before-network; do
   if sudo test -e "$p" || sudo test -L "$p"; then echo "Fixture path already exists: $p" >&2; exit 1; fi
 done
 if sudo docker volume inspect xennic-preview_preview_db >/dev/null 2>&1; then
@@ -13,7 +14,8 @@ scratch=$(mktemp -d "$RUNNER_TEMP/xennic-upgrade.XXXXXX")
 cleanup() {
   sudo docker volume rm xennic-preview_preview_db >/dev/null 2>&1 || true
   sudo rm -rf /srv/xennic-preview /root/xennic-preview-install /usr/local/libexec/xennic-preview \
-    /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous
+    /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous \
+    /usr/local/libexec/.xennic-preview-before-network
   rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -30,7 +32,12 @@ sudo install -d -m 0755 /usr/local/libexec
 for f in "${files[@]}" install-preview-sftp-helper.py; do
   git show "$old:scripts/$f" > "$scratch/$f"
   sudo install -o root -g root -m 0600 "$scratch/$f" "/root/xennic-preview-install/$f"
-  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming/$f"
+  if [[ $f == install-preview-sftp-helper.py ]]; then
+    sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming/$f"
+  else
+    git show "f18b3158cd23786da3e4ee4ff3eae70577dcdc97:scripts/$f" > "$scratch/new-$f"
+    sudo install -o root -g root -m 0600 "$scratch/new-$f" "/root/xennic-preview-install/incoming/$f"
+  fi
 done
 sudo chmod 0700 /root/xennic-preview-install/install-preview-sftp-helper.py \
   /root/xennic-preview-install/incoming/install-preview-sftp-helper.py
@@ -66,7 +73,7 @@ if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Modified alias accep
 sudo install -o root -g root -m 0700 /root/xennic-preview-install/preview-fixed-operations.py /usr/local/libexec/xennic-preview/release-check
 printf 'unknown version\n' | sudo tee /root/xennic-preview-install/incoming/preview-deploy-state.py >/dev/null
 if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Unknown new version accepted' >&2; exit 1; fi
-sudo install -o root -g root -m 0600 scripts/preview-deploy-state.py /root/xennic-preview-install/incoming/preview-deploy-state.py
+sudo install -o root -g root -m 0600 "$scratch/new-preview-deploy-state.py" /root/xennic-preview-install/incoming/preview-deploy-state.py
 sudo /usr/bin/python3 - "$installer" <<'PY'
 import importlib.util, subprocess, sys
 sys.dont_write_bytecode = True
@@ -119,3 +126,69 @@ if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Repeated update unex
 after=$(sudo sha256sum /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 [[ "$before" == "$after" ]] || { echo 'Protected fixture changed' >&2; exit 1; }
 echo 'PASS: refusal, rollback, backup and protected-file preservation'
+
+# Reproduce the VPS after its first bounded upgrade, including the exact old
+# loopback Compose and retained 449a backup. Only disposable fixture files are
+# removed between the deliberately failed attempt and the success attempt.
+python3 - <<'PY' > "$scratch/old-compose.yml"
+from pathlib import Path
+s = Path('compose.preview.yml').read_text()
+old = '    build:\n      context: .\n      dockerfile: Dockerfile.preview\n'
+assert s.count(old) == 1
+print(s.replace(old, '    image: ${PREVIEW_IMAGE:?required}\n    pull_policy: never\n'), end='')
+PY
+sudo install -o root -g root -m 0600 "$scratch/old-compose.yml" /srv/xennic-preview/config/compose.yml
+sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/incoming-network
+for f in "${files[@]}" install-preview-sftp-helper.py; do
+  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-network/$f"
+done
+sudo install -o root -g root -m 0600 config/preview-compose.yml /root/xennic-preview-install/incoming-network/preview-compose.yml
+new_installer=/root/xennic-preview-install/incoming-network/install-preview-sftp-helper.py
+printf 'unknown compose\n' | sudo tee /srv/xennic-preview/config/compose.yml >/dev/null
+if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Unknown previous compose accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0600 "$scratch/old-compose.yml" /srv/xennic-preview/config/compose.yml
+printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.json >/dev/null
+if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Network upgrade accepted journal' >&2; exit 1; fi
+sudo test -f /srv/xennic-preview/state/release-state.json
+sudo rm /srv/xennic-preview/state/release-state.json # disposable fixture only
+sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('network_upgrade_ci', sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+original = m.verify_backend
+calls = 0
+def fail_after_replace():
+    global calls
+    calls += 1
+    if calls == 2: raise RuntimeError('injected after both replacements')
+    original()
+m.verify_backend = fail_after_replace
+try:
+    m.upgrade_network()
+    raise AssertionError('injected failure accepted')
+except RuntimeError as e:
+    if str(e) != 'injected after both replacements': raise
+m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
+m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
+if m.read_private(m.COMPOSE) != m.read_private(m.COMPOSE_BACKUP): raise AssertionError('old Compose not restored')
+if m.BACKUP_NETWORK.exists() or not m.NEW_DIR.exists(): raise AssertionError('old helper directory not restored')
+print('PASS: network upgrade failure restored previous helper and Compose')
+PY
+sudo rm -rf /usr/local/libexec/.xennic-preview-update # disposable fixture only
+sudo rm /srv/xennic-preview/config/.compose-before-network.yml # disposable fixture only
+sudo /usr/bin/python3 "$new_installer" --upgrade
+sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('network_upgrade_verify', sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_MANIFEST))
+m.installed_matches(m.BACKUP_NETWORK, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
+m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
+if m.read_private(m.COMPOSE_BACKUP) == m.read_private(m.COMPOSE): raise AssertionError('Compose not upgraded')
+m.verify_backend()
+print('PASS: isolated-network helpers and Compose installed; both previous helper sets and Compose retained')
+PY
+after=$(sudo sha256sum /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+[[ "$before" == "$after" ]] || { echo 'Protected fixture changed' >&2; exit 1; }

@@ -1,0 +1,74 @@
+# Caddy 2.11.7; imported inside a site block. All app routes require auth.
+# The /oauth2/ path is forwarded ONLY to the gate, never to the application.
+# Callback failures can be CSRF, provider API/scope, profile or allowlist errors.
+# Preserve the error class; never expose the upstream body or claim a cause.
+handle /oauth2/callback {
+	reverse_proxy {$GATE_ADDR} {
+		import oauth-gateway.caddy
+		@callback_client_error status 4xx
+		handle_response @callback_client_error {
+			header Cache-Control "no-store"
+			header Content-Type "text/plain; charset=utf-8"
+			respond "Sign-in could not be completed. Please try again or contact the administrator." 403
+		}
+		@callback_server_error status 5xx
+		handle_response @callback_server_error {
+			header Cache-Control "no-store"
+			header Content-Type "text/plain; charset=utf-8"
+			respond "Sign-in could not be completed. Please try again or contact the administrator." 500
+		}
+	}
+}
+
+handle /oauth2/* {
+	reverse_proxy {$GATE_ADDR} {
+		import oauth-gateway.caddy
+	}
+}
+
+@api path /api /api/* /graphql /graphql/*
+handle @api {
+	forward_auth {$GATE_ADDR} {
+		uri /oauth2/auth
+		header_up -Authorization
+		header_up -Forwarded
+		header_up -X-Forwarded-User
+		header_up -X-Forwarded-Email
+		header_up -X-Auth-Request-*
+		header_up -X-Forwarded-Client-Cert
+		header_up -X-Forwarded-Prefix
+		header_up -X-Forwarded-Scheme
+		header_up -X-Original-URL
+		header_up -X-Rewrite-URL
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Host {$PUBLIC_AUTHORITY}
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-For {remote_host}
+	}
+	import upstream.caddy
+}
+
+handle {
+	forward_auth {$GATE_ADDR} {
+		uri /oauth2/auth
+		header_up -Authorization
+		header_up -Forwarded
+		header_up -X-Forwarded-User
+		header_up -X-Forwarded-Email
+		header_up -X-Auth-Request-*
+		header_up -X-Forwarded-Client-Cert
+		header_up -X-Forwarded-Prefix
+		header_up -X-Forwarded-Scheme
+		header_up -X-Original-URL
+		header_up -X-Rewrite-URL
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Host {$PUBLIC_AUTHORITY}
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-For {remote_host}
+		@unauth status 401
+		handle_response @unauth {
+			redir * /oauth2/sign_in 302
+		}
+	}
+	import upstream.caddy
+}

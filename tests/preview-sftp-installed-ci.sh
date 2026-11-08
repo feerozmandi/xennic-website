@@ -292,13 +292,7 @@ badref="ghcr.io/feerozmandi/xennic-website@$bad_digest"
 docker pull --platform linux/amd64 "$badref" >/dev/null
 [[ "$badref" =~ ^ghcr\.io/feerozmandi/xennic-website@sha256:[0-9a-f]{64}$ ]] || { echo 'Invalid local fixture bad image reference' >&2; exit 1; }
 # Compose is root-owned and fixed; only PREVIEW_IMAGE from the journal is used.
-python3 - <<'PY' > "$scratch/compose-chain.yml"
-from pathlib import Path
-s = Path('compose.preview.yml').read_text()
-old = '    build:\n      context: .\n      dockerfile: Dockerfile.preview\n'
-assert old in s
-print(s.replace(old, '    image: ${PREVIEW_IMAGE:?required}\n    pull_policy: never\n'), end='')
-PY
+cp config/preview-compose.yml "$scratch/compose-chain.yml"
 sudo install -o root -g root -m 0600 "$scratch/compose-chain.yml" /srv/xennic-preview/config/compose.yml
 compose=(sudo env PREVIEW_IMAGE="$oldref" docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml)
 # The earlier synthetic backup scenario used this disposable CI project. Reset

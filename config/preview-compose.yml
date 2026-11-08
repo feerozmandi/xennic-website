@@ -1,0 +1,40 @@
+# Fixed preview application stack. Only the reviewed Caddy edge may publish host ports.
+name: xennic-preview
+services:
+  postgres:
+    image: postgres:16.14-bookworm
+    environment:
+      POSTGRES_DB: ${PREVIEW_POSTGRES_DB:?required}
+      POSTGRES_USER: ${PREVIEW_POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${PREVIEW_POSTGRES_PASSWORD:?required}
+    volumes:
+      - preview_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    mem_limit: 256m
+  app:
+    image: ${PREVIEW_IMAGE:?required}
+    pull_policy: never
+    environment:
+      DATABASE_URL: ${PREVIEW_DATABASE_URL:?required}
+      PAYLOAD_SECRET: ${PREVIEW_PAYLOAD_SECRET:?required}
+      PREVIEW_ORIGIN: ${PREVIEW_ORIGIN:?required}
+    networks: [default, gateway]
+    volumes:
+      - preview_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 512m
+volumes:
+  preview_db:
+  preview_media:
+
+networks:
+  default:
+    internal: true
+  gateway:
+    internal: true

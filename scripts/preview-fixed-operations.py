@@ -100,9 +100,40 @@ def config_for(release):
         services = obj['services']
         if set(services) != {'app', 'postgres'} or services['app']['image'] != image:
             raise Rejected('Compose image or services mismatch')
+        validate_topology(obj)
     except (ValueError, KeyError, TypeError) as exc:
         raise Rejected('invalid Compose configuration') from exc
     return image
+
+
+def validate_topology(obj):
+    """Require the fixed isolated database and gateway networks on every release."""
+    services, volumes, networks = obj['services'], obj['volumes'], obj['networks']
+    if (set(services) != {'app', 'postgres'} or set(volumes) != {'preview_db', 'preview_media'} or
+            set(networks) != {'default', 'gateway'} or
+            any(volumes[k].get('external') or volumes[k].get('driver_opts') or
+                volumes[k].get('driver') not in (None, 'local') or
+                volumes[k].get('name') != 'xennic-preview_' + k for k in volumes) or
+            any(networks[k].get('external') or networks[k].get('driver_opts') or
+                networks[k].get('driver') not in (None, 'bridge') or
+                networks[k].get('internal') is not True or
+                networks[k].get('name') != 'xennic-preview_' + k for k in networks)):
+        raise Rejected('preview volumes or networks are not isolated')
+    for service, volume, destination, nets in (
+            ('postgres', 'preview_db', '/var/lib/postgresql/data', {'default'}),
+            ('app', 'preview_media', '/app/media', {'default', 'gateway'})):
+        item = services[service]
+        mounts = item.get('volumes') or []
+        if (len(mounts) != 1 or mounts[0].get('type') != 'volume' or
+                mounts[0].get('source') != volume or mounts[0].get('target') != destination or
+                set(item.get('networks') or {}) != nets or item.get('network_mode') or
+                item.get('ports') or item.get('privileged') or item.get('devices') or
+                item.get('pid') or item.get('ipc')):
+            raise Rejected('preview service or published ports are unsafe')
+    app = services['app']
+    if (app.get('build') or app.get('pull_policy') != 'never' or
+            services['postgres'].get('image') != 'postgres:16.14-bookworm'):
+        raise Rejected('preview application or database image is unsafe')
 
 
 def assert_initial_pristine(release, journal_exists=False):
@@ -110,30 +141,9 @@ def assert_initial_pristine(release, journal_exists=False):
     image = config_for(release)
     try:
         obj = json.loads(run(COMPOSE + ['config', '--format', 'json'], image=image, output=True))
-        services, volumes, networks = obj['services'], obj['volumes'], obj['networks']
-        if (set(volumes) != {'preview_db', 'preview_media'} or set(networks) != {'default'} or
-                any(volumes[k].get('external') or volumes[k].get('driver_opts') or
-                    volumes[k].get('driver') not in (None, 'local') or
-                    volumes[k].get('name') != 'xennic-preview_' + k for k in volumes) or
-                networks['default'].get('external') or networks['default'].get('name') != 'xennic-preview_default'):
-            raise Rejected('initial volumes or network are not isolated')
-        for service, volume, destination in (('postgres', 'preview_db', '/var/lib/postgresql/data'),
-                                              ('app', 'preview_media', '/app/media')):
-            item = services[service]
-            mounts = item.get('volumes') or []
-            if (len(mounts) != 1 or mounts[0].get('type') != 'volume' or
-                    mounts[0].get('source') != volume or mounts[0].get('target') != destination or
-                    set(item.get('networks') or {}) != {'default'} or item.get('network_mode') or
-                    item.get('privileged') or item.get('devices') or item.get('pid') or item.get('ipc')):
-                raise Rejected('initial service is not isolated')
+        validate_topology(obj)
+        services = obj['services']
         app = services['app']
-        ports = app.get('ports') or []
-        if (app.get('build') or app.get('pull_policy') != 'never' or
-                len(ports) != 1 or ports[0].get('host_ip') != '127.0.0.1' or
-                ports[0].get('target') != 3000 or ports[0].get('protocol', 'tcp') != 'tcp' or
-                services['postgres'].get('ports') or
-                services['postgres'].get('image') != 'postgres:16.14-bookworm'):
-            raise Rejected('initial application or database ports are unsafe')
         env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
         url = urlsplit(env['PREVIEW_DATABASE_URL'])
         if (url.scheme not in ('postgres', 'postgresql') or url.hostname != 'postgres' or
@@ -212,6 +222,21 @@ def running_app_id(release):
     items = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))
     if len(items) != 1 or not items[0].get('State', {}).get('Running') or items[0].get('Image') != image_id(release):
         raise Rejected('running image does not match previous release')
+    app = items[0]
+    host = app.get('HostConfig', {})
+    net = app.get('NetworkSettings', {})
+    if (host.get('NetworkMode') == 'host' or host.get('PublishAllPorts') or host.get('PortBindings') or
+            any((net.get('Ports') or {}).values()) or
+            set(net.get('Networks') or {}) != {'xennic-preview_default', 'xennic-preview_gateway'}):
+        raise Rejected('running app network or published ports are unsafe')
+    # Until a reviewed gateway identity is enforced, fail closed for every
+    # additional peer. A container name or label alone cannot prove a gate.
+    network_id = net['Networks']['xennic-preview_gateway'].get('NetworkID', '')
+    if not re.fullmatch('[0-9a-f]{12,64}', network_id):
+        raise Rejected('gateway network is invalid')
+    entries = json.loads(run([DOCKER, 'network', 'inspect', network_id], output=True))
+    if len(entries) != 1 or set((entries[0].get('Containers') or {}).keys()) != {app['Id']}:
+        raise Rejected('gateway peer is not yet independently verified')
     return ids[0]
 
 
