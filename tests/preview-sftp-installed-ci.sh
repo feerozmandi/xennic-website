@@ -324,6 +324,14 @@ sudo install -o root -g root -m 0600 "$scratch/chain-transitions.json" /srv/xenn
 printf 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' | sudo tee /srv/xennic-preview/config/verified-host-fingerprint >/dev/null
 printf 'client_id="ci"\nclient_secret="ci"\ncookie_secret="ci"\n' | sudo tee /srv/xennic-preview/secrets/oauth2-proxy.cfg >/dev/null
 sudo chmod 0600 /srv/xennic-preview/config/verified-host-fingerprint /srv/xennic-preview/secrets/oauth2-proxy.cfg
+# Disposable gateway fixture: real Caddy and synthetic gate on the installed
+# application's gateway network. This is not an operational OAuth configuration.
+sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/ci-gateway
+for f in preview-Caddyfile routes.caddy oauth-gateway.caddy upstream.caddy; do
+  sudo install -o root -g root -m 0600 "config/$f" "/root/xennic-preview-install/ci-gateway/$f"
+done
+sudo install -o root -g root -m 0600 tests/preview-installed-gateway-fixture.py /root/xennic-preview-install/ci-gateway/gate.py
+sudo install -o root -g root -m 0600 tests/preview-installed-gateway-fixture.yml /root/xennic-preview-install/ci-gateway/compose.yml
 sudo install -o root -g root -m 0700 tests/preview-installed-chain-ci.py /root/xennic-preview-install/ci-installed-chain.py
 # Only the test subprocess sees the fake api.github.com hosts file; the runner
 # itself keeps its real GitHub API. Docker sees the fake ghcr.io on this VM.

@@ -1,0 +1,27 @@
+# Disposable CI only. This is not the final operational Compose configuration.
+services:
+  caddy:
+    image: caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e
+    environment:
+      CADDY_SITE: ':8080'
+      GATE_ADDR: gate:4180
+      APP_ADDR: app:3000
+      PUBLIC_AUTHORITY: preview.xennic.ir
+    volumes:
+      - ./preview-Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./routes.caddy:/etc/caddy/routes.caddy:ro
+      - ./oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
+      - ./upstream.caddy:/etc/caddy/upstream.caddy:ro
+    networks: [gateway, auth]
+  gate:
+    image: python:3.12.8-alpine@sha256:ba13ef990f6e5d13014e9e8d04c02a8fdb0fe53d6dccf6e19147f316e6cc3a84
+    command: ['python', '/fixture/gate.py']
+    volumes:
+      - ./gate.py:/fixture/gate.py:ro
+    networks: [auth]
+networks:
+  gateway:
+    external: true
+    name: xennic-preview_gateway
+  auth:
+    internal: true

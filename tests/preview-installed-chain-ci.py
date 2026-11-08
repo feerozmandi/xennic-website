@@ -130,6 +130,72 @@ if result != previous or journal['blocked'] or journal['current'] != previous or
     raise AssertionError('first healthy release was not recorded correctly')
 if record.get('remote_path') != 'manual-offsite-pending' or not (ROOT / 'work/backup.age').is_file():
     raise AssertionError('first encrypted local backup not verified')
+
+# Negative integration regression: attach a CI-owned Caddy and synthetic gate
+# to the exact installed helper's app, probe protected paths and gate outage,
+# and require the installed release-check to reject this unapproved peer. This
+# is deliberately not final gateway acceptance: CI, not the helper, starts it.
+gateway_compose = ['/usr/bin/docker', 'compose', '-p', 'xennic-ci-gateway', '-f',
+                   '/root/xennic-preview-install/ci-gateway/compose.yml']
+probe = r"""
+(async () => {
+  const paths = ['/', '/admin', '/api/pages', '/api/graphql', '/media/missing.png'];
+  for (const path of paths) {
+    let response;
+    for (let i = 0; i < 20; i++) {
+      response = await fetch('http://caddy:8080' + path, {
+        redirect: 'manual', headers: {Host: 'preview.xennic.ir'},
+        signal: AbortSignal.timeout(5000)
+      });
+      if (process.argv[1] === 'offline' || response.status < 500) break;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    if (process.argv[1] === 'offline') {
+      if (response.status < 500) throw Error('gate outage passed ' + path + ': ' + response.status);
+    } else {
+      const expected = path.startsWith('/api/') ? 401 : 302;
+      if (response.status !== expected) throw Error('missing session passed ' + path + ': ' + response.status);
+    }
+  }
+  if (process.argv[1] !== 'offline') {
+    const response = await fetch('http://caddy:8080/', {redirect:'manual',
+      headers:{Host:'preview.xennic.ir', Cookie:'__Host-preview_gate=ci-valid'},
+      signal:AbortSignal.timeout(5000)});
+    if (response.status !== 200 || !(await response.text()).includes('<html'))
+      throw Error('synthetic session did not reach app');
+  }
+})().catch(error => { console.error(error.message); process.exit(1); });
+"""
+# Establish the same candidate passes without the additional gateway peer;
+# otherwise an unrelated verifier or migration-policy failure could look like
+# a successful gateway rejection.
+select('first')
+runner.call('release-check', first, b'synthetic-token')
+try:
+    subprocess.check_call(gateway_compose + ['up', '-d', '--wait'])
+    for project_compose, service in ((compose, 'app'), (compose, 'postgres'), (gateway_compose, 'gate')):
+        cid = subprocess.check_output(project_compose + ['ps', '-q', service], env=initial_env, text=True).strip()
+        item = json.loads(subprocess.check_output(['/usr/bin/docker', 'inspect', cid]))[0]
+        host = item['HostConfig']; net = item['NetworkSettings']
+        if (host.get('NetworkMode') == 'host' or host.get('PublishAllPorts') or host.get('PortBindings') or
+                any((net.get('Ports') or {}).values())):
+            raise AssertionError(service + ' published a host port')
+    subprocess.check_call(compose + ['exec', '-T', 'app', 'node', '-e', probe, 'online'], env=initial_env)
+    subprocess.check_call(gateway_compose + ['stop', 'gate'])
+    subprocess.check_call(compose + ['exec', '-T', 'app', 'node', '-e', probe, 'offline'], env=initial_env)
+    subprocess.check_call(gateway_compose + ['start', 'gate'])
+    subprocess.check_call(compose + ['exec', '-T', 'app', 'node', '-e', probe, 'online'], env=initial_env)
+    print('PASS: real Caddy/app fixture blocks protected paths and gate outage; auth is synthetic', flush=True)
+    select('first')
+    try:
+        runner.call('release-check', first, b'synthetic-token')
+    except backend.BackendError:
+        print('PASS: installed release-check rejected unapproved Caddy peer', flush=True)
+    else:
+        raise AssertionError('unapproved gateway was accepted')
+    select('previous')
+finally:
+    subprocess.run(gateway_compose + ['down', '--remove-orphans'], check=False)
 # Add synthetic upgrade data only after a genuine first release exists.
 subprocess.check_call(compose + ['exec', '-T', 'postgres', 'psql', '-U', 'preview_ci', '-d', 'preview_ci', '-v', 'ON_ERROR_STOP=1', '-c',
                                 "INSERT INTO shared.customers (name, source) VALUES ('CI snapshot fixture', 'ci-only')"], env=initial_env, stdout=subprocess.DEVNULL)
