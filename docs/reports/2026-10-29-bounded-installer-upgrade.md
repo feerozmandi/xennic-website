@@ -19,14 +19,14 @@
 
 | آزمون یا بررسی | تاریخ و محیط | نتیجه |
 |---|---|---|
-| [انتشار merge commit](https://github.com/feerozmandi/xennic-website/actions/runs/42514781302) | GitHub Actions | موفق؛ آزمون image با digest منتشرشده، آزمون pull با helper نصب‌شده و ثبت artifact `13631685436` موفق‌اند. دریافت artifact در Arena به علت محدودیت شبکه EOF داد؛ مقدار digest در این محیط هنوز خوانده نشده و تأیید مستقل در CI این PR افزوده شده است. |
+| [انتشار merge commit](https://github.com/feerozmandi/xennic-website/actions/runs/42514781302) | GitHub Actions | موفق؛ image `ghcr.io/feerozmandi/xennic-website@sha256:cdc694144f5696a74031a9aa3e545933bb23542635c0eaeca310868f1b3eb411`، آزمون همان digest و pull با helper نصب‌شده و artifact `13631685436` موفق‌اند. دریافت artifact در Arena به علت شبکه EOF داد؛ [verifier مستقل در runner](https://github.com/feerozmandi/xennic-website/actions/runs/42516019719/job/128839091787) artifact، نوک dev، commit، digest و معماری را تأیید کرد. |
 | محاسبهٔ aggregate فایل‌های Git | محلی | helperهای قدیمی `105cde2ecdac77c14b70cdb9d1f1c22fe9bd9f93bad466a93bb3c1e476f72f7a` و جدید `ec0ea6d51210c23b85e94a7f4aac902d39a86f247f1eb80c618265f4b5fd55fa`؛ شاهد وضعیت VPS نیست. |
 | [CI ارتقای installer](https://github.com/feerozmandi/xennic-website/actions/runs/42515552906/job/128837652876) | runner دورریختنی GitHub، commit `f8912fc` | نصب نسخهٔ قدیم، رد journal/volume/فایل/مجوز نامعتبر، قفل، شکست پس از تعویض، rollback و حفظ تنظیمات موفق؛ آزمون مستقل VPS نیست. |
 | VPS، DNS و Docker محلی | این نشست | روی VPS یا DNS عملیاتی انجام نشد؛ Docker در Arena اجرا نشده است. |
 
 ## ریسک‌ها و کارهای باز
 
-- نسخهٔ واقعی روز VPS تأیید نشده و مقدار digest انتشار merge از Arena قابل خواندن نبوده است. پس از merge این اصلاح، نوک `dev` دوباره تغییر می‌کند و release جدید باید مجدداً منتشر و تأیید شود؛ image قدیمی `449a` release جاری نیست.
+- نسخهٔ واقعی روز VPS تأیید نشده است. پس از merge این اصلاح، نوک `dev` دوباره تغییر می‌کند و release جدید باید مجدداً منتشر و تأیید شود؛ image قدیمی `449a` release جاری نیست.
 - پیش از Caddy، تداخل ۸۰/۴۴۳ و سرویس‌های موجود دوباره بررسی شود. OAuth واقعی، TLS، حفاظت API/admin/media، مرورگر و backup/restore عملیاتی هنوز پذیرش نشده‌اند.
 - فقط staging بدون دادهٔ واقعی با انتقال دستی backup رمزنگاری‌شده به رایانهٔ مالک در نقاط مهم مجاز است؛ استفادهٔ عملیاتی به backup خودکار خارج VPS نیاز دارد.
 - DNS والد قبلاً `ns2/ns92` و zone `ns2/ns32` را نشان داده؛ تا احراز zone معتبر هیچ رکوردی تغییر نمی‌کند. nameserverها تغییر نمی‌کنند و پس از احراز فقط `preview A 185.192.113.85` در محدوده است.

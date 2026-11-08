@@ -58,6 +58,15 @@ sudo rm /usr/local/libexec/xennic-preview/unknown-fixture # disposable fixture o
 sudo chmod 0644 /usr/local/libexec/xennic-preview/release-check
 if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Unsafe helper mode accepted' >&2; exit 1; fi
 sudo chmod 0700 /usr/local/libexec/xennic-preview/release-check
+sudo chown "$(id -u):$(id -g)" /usr/local/libexec/xennic-preview/release-check
+if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Unsafe helper owner accepted' >&2; exit 1; fi
+sudo chown root:root /usr/local/libexec/xennic-preview/release-check
+printf 'unknown version\n' | sudo tee /usr/local/libexec/xennic-preview/release-check >/dev/null
+if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Modified alias accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0700 /root/xennic-preview-install/preview-fixed-operations.py /usr/local/libexec/xennic-preview/release-check
+printf 'unknown version\n' | sudo tee /root/xennic-preview-install/incoming/preview-deploy-state.py >/dev/null
+if sudo /usr/bin/python3 "$installer" --upgrade; then echo 'Unknown new version accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0600 scripts/preview-deploy-state.py /root/xennic-preview-install/incoming/preview-deploy-state.py
 sudo /usr/bin/python3 - "$installer" <<'PY'
 import importlib.util, subprocess, sys
 sys.dont_write_bytecode = True
