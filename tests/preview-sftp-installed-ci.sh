@@ -301,9 +301,10 @@ print(s.replace(old, '    image: ${PREVIEW_IMAGE:?required}\n    pull_policy: ne
 PY
 sudo install -o root -g root -m 0600 "$scratch/compose-chain.yml" /srv/xennic-preview/config/compose.yml
 compose=(sudo env PREVIEW_IMAGE="$oldref" docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml)
-"${compose[@]}" up -d --wait --no-build app
-# Only disposable files created by this CI fixture are reset; operational data is untouched.
-sudo rm -f /srv/xennic-preview/work/backup.age /srv/xennic-preview/state/backup-2.json /srv/xennic-preview/state/backup-3.json
+# The earlier synthetic backup scenario used this disposable CI project. Reset
+# only that fixture so the installed helper can exercise genuinely empty state.
+"${compose[@]}" down --volumes --remove-orphans
+sudo find /srv/xennic-preview/state /srv/xennic-preview/work -mindepth 1 -delete
 python3 - "$oldref" "$goodref" "$badref" "$scratch/good-context/migrations" <<'PY' > "$scratch/fixture-values.json"
 import hashlib, json, pathlib, sys
 old, good, bad = (x.split('@', 1)[1] for x in sys.argv[1:4])
@@ -319,13 +320,11 @@ PY
 python3 - "$scratch" <<'PY'
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1]); v = json.loads((p/'fixture-values.json').read_text())
-(p/'chain-state.json').write_text(json.dumps({'version':1,'last_run':1,'blocked':False,'current':v['previous'],'previous':[],'pending':None}))
-(p/'chain-github.json').write_text(json.dumps({'current':'first','releases':{'first':v['first'],'second':v['second']}}))
+(p/'chain-github.json').write_text(json.dumps({'current':'previous','releases':{'previous':v['previous'],'first':v['first'],'second':v['second']}}))
 (p/'chain-transitions.json').write_text(json.dumps({'version':1,'transitions':[
  {'from_commit':v['previous']['commit'],'to_commit':v['first']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline'],'rollback_safe':True},
  {'from_commit':v['first']['commit'],'to_commit':v['second']['commit'],'migration_sha256':v['migration_sha256'],'previous_migrations':['20261030_163225_baseline','20261031_000000_ci_additive'],'rollback_safe':True}]}))
 PY
-sudo install -o root -g root -m 0600 "$scratch/chain-state.json" /srv/xennic-preview/state/release-state.json
 sudo install -o root -g root -m 0600 "$scratch/chain-github.json" /srv/xennic-preview/config/ci-github-fixture.json
 sudo install -o root -g root -m 0600 "$scratch/chain-transitions.json" /srv/xennic-preview/config/compatible-transitions.json
 printf 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' | sudo tee /srv/xennic-preview/config/verified-host-fingerprint >/dev/null
