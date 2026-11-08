@@ -16,8 +16,9 @@
 
 | آزمون یا بررسی | تاریخ و محیط | نتیجه |
 |---|---|---|
-| بررسی نحو Python و shell | محلی بدون Docker | به خروجی اجرای نشست مراجعه شود |
-| آزمون جدید با helper نصب‌شده و Caddy/gate مصنوعی | GitHub Actions دورریختنی | در انتظار CI؛ این آزمون حتی با موفقیت، Compose نهایی و شناسایی gateway واقعی در helper را ثابت نمی‌کند. |
+| بررسی نحو Python و shell و آزمون واحد topology | ۲۰۲۶-۱۰-۲۹، محلی بدون Docker | موفق؛ آزمون runtime نیست. |
+| آزمون جدید با helper نصب‌شده و Caddy/gate مصنوعی | [CI 42523566742](https://github.com/feerozmandi/xennic-website/actions/runs/42523566742)، commit `ccf1ec4`، GitHub Actions دورریختنی | موفق: مسیرهای بی‌نشست و قطع gate بسته ماندند، درخواست با نشست مصنوعی به App رسید، و helper peer تأییدنشده را رد کرد. Compose نهایی و شناسایی gateway واقعی در helper را ثابت نمی‌کند. |
+| انتشار خودکار پس از PR #20 | [CI 42523137869](https://github.com/feerozmandi/xennic-website/actions/runs/42523137869)، commit `12d4002` | job انتشار موفق؛ این commit به دلیل نقص شناخته‌شده نامزد تأییدشدهٔ استقرار نیست و verifier مستقل این نسخه در این مرحله اجرا نشده است. |
 | OAuth/GitHub واقعی، TLS عمومی و VPS | عملیاتی | اجرا نشده |
 
 ## ریسک‌ها و کارهای باز
