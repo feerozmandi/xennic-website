@@ -116,6 +116,46 @@ jobs:
           fi
           tail -n 15 "$RUNNER_TEMP/installed-preview-ci.log"
 
+  installer-upgrade:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Exercise bounded installer upgrade and rollback on disposable runner
+        run: bash tests/preview-installer-upgrade-ci.sh
+      # One-time read-only verification of the already-completed dev release.
+      # No registry or deploy credentials are given to this PR job.
+      - name: Verify merged dev release evidence
+        if: github.event_name == 'pull_request'
+        env:
+          GH_VERIFIER_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, io, json, os, re, zipfile
+          spec = importlib.util.spec_from_file_location('verifier', 'scripts/preview-release-verifier.py')
+          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
+          token = os.environ['GH_VERIFIER_TOKEN'].encode('ascii')
+          raw = verifier.request(verifier.BASE + '/actions/artifacts/13631685436/zip', token, verifier.MAX_ZIP)
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+              files = archive.infolist()
+              if len(files) != 1 or files[0].filename != 'xennic-preview-release.json' or files[0].file_size > 16384:
+                  raise RuntimeError('unexpected release artifact')
+              evidence = json.loads(archive.read(files[0]))
+          release = evidence['release']
+          if (release['repository'] != 'feerozmandi/xennic-website' or
+              release['commit'] != 'f18b3158cd23786da3e4ee4ff3eae70577dcdc97' or
+              release['platform'] != 'linux/amd64' or not re.fullmatch(r'sha256:[0-9a-f]{64}', release['digest'])):
+              raise RuntimeError('unexpected release fields')
+          verifier.assert_current(release, token)
+          if verifier.verify(release, token) != 42514781302:
+              raise RuntimeError('unexpected release run')
+          print('::notice title=Verified dev release::' + release['commit'] + ' ghcr.io/' + release['repository'] + '@' + release['digest'])
+          PY
+
   production-preview:
     runs-on: ubuntu-latest
     env:
@@ -142,7 +182,7 @@ jobs:
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: [checks, compose-smoke, production-preview, installed-sftp]
+    needs: [checks, compose-smoke, production-preview, installed-sftp, installer-upgrade]
     runs-on: ubuntu-latest
     permissions:
       contents: read
