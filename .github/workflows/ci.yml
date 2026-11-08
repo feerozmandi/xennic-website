@@ -116,6 +116,15 @@ jobs:
           fi
           tail -n 15 "$RUNNER_TEMP/installed-preview-ci.log"
 
+  installer-upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Exercise bounded installer upgrade and rollback on disposable runner
+        run: bash tests/preview-installer-upgrade-ci.sh
+
   production-preview:
     runs-on: ubuntu-latest
     env:
@@ -142,7 +151,7 @@ jobs:
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: [checks, compose-smoke, production-preview, installed-sftp]
+    needs: [checks, compose-smoke, production-preview, installed-sftp, installer-upgrade]
     runs-on: ubuntu-latest
     permissions:
       contents: read
