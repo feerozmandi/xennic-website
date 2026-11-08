@@ -57,6 +57,9 @@ if [[ -n "${PREVIEW_TEST_IMAGE:-}" ]]; then
   printf 'PASS: running app uses the image pulled by the recorded digest\n'
 fi
 python3 tests/preview-internal-health-ci.py
+# Separate disposable project: exact isolated topology, real Caddy/app and a
+# synthetic auth gate. This does not claim real OAuth or VPS acceptance.
+bash tests/preview-network-ci.sh
 printf '\n--- Idle app and database memory ---\n'
 docker stats --no-stream --format 'idle {{.Name}} {{.MemUsage}}' "$("${compose[@]}" ps -q app)" "$("${compose[@]}" ps -q postgres)" | tee -a "$metrics"
 node scripts/wait-for-server.mjs

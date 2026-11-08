@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [اصلاح شبکهٔ داخلی پیش‌نمایش](reports/2026-10-29-private-network-correction.md) | تصمیم مدیریت پروژه، وضعیت اصلاح و محدودیت gateway |
 | ۲۰۲۶-۱۰-۲۹ | [ارتقای helperهای VPS](reports/2026-10-29-vps-helper-upgrade.md) | نتیجهٔ گزارش‌شدهٔ مالک و پیش‌شرط‌های باز |
 | ۲۰۲۶-۱۰-۲۹ | [ارتقای محدود installer](reports/2026-10-29-bounded-installer-upgrade.md) | وضعیت merge، ایمنی ارتقا و آزمون‌های در انتظار؛ اختلاف تاریخ محیط ذکر شده است |
 | ۲۰۲۶-۱۱-۰۱ | [backup موقت staging آزمایشی](reports/2026-11-01-temporary-staging-backup.md) | CI موفق نصب نخست و پیگیری DNS |

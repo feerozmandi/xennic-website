@@ -51,6 +51,7 @@ jobs:
           python3 tests/preview-deploy-backend.py
           python3 tests/preview-compose-operations.py
           python3 tests/preview-internal-health.py
+          python3 tests/preview-network-topology.py
       - name: Build
         run: npm run build
 

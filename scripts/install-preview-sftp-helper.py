@@ -39,6 +39,17 @@ INCOMING = SOURCE / 'incoming'
 NEW_DIR = PARENT / '.xennic-preview-update'
 BACKUP = PARENT / '.xennic-preview-previous'
 ROOT = Path('/srv/xennic-preview')
+# Reviewed pre-first-deployment transition from the installed f18b helpers and
+# exact loopback Compose file to this release's isolated-network topology.
+NETWORK_MANIFEST = 'f5ff9e085509e18ed48360481632bff45dba7d5bb8b9c56732efa37220fd3548'
+OLD_COMPOSE = '18a97bc2c21a6d623a54c81d07a49e44f6468cd225f0ce34a73f3760d3d0a373'
+NETWORK_COMPOSE = '44639d7d7f3678c8cb772d02768a8c51320ae4f71e7ccd3829b3d9d5126f2b7c'
+INCOMING_NETWORK = SOURCE / 'incoming-network'
+BACKUP_NETWORK = PARENT / '.xennic-preview-before-network'
+COMPOSE = ROOT / 'config/compose.yml'
+COMPOSE_BACKUP = ROOT / 'config/.compose-before-network.yml'
+COMPOSE_NEW = ROOT / 'config/.compose-network-update.yml'
+COMPOSE_ROLLBACK = ROOT / 'config/.compose-network-rollback.yml'
 
 
 def check_dir(path):
@@ -182,11 +193,83 @@ def upgrade():
     print('Fixed preview helpers upgraded; previous helpers preserved; no deployment started.')
 
 
+def write_exclusive(path, data, mode=0o600):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, mode)
+    try:
+        with os.fdopen(fd, 'wb', closefd=False) as stream:
+            stream.write(data); stream.flush(); os.fsync(stream.fileno())
+    finally: os.close(fd)
+
+
+def sync_dir(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def upgrade_network():
+    """Upgrade only the known pre-deployment installation, preserving both backups."""
+    for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
+        check_dir(path)
+    private_dir(SOURCE); private_dir(INCOMING); private_dir(INCOMING_NETWORK)
+    if {p.name for p in SOURCE.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'incoming', 'incoming-network'}:
+        raise RuntimeError('unexpected staging contents')
+    if {p.name for p in INCOMING.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py'}:
+        raise RuntimeError('unexpected current staging contents')
+    if {p.name for p in INCOMING_NETWORK.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'preview-compose.yml'}:
+        raise RuntimeError('unexpected network staging contents')
+    for path in (NEW_DIR, BACKUP_NETWORK, COMPOSE_BACKUP, COMPOSE_NEW, COMPOSE_ROLLBACK):
+        if os.path.lexists(path): raise RuntimeError('previous or incomplete network update exists')
+    previous = verified_sources(SOURCE, OLD_MANIFEST)
+    current = verified_sources(INCOMING, NEW_MANIFEST)
+    candidate = verified_sources(INCOMING_NETWORK, NETWORK_MANIFEST)
+    installed_matches(BACKUP, previous)
+    installed_matches(TARGET, current)
+    verify_backend()
+    old_compose = read_private(COMPOSE)
+    new_compose = read_private(INCOMING_NETWORK / 'preview-compose.yml')
+    if (hashlib.sha256(old_compose).hexdigest() != OLD_COMPOSE or
+            hashlib.sha256(new_compose).hexdigest() != NETWORK_COMPOSE):
+        raise RuntimeError('compose version is not approved')
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_network_lock')
+    with locks.acquire_lock(nonblocking=True):
+        installed_matches(BACKUP, previous); installed_matches(TARGET, current)
+        assert_pristine()
+        if read_private(COMPOSE) != old_compose:
+            raise RuntimeError('compose changed before update')
+        NEW_DIR.mkdir(mode=0o700)
+        for name in FILES:
+            for installed in EXECUTABLES.get(name, (name,)):
+                write_exclusive(NEW_DIR / installed, candidate[name], 0o700 if name in EXECUTABLES else 0o600)
+        sync_dir(NEW_DIR)
+        installed_matches(NEW_DIR, candidate)
+        write_exclusive(COMPOSE_BACKUP, old_compose)
+        write_exclusive(COMPOSE_NEW, new_compose)
+        sync_dir(COMPOSE.parent)
+        renamed_old = renamed_new = replaced_compose = False
+        try:
+            os.rename(TARGET, BACKUP_NETWORK); renamed_old = True; sync_parent()
+            os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            os.replace(COMPOSE_NEW, COMPOSE); replaced_compose = True; sync_dir(COMPOSE.parent)
+            installed_matches(TARGET, candidate)
+            if read_private(COMPOSE) != new_compose: raise RuntimeError('new compose verification failed')
+            verify_backend()
+        except BaseException:
+            if replaced_compose:
+                write_exclusive(COMPOSE_ROLLBACK, old_compose)
+                os.replace(COMPOSE_ROLLBACK, COMPOSE); sync_dir(COMPOSE.parent)
+            if renamed_new: os.rename(TARGET, NEW_DIR)
+            if renamed_old: os.rename(BACKUP_NETWORK, TARGET)
+            sync_parent()
+            raise
+    print('Fixed preview helpers and Compose upgraded; both previous versions preserved; no deployment started.')
+
+
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('root required')
     if sys.argv[1:] == ['--upgrade']:
-        return upgrade()
+        return upgrade_network() if os.path.lexists(INCOMING_NETWORK) else upgrade()
     if len(sys.argv) != 1:
         raise RuntimeError('invalid arguments')
     for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):

@@ -1,0 +1,15 @@
+# Shared request-header policy for OAuth2 Proxy only.
+header_up -Authorization
+header_up -Forwarded
+header_up -X-Forwarded-User
+header_up -X-Forwarded-Email
+header_up -X-Auth-Request-*
+header_up -X-Forwarded-Client-Cert
+header_up -X-Forwarded-Prefix
+header_up -X-Forwarded-Scheme
+header_up -X-Original-URL
+header_up -X-Rewrite-URL
+header_up X-Real-IP {remote_host}
+header_up X-Forwarded-Host {$PUBLIC_AUTHORITY}
+header_up X-Forwarded-Proto https
+header_up X-Forwarded-For {remote_host}
