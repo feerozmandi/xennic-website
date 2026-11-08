@@ -10,7 +10,7 @@ installer محدود در PR #17 ادغام شد. در [CI نهایی](https://g
 
 ## اقدامات و خروجی‌ها
 
-[انتشار dev](https://github.com/feerozmandi/xennic-website/actions/runs/42516811740) موفق شد؛ image و pull با helper نصب‌شده از همان digest در runner آزمایش شدند و artifact `13631194364` موجود است. صفحهٔ بستهٔ GitHub، image `ghcr.io/feerozmandi/xennic-website@sha256:6761859cd3c9f3e6cd34c50cb9cbd4aa4970a87d78e874f42fa630f4a2eba07e` و manifest معماری `linux/amd64` به digest `sha256:3d5d964cc1b6c811125fef76d8e7dac6737989abf143284ef1035dfc06fc3726` را نشان می‌دهد. metadata صفحه به‌تنهایی اثبات artifact نیست؛ verifier مستقل همان سیستم در CI جداگانه اجرا می‌شود. آزمون‌های GitHub به معنای استقرار VPS نیستند.
+[انتشار dev](https://github.com/feerozmandi/xennic-website/actions/runs/42516811740) موفق شد؛ image و pull با helper نصب‌شده از همان digest در runner آزمایش شدند و artifact `13631194364` موجود است. صفحهٔ بستهٔ GitHub، image `ghcr.io/feerozmandi/xennic-website@sha256:6761859cd3c9f3e6cd34c50cb9cbd4aa4970a87d78e874f42fa630f4a2eba07e` و manifest معماری `linux/amd64` به digest `sha256:3d5d964cc1b6c811125fef76d8e7dac6737989abf143284ef1035dfc06fc3726` را نشان می‌دهد. metadata صفحه به‌تنهایی اثبات artifact نیست؛ verifier مستقل همان سیستم در CI جداگانه موفق شد. آزمون‌های GitHub به معنای استقرار VPS نیستند.
 
 ## آزمون‌ها و شواهد
 
@@ -18,7 +18,7 @@ installer محدود در PR #17 ادغام شد. در [CI نهایی](https://g
 |---|---|---|
 | ارتقای installer و زنجیرهٔ نصب‌شده | [CI PR #17](https://github.com/feerozmandi/xennic-website/actions/runs/42516256065) | موفق، داده و endpoints دورریختنی |
 | انتشار و pull image | [CI dev](https://github.com/feerozmandi/xennic-website/actions/runs/42516811740) | موفق، commit بالا و artifact محفوظ |
-| verifier مستقل | PR صرفاً تأیید شاهد | در انتظار نتیجه؛ دریافت artifact در Arena به محدودیت شبکه خورد |
+| [verifier مستقل](https://github.com/feerozmandi/xennic-website/actions/runs/42517862088/job/128844728020) | runner جداگانه، PR صرفاً تأیید شاهد | موفق؛ artifact، digest، مخزن، معماری، workflow موفق و تطبیق نوک dev بررسی شدند. دریافت artifact در Arena به محدودیت شبکه خورد. |
 | VPS | این نشست | اجرا یا تغییر جدید انجام نشد؛ نسخهٔ نصب‌شده در حال حاضر تأیید نشده است. |
 
 ## ریسک‌ها و کارهای باز
