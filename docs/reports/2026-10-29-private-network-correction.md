@@ -17,8 +17,8 @@ Caddyfile و routeهای بازبینی‌شده به تنظیمات افزود�
 | آزمون | محیط | وضعیت |
 |---|---|---|
 | تست واحد توپولوژی، backend، transaction و internal health | محلی، بدون Docker | موفق؛ آزمون runtime نیست |
-| ارتقا، نصب نخست و rollback با helper نصب‌شده | GitHub Actions دورریختنی | در انتظار CI روی این تغییر |
-| Caddy واقعی و app واقعی، gate مصنوعی | GitHub Actions دورریختنی | در انتظار CI روی این تغییر |
+| ارتقا، نصب نخست و rollback با helper نصب‌شده | GitHub Actions دورریختنی | [CI 42521915171](https://github.com/feerozmandi/xennic-website/actions/runs/42521915171) برای `fc5f058` موفق؛ gateway واقعی در این زنجیره متصل نبود و endpointهای GitHub/GHCR مصنوعی بودند. |
+| Caddy واقعی و app واقعی، gate مصنوعی | GitHub Actions دورریختنی | همان CI، job `production-preview` موفق؛ آزمون جداگانه است، نه اتصال Caddy به helper نصب‌شده و نه آزمون OAuth واقعی. |
 | VPS | گزارش مالک قبل از این تغییر | helperهای نسخهٔ قبلی ارتقا و Compose loopback آماده شدند؛ app/gate شروع نشده‌اند. این اصلاح هنوز روی VPS اجرا نشده است. |
 
 ## خطرها و پیگیری
