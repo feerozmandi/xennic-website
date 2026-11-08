@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [انتشار اصلاح installer](reports/2026-10-29-merged-upgrade-release.md) | انتشار dev، شاهد CI و بررسی روز VPS |
 | ۲۰۲۶-۱۰-۲۹ | [ارتقای محدود installer](reports/2026-10-29-bounded-installer-upgrade.md) | وضعیت merge، ایمنی ارتقا و آزمون‌های در انتظار؛ اختلاف تاریخ محیط ذکر شده است |
 | ۲۰۲۶-۱۱-۰۱ | [backup موقت staging آزمایشی](reports/2026-11-01-temporary-staging-backup.md) | CI موفق نصب نخست و پیگیری DNS |
 | ۲۰۲۶-۱۰-۳۱ | [زنجیرهٔ helperهای نصب‌شده](reports/2026-10-31-installed-preview-chain.md) | نتیجهٔ CI دورریختنی، rollback و آزمون GHCR پس از merge |
