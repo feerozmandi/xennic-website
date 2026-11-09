@@ -21,6 +21,9 @@ cleanup() {
 }
 trap cleanup EXIT
 export PREVIEW_IMAGE="${COMPOSE_PROJECT_NAME}-app"
+# This disposable app is explicitly configured for the approved apex origin.
+# The installed preview stack and the outer CI app keep their own origin.
+export PREVIEW_ORIGIN='https://xennic.ir'
 cat > "$scratch/gate.py" <<'PY'
 from http.server import BaseHTTPRequestHandler, HTTPServer
 class Handler(BaseHTTPRequestHandler):
@@ -80,6 +83,18 @@ services:
       - $PWD/config/oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
       - $PWD/config/upstream.caddy:/etc/caddy/upstream.caddy:ro
     networks: [gateway, auth]
+  caddy-apex-app:
+    image: caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e
+    environment:
+      GATE_ADDR: gate:4180
+      APP_ADDR: app:3000
+      PUBLIC_AUTHORITY: xennic.ir
+    volumes:
+      - $PWD/config/preview-Caddyfile:/etc/caddy/Caddyfile:ro
+      - $PWD/config/routes.caddy:/etc/caddy/routes.caddy:ro
+      - $PWD/config/oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
+      - $PWD/config/upstream.caddy:/etc/caddy/upstream.caddy:ro
+    networks: [gateway, auth]
   echo:
     image: python:3.12.8-alpine@sha256:ba13ef990f6e5d13014e9e8d04c02a8fdb0fe53d6dccf6e19147f316e6cc3a84
     command: ['python', '/fixture/echo.py']
@@ -111,6 +126,7 @@ for project, service, networks in (
     (gate, 'caddy', {app + '_gateway', gate + '_auth'}),
     (gate, 'gate', {gate + '_auth'}),
     (gate, 'caddy-apex', {app + '_gateway', gate + '_auth'}),
+    (gate, 'caddy-apex-app', {app + '_gateway', gate + '_auth'}),
     (gate, 'echo', {app + '_gateway'}),
 ):
     item = inspect(project, service)
@@ -220,6 +236,53 @@ def walk(v):
 walk(x); print("CI_GATE_MATCHERS="+json.dumps(found,separators=(",",":"))[:4000])' || true
   exit 1
 fi
+# Exercise Payload through real Caddy and the synthetic gate at apex authority.
+# Credentials, data, network and database are disposable CI-only fixtures.
+"${app[@]}" exec -T app node - <<'JS'
+const http = require('node:http');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const origin = 'https://xennic.ir';
+const gate = '__Host-preview_gate=ci-valid';
+const request = (path, {method='GET', headers={}, body} = {}) => new Promise((resolve, reject) => {
+  const data = body === undefined ? undefined : JSON.stringify(body);
+  const req = http.request({hostname:'caddy-apex-app', port:8080, path, method,
+    headers:{Host:'xennic.ir', ...(data ? {'Content-Type':'application/json','Content-Length':Buffer.byteLength(data)} : {}), ...headers}}, res => {
+    const chunks=[]; res.on('data', x => chunks.push(x));
+    res.on('end', () => resolve({status:res.statusCode, headers:res.headers, body:Buffer.concat(chunks).toString()}));
+    res.on('error', reject);
+  });
+  req.setTimeout(15000, () => req.destroy(new Error('Payload fixture timeout')));
+  req.on('error', reject); req.end(data);
+});
+(async () => {
+  const email = 'apex-ci@example.invalid', password = crypto.randomBytes(24).toString('hex');
+  let r = await request('/api/staff/first-register', {method:'POST', headers:{Cookie:gate, Origin:origin},
+    body:{name:'Apex CI', email, password}});
+  assert.equal(r.status, 200, 'synthetic Staff registration');
+  r = await request('/api/staff/login', {method:'POST', headers:{Cookie:gate, Origin:'https://untrusted.example.invalid'}, body:{email,password}});
+  assert.equal(r.status, 403, 'untrusted login origin');
+  r = await request('/api/staff/login', {method:'POST', headers:{Cookie:gate, Origin:origin}, body:{email,password}});
+  assert.equal(r.status, 200, 'trusted login origin');
+  const token = JSON.parse(r.body).token;
+  const payloadCookie = (r.headers['set-cookie'] || []).find(c => c.startsWith('payload-token='))?.split(';')[0];
+  assert.ok(token && payloadCookie, 'Payload credentials missing');
+  r = await request('/api/staff/me', {headers:{Cookie:gate, Authorization:'Bearer ' + token}});
+  assert.equal(JSON.parse(r.body).user?.email, email, 'bearer passes Caddy and gate');
+  r = await request('/api/staff/me', {headers:{Authorization:'Bearer ' + token}});
+  assert.equal(r.status, 401, 'Payload bearer cannot bypass gate');
+  r = await request('/api/staff/me', {headers:{Cookie:gate + '; ' + payloadCookie, Origin:origin}});
+  assert.equal(JSON.parse(r.body).user?.email, email, 'trusted cookie survives Caddy');
+  r = await request('/api/staff/me', {headers:{Cookie:gate + '; ' + payloadCookie, Origin:'https://untrusted.example.invalid'}});
+  assert.equal(JSON.parse(r.body).user, null, 'untrusted cookie rejected');
+  r = await request('/api/staff/me', {headers:{Cookie:gate + '; ' + payloadCookie}});
+  assert.equal(JSON.parse(r.body).user, null, 'ambiguous cookie rejected');
+  r = await request('/api/graphql', {method:'POST', headers:{Cookie:gate, Authorization:'Bearer ' + token, Origin:origin}, body:{query:'query { meStaff { user { email } } }'}});
+  const graphql = JSON.parse(r.body);
+  assert.equal(graphql.data?.meStaff?.user?.email, email, 'GraphQL bearer passes Caddy');
+  console.log('PASS: apex Caddy, synthetic gate and real Payload auth; OAuth and TLS not tested');
+})().catch(error => { console.error(error.message); process.exit(1); });
+JS
 # Run the real installed health logic over Docker's internal exec path.
 python3 - "$PWD/config/preview-compose.yml" "$app_project" <<'PY'
 import importlib.util, os, sys
