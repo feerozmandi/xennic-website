@@ -18,7 +18,7 @@
 | آزمون یا بررسی | تاریخ و محیط | نتیجه |
 |---|---|---|
 | topology، تنظیمات، probe و guard | محلی بدون Docker | ۹ آزمون واحد موفق؛ پاسخ‌های probe مصنوعی‌اند. |
-| نصب نخست موفق با helper نصب‌شده | [CI 42555492512](https://github.com/feerozmandi/xennic-website/actions/runs/42555492512)، commit `1359d28` | job `installed-sftp` در نصب نخست با `release failed; blocked, review required` شکست خورد؛ سایر jobها موفق شدند. نتیجه با guard موقت سازگار است، ولی خروجی helper علت دقیق را مخفی می‌کند. تست موفقیت تضعیف نشده است. |
+| نصب نخست موفق با helper نصب‌شده | [CI 42556088164](https://github.com/feerozmandi/xennic-website/actions/runs/42556088164)، commit `37e84c6` | job `installed-sftp` در نصب نخست با `release failed; blocked, review required` شکست خورد؛ سایر jobها موفق شدند. fixture پیش از cleanup تأیید کرد journal مسدود و بدون current، App متوقف و دو volume موجود بودند. خروجی helper علت دقیق را مخفی می‌کند؛ تست موفقیت تضعیف نشده است. |
 | gateway یکپارچه، OAuth واقعی، VPS | عملیاتی | انجام نشده؛ نامزد استقرار وجود ندارد. |
 
 ## ریسک‌ها و کارهای باز
