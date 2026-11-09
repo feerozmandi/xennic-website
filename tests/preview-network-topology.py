@@ -136,5 +136,15 @@ process.on('beforeExit', code => { if (code === 0 && count !== 6) process.exitCo
             run.assert_called_once_with([fixed.DOCKER, 'exec', 'a' * 64, 'node', '-e', fixed.INGRESS_PROBE], timeout=45)
         with self.assertRaises(fixed.Rejected): fixed.check_ingress_protection('arbitrary;command')
 
+    def test_internal_health_cannot_substitute_for_gateway_identity(self):
+        release = {'digest': 'sha256:' + 'a' * 64}
+        with mock.patch.object(fixed, 'config_for'), mock.patch.object(fixed, 'running_app_id', return_value='a' * 64), \
+                mock.patch.object(fixed.healthcheck, 'check_once') as internal, \
+                mock.patch.object(fixed, 'check_ingress_protection') as ingress:
+            with self.assertRaisesRegex(fixed.Rejected, 'gateway identity'):
+                fixed.check_health(release)
+            internal.assert_called_once_with()
+            ingress.assert_not_called()
+
 
 if __name__ == '__main__': unittest.main()

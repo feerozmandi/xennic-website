@@ -31,7 +31,7 @@ PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'he
 
 # Fixed probe for the reviewed Caddy route set. The internal endpoint is not a
 # substitute for validating the actual Caddy container and effective config.
-# It is not wired to the transaction until that identity check is implemented.
+# The identity guard below deliberately blocks it until that check exists.
 INGRESS_PROBE = r"""
 (async () => {
   const cases = [
@@ -436,11 +436,23 @@ def check_ingress_protection(app_id):
     run([DOCKER, 'exec', app_id, 'node', '-e', INGRESS_PROBE], timeout=45)
 
 
+def require_verified_gateway(app_id):
+    # Fail closed: an answer on a port is not proof of gateway identity. This
+    # guard must be replaced by exact project, image, configuration and network
+    # checks before any release can be recorded healthy.
+    raise Rejected('gateway identity and startup not yet verified')
+
+
 def check_health(release):
     config_for(release)
-    running_app_id(release)
+    app = running_app_id(release)
     healthcheck.ENV = dict(SAFE, PREVIEW_IMAGE=reference(release))
     healthcheck.check_once()
+    # Fail closed while gateway identity/startup is incomplete. A healthy
+    # internal application alone must never become a healthy release. The
+    # existing peer check still rejects every unrecognized gateway.
+    require_verified_gateway(app)
+    check_ingress_protection(app)
 
 
 def execute(phase, release, token):
