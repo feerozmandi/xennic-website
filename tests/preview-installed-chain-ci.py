@@ -1,10 +1,19 @@
 #!/usr/bin/python3
 """Disposable CI: exact installed backend/helpers; GitHub/GHCR endpoints are fixtures."""
+import base64
+import hashlib
+import hmac
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import time
+
+import lz4.frame
+import msgpack
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 sys.dont_write_bytecode = True
 ROOT = Path('/srv/xennic-preview')
@@ -174,6 +183,27 @@ if result != previous or journal['blocked'] or journal['current'] != previous or
     raise AssertionError('first healthy release was not recorded correctly')
 if record.get('remote_path') != 'manual-offsite-pending' or not (ROOT / 'work/backup.age').is_file():
     raise AssertionError('first encrypted local backup not verified')
+
+# A synthetic session is signed using the disposable CI cookie secret. This
+# tests an authorized request through the *installed-helper-started* gateway;
+# it is not evidence of a GitHub OAuth login or real-user acceptance.
+seed = 'eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg='
+name = '__Host-preview_gate'
+packed = msgpack.packb({'u': 'ci-user', 'e': 'ci-user@example.com'}, use_bin_type=True)
+compressed = lz4.frame.compress(packed, block_size=lz4.frame.BLOCKSIZE_MAX64KB)
+iv = os.urandom(16)
+encryptor = Cipher(algorithms.AES(b'x' * 32), modes.CFB(iv)).encryptor()
+value = base64.urlsafe_b64encode(iv + encryptor.update(compressed) + encryptor.finalize()).decode('ascii')
+timestamp = str(int(time.time()))
+signature = base64.urlsafe_b64encode(hmac.new(seed.encode(), (name + value + timestamp).encode(), hashlib.sha256).digest()).decode('ascii')
+synthetic_cookie = name + '=' + value + '|' + timestamp + '|' + signature
+valid_probe = """(async()=>{const cookie=require('fs').readFileSync(0,'utf8');
+const r=await fetch('http://caddy:8080/',{redirect:'manual',headers:{Host:'preview.xennic.ir',Cookie:cookie},signal:AbortSignal.timeout(5000)});
+if(r.status!==200 || !(await r.text()).includes('<html'))throw Error('synthetic authorized session did not reach app')
+})().catch(()=>process.exit(1))"""
+subprocess.run(compose + ['exec', '-T', 'app', 'node', '-e', valid_probe], env=initial_env,
+               input=synthetic_cookie, text=True, check=True)
+print('PASS: synthetic session reached the app through the helper-started gateway; real OAuth not tested', flush=True)
 
 # The operational helper, not CI, has started this real Caddy and OAuth2 Proxy.
 # Stop only the disposable gate and verify no unauthenticated path reaches app.

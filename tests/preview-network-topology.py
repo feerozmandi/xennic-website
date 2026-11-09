@@ -6,7 +6,6 @@ import importlib.machinery
 import json
 import importlib.util
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 from unittest import mock
@@ -114,8 +113,12 @@ class IngressProbeTest(unittest.TestCase):
             def __init__(self, host, port, timeout):
                 if (host, port, timeout) != ('172.20.0.3', 8080, 4): raise AssertionError('wrong peer')
             def request(self, method, path, headers):
-                if headers.get('Host') != 'preview.xennic.ir' or 'Cookie' in headers:
-                    raise AssertionError('unsafe probe')
+                expected = fixed.INGRESS_CASES[len(seen) if mode == 'denied' else 0]
+                if (method, path) != expected[:2] or headers != {
+                    'Host': 'preview.xennic.ir', 'Authorization': 'Bearer invalid-probe',
+                    'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe',
+                }:
+                    raise AssertionError('unexpected probe request or forged headers')
                 seen.append((method, path)); self.path = path
             def getresponse(self): return Response(self.path)
             def close(self): pass
@@ -132,8 +135,21 @@ class IngressProbeTest(unittest.TestCase):
         for mode in ('open', 'down', 'bad-redirect'):
             with self.subTest(mode=mode): self.run_probe(mode)
 
-    def test_probe_rejects_invalid_address(self):
-        with self.assertRaises(fixed.Rejected): fixed.check_ingress_protection('127.0.0.1')
+    def test_probe_rejects_invalid_address_and_network_failure(self):
+        for ip in ('127.0.0.1', '8.8.8.8', 'arbitrary;command'):
+            with self.subTest(ip=ip), self.assertRaises(fixed.Rejected): fixed.check_ingress_protection(ip)
+        with mock.patch.object(fixed.http.client, 'HTTPConnection', side_effect=OSError('connection failed')), \
+                mock.patch.object(fixed.time, 'sleep'), self.assertRaises(fixed.Rejected):
+            fixed.check_ingress_protection('172.20.0.3')
+
+    def test_verified_identity_is_used_for_ingress(self):
+        release = {'digest': 'sha256:' + 'a' * 64}
+        with mock.patch.object(fixed, 'config_for'), mock.patch.object(fixed, 'running_app_id', return_value='a' * 64), \
+                mock.patch.object(fixed.healthcheck, 'check_once'), \
+                mock.patch.object(fixed, 'require_verified_gateway', return_value='172.20.0.3'), \
+                mock.patch.object(fixed, 'check_ingress_protection') as ingress:
+            fixed.check_health(release)
+            ingress.assert_called_once_with('172.20.0.3')
 
     def test_internal_health_cannot_substitute_for_gateway_identity(self):
         release = {'digest': 'sha256:' + 'a' * 64}
