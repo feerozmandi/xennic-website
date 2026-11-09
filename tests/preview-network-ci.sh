@@ -86,8 +86,8 @@ PY
 "${app[@]}" exec -T app node - <<'JS'
 (async () => {
   const base = 'http://caddy:8080';
-  const call = (path, cookie) => fetch(base + path, {redirect: 'manual', headers: {
-    Host: 'preview.xennic.ir', ...(cookie ? {Cookie: cookie} : {})}});
+  const call = (path, cookie, host = 'preview.xennic.ir', method = 'GET') => fetch(base + path, {redirect: 'manual', method, headers: {
+    Host: host, ...(cookie ? {Cookie: cookie} : {})}});
   const page = await call('/');
   if (page.status !== 302) throw Error('missing session did not block page');
   const api = await call('/api/pages');
@@ -96,7 +96,30 @@ PY
   if (authorized.status !== 200) throw Error('authorized request did not reach app');
   const html = await authorized.text();
   if (!html.includes('<html')) throw Error('app HTML missing');
-  console.log('PASS: real Caddy and real app route correctly; gate is synthetic, not OAuth');
+  for (const path of ['/', '/company', '/company/about', '/services', '/track-record', '/knowledge', '/platform', '/contact']) {
+    const result = await call(path, null, 'xennic.ir');
+    if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status);
+  }
+  const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
+  if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
+  for (const path of ['/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
+    const result = await call(path, null, 'xennic.ir');
+    if (result.status !== 302) throw Error('private path was not gated: ' + path);
+  }
+  if ((await call('/api/pages', null, 'xennic.ir')).status !== 401) throw Error('API was not gated');
+  if ((await call('/api/graphql', null, 'xennic.ir', 'POST')).status !== 401) throw Error('GraphQL was not gated');
+  if ((await call('/', null, 'xennic.ir', 'POST')).status !== 302) throw Error('public POST was not gated');
+  if ((await call('/', null, 'www.xennic.ir')).status !== 302) throw Error('unapproved host was not gated');
+  const http = require('node:http');
+  for (const path of ['/services/%2e%2e/admin', '/_next/static/%2e%2e/%2e%2e/admin', '/services%2f..%2fadmin']) {
+    const status = await new Promise((resolve, reject) => {
+      const req = http.request({hostname:'caddy', port:8080, path, method:'GET', headers:{Host:'xennic.ir'}},
+        response => { response.resume(); resolve(response.statusCode); });
+      req.on('error', reject); req.end();
+    });
+    if (![302, 400, 404].includes(status)) throw Error('encoded path escaped gate');
+  }
+  console.log('PASS: exact apex public routes and protected management routes; internal CI only, gate synthetic');
 })().catch(e => { console.error(e.message); process.exit(1); });
 JS
 # Run the real installed health logic over Docker's internal exec path.
