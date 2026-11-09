@@ -104,46 +104,47 @@ class GatewayOptionsTest(unittest.TestCase):
 
 class IngressProbeTest(unittest.TestCase):
     def run_probe(self, mode):
-        # Exercise the actual JS probe with a synthetic response source. This
-        # unit test does not establish Caddy identity or network protection.
-        prefix = r"""
-const mode = process.argv[1];
-let count = 0;
-global.fetch = async (url, options) => {
-  count++;
-  if (!url.startsWith('http://caddy:8080/') || options.redirect !== 'manual' ||
-      options.headers.Host !== 'preview.xennic.ir' || options.headers.Cookie ||
-      options.headers.Authorization !== 'Bearer invalid-probe') throw Error('unexpected probe');
-  const api = url.includes('/api/');
-  const status = mode === 'open' ? 200 : mode === 'down' ? 502 : api ? 401 : 302;
-  return {status, headers: {get: () => mode === 'bad-redirect' ? 'https://evil.example/' : '/oauth2/sign_in'}};
-};
-process.on('beforeExit', code => { if (code === 0 && count !== 6) process.exitCode = 1; });
-"""
-        return subprocess.run(['node', '-e', prefix + fixed.INGRESS_PROBE, mode],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode
+        seen = []
+        class Response:
+            def __init__(self, path):
+                self.status = 200 if mode == 'open' else 502 if mode == 'down' else 401 if path.startswith('/api/') else 302
+            def getheader(self, name):
+                return 'https://evil.example/' if mode == 'bad-redirect' else '/oauth2/sign_in'
+        class Connection:
+            def __init__(self, host, port, timeout):
+                if (host, port, timeout) != ('172.20.0.3', 8080, 4): raise AssertionError('wrong peer')
+            def request(self, method, path, headers):
+                if headers.get('Host') != 'preview.xennic.ir' or 'Cookie' in headers:
+                    raise AssertionError('unsafe probe')
+                seen.append((method, path)); self.path = path
+            def getresponse(self): return Response(self.path)
+            def close(self): pass
+        with mock.patch.object(fixed.http.client, 'HTTPConnection', Connection), mock.patch.object(fixed.time, 'sleep'):
+            if mode == 'denied':
+                fixed.check_ingress_protection('172.20.0.3')
+                self.assertEqual(seen, [(method, path) for method, path, _ in fixed.INGRESS_CASES])
+            else:
+                with self.assertRaises(fixed.Rejected): fixed.check_ingress_protection('172.20.0.3')
 
-    def test_expected_denials_pass(self):
-        self.assertEqual(self.run_probe('denied'), 0)
+    def test_expected_denials_pass(self): self.run_probe('denied')
 
     def test_unprotected_outage_and_wrong_redirect_fail(self):
         for mode in ('open', 'down', 'bad-redirect'):
-            with self.subTest(mode=mode): self.assertNotEqual(self.run_probe(mode), 0)
+            with self.subTest(mode=mode): self.run_probe(mode)
 
-    def test_probe_executes_only_in_identified_container(self):
-        with mock.patch.object(fixed, 'run') as run:
-            fixed.check_ingress_protection('a' * 64)
-            run.assert_called_once_with([fixed.DOCKER, 'exec', 'a' * 64, 'node', '-e', fixed.INGRESS_PROBE], timeout=45)
-        with self.assertRaises(fixed.Rejected): fixed.check_ingress_protection('arbitrary;command')
+    def test_probe_rejects_invalid_address(self):
+        with self.assertRaises(fixed.Rejected): fixed.check_ingress_protection('127.0.0.1')
 
     def test_internal_health_cannot_substitute_for_gateway_identity(self):
         release = {'digest': 'sha256:' + 'a' * 64}
         with mock.patch.object(fixed, 'config_for'), mock.patch.object(fixed, 'running_app_id', return_value='a' * 64), \
                 mock.patch.object(fixed.healthcheck, 'check_once') as internal, \
+                mock.patch.object(fixed, 'require_verified_gateway', side_effect=fixed.Rejected('identity')) as identity, \
                 mock.patch.object(fixed, 'check_ingress_protection') as ingress:
             with self.assertRaises(fixed.Rejected):
                 fixed.check_health(release)
             internal.assert_called_once_with()
+            identity.assert_called_once_with('a' * 64)
             ingress.assert_not_called()
 
 

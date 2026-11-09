@@ -7,6 +7,7 @@ requires a validated manifest on stdin. SSH/automatic deployment remains disable
 import base64
 import binascii
 import hashlib
+import http.client
 import importlib.util
 import ipaddress
 import io
@@ -43,29 +44,11 @@ GATEWAY_FILES = {
 }
 PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback'})
 
-# Fixed probe for the reviewed Caddy route set. The internal endpoint is not a
-# substitute for validating the actual Caddy container and effective config.
-# The identity guard below deliberately blocks it until that check exists.
-INGRESS_PROBE = r"""
-(async () => {
-  const cases = [
-    ['GET', '/', 302], ['GET', '/admin', 302],
-    ['GET', '/api/pages', 401], ['POST', '/api/graphql', 401],
-    ['GET', '/media/missing.png', 302], ['GET', '/health', 302]
-  ];
-  for (const [method, path, expected] of cases) {
-    const result = await fetch('http://caddy:8080' + path, {
-      method, redirect: 'manual', signal: AbortSignal.timeout(4000),
-      headers: {Host: 'preview.xennic.ir', Authorization: 'Bearer invalid-probe',
-        'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
-    });
-    if (result.status !== expected ||
-        (expected === 302 && result.headers.get('location') !== '/oauth2/sign_in')) {
-      throw Error('entry protection check failed');
-    }
-  }
-})().catch(() => process.exit(1));
-"""
+# Probe from the trusted host helper, not from a candidate app image. The
+# address is taken only from the independently verified Caddy container.
+INGRESS_CASES = (('GET', '/', 302), ('GET', '/admin', 302),
+                 ('GET', '/api/pages', 401), ('POST', '/api/graphql', 401),
+                 ('GET', '/media/missing.png', 302), ('GET', '/health', 302))
 
 
 def load(name, filename):
@@ -432,20 +415,35 @@ def verify_backup(release):
         raise Rejected('verified backup record missing') from exc
 
 
-def check_ingress_protection(app_id):
-    """Probe only the fixed Caddy route from the already identified app.
+def check_ingress_protection(caddy_ip):
+    """Probe fixed routes directly from the trusted host, not the candidate app.
 
-    A successful denial probe is not proof of OAuth or gateway identity. The
-    caller must verify those separately before using this as a health gate.
+    A denial probe is not proof of OAuth or gateway identity: the caller must
+    verify the gateway and obtain this address from its inspected container.
     """
-    if not re.fullmatch('[0-9a-f]{12,64}', app_id):
-        raise Rejected('invalid probe container')
+    try:
+        addr = ipaddress.ip_address(caddy_ip)
+        if addr.version != 4 or not addr.is_private or addr.is_loopback:
+            raise ValueError('invalid peer')
+    except (ValueError, TypeError) as exc:
+        raise Rejected('invalid Caddy probe address') from exc
+    headers = {'Host': 'preview.xennic.ir', 'Authorization': 'Bearer invalid-probe',
+               'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
     for attempt in range(12):
         try:
-            run([DOCKER, 'exec', app_id, 'node', '-e', INGRESS_PROBE], timeout=45)
+            for method, path, expected in INGRESS_CASES:
+                conn = http.client.HTTPConnection(str(addr), 8080, timeout=4)
+                try:
+                    conn.request(method, path, headers=headers)
+                    response = conn.getresponse()
+                    if (response.status != expected or
+                            (expected == 302 and response.getheader('Location') != '/oauth2/sign_in')):
+                        raise Rejected('entry protection check failed')
+                finally:
+                    conn.close()
             return
-        except Rejected:
-            if attempt == 11: raise
+        except (OSError, http.client.HTTPException, Rejected) as exc:
+            if attempt == 11: raise Rejected('entry protection check failed') from exc
             time.sleep(1)
 
 
@@ -601,6 +599,7 @@ def require_verified_gateway(app_id):
             for dest, name in (('/data', 'xennic-preview-gateway_caddy_data'), ('/config', 'xennic-preview-gateway_caddy_config')):
                 if actual[dest].get('Type') != 'volume' or actual[dest].get('Name') != name:
                     raise Rejected('Caddy volume mismatch')
+    return caddy_net['xennic-preview_gateway'].get('IPAddress', '')
 
 
 def check_health(release):
@@ -611,8 +610,8 @@ def check_health(release):
     # Fail closed while gateway identity/startup is incomplete. A healthy
     # internal application alone must never become a healthy release. The
     # existing peer check still rejects every unrecognized gateway.
-    require_verified_gateway(app)
-    check_ingress_protection(app)
+    caddy_ip = require_verified_gateway(app)
+    check_ingress_protection(caddy_ip)
 
 
 def execute(phase, release, token):
