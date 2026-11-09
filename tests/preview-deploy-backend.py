@@ -58,8 +58,10 @@ class SyntheticRunner:
             restored = dict(self.backups[self.destination])
             if restored != self.data:
                 raise backend.BackendError("synthetic restore failed")
-        if phase == "pull-image" and token != b"synthetic-token":
-            raise backend.BackendError("invalid synthetic token")
+        if phase in ("release-check", "current-check") and token != b"synthetic-token":
+            raise backend.BackendError("invalid synthetic API credential")
+        if phase == "pull-image" and token != b"public-read":
+            raise backend.BackendError("registry pull was not independent of API credential")
         if phase in ("activate", "rollback"):
             self.running = item
 

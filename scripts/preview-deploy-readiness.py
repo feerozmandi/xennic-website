@@ -130,7 +130,7 @@ def check(root=ROOT, owner_uid=0, registry_token=b""):
     if not re.fullmatch(r"SHA256:[A-Za-z0-9+/]{43}", fingerprint):
         raise NotReady("independently verified SSH host fingerprint is missing")
     if not isinstance(registry_token, bytes) or not re.fullmatch(rb"[!-~]{1,4096}", registry_token):
-        raise NotReady("short-lived GHCR token is missing")
+        raise NotReady("short-lived GitHub API credential is missing")
     env = _env(_read(root, "secrets/preview.env", owner_uid))
     for key in ("PREVIEW_POSTGRES_USER", "PREVIEW_POSTGRES_DB", "PREVIEW_POSTGRES_PASSWORD", "PREVIEW_DATABASE_URL", "PREVIEW_PAYLOAD_SECRET"):
         if env.get(key, "") in ("", '""', "''"):

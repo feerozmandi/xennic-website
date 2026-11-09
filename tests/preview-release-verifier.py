@@ -36,19 +36,14 @@ class VerifierTests(unittest.TestCase):
 
     def test_successful_matching_evidence(self):
         self.assertEqual(self.verify(), 11)
-        self.assertEqual(self.verify(v.PUBLIC_READ), 11)
-        self.evidence['release'] = dict(self.release, digest='sha256:' + 'c' * 64)
-        with self.assertRaises(v.Unverified): self.verify(v.PUBLIC_READ)
 
-    def test_public_request_has_no_auth_and_never_leaks_credentials(self):
+    def test_request_never_leaks_credentials(self):
         response = mock.MagicMock()
         response.__enter__.return_value.read.return_value = b'{}'
         with mock.patch.object(v.OPENER, 'open', return_value=response) as send:
-            self.assertEqual(v.request(v.BASE + '/commits/dev', v.PUBLIC_READ), b'{}')
-            self.assertIsNone(send.call_args.args[0].get_header('Authorization'))
             v.request(v.BASE + '/commits/dev', b'synthetic-token')
             self.assertEqual(send.call_args.args[0].get_header('Authorization'), 'Bearer synthetic-token')
-        with self.assertRaises(v.Unverified): v.request('https://attacker.example/a', v.PUBLIC_READ)
+        with self.assertRaises(v.Unverified): v.request('https://attacker.example/a', b'synthetic-token')
         with self.assertRaises(v.Unverified): v.request(v.BASE + '/commits/dev', None)
 
     def test_invalid_auth_has_no_anonymous_fallback(self):
@@ -62,13 +57,13 @@ class VerifierTests(unittest.TestCase):
         target = 'https://ci.blob.core.windows.net/artifact'
         redirect = v.urllib.error.HTTPError(artifact, 302, 'redirect', {'Location': target}, None)
         response = mock.MagicMock(); response.__enter__.return_value.read.return_value = b'zip'
-        for token in (v.PUBLIC_READ, b'synthetic-token'):
+        for token in (b'synthetic-token',):
             with self.subTest(token=token), mock.patch.object(v.OPENER, 'open', side_effect=[redirect, response]) as send:
                 self.assertEqual(v.request(artifact, token), b'zip')
                 self.assertIsNone(send.call_args_list[1].args[0].get_header('Authorization'))
         redirect = v.urllib.error.HTTPError(artifact, 302, 'redirect', {'Location': 'https://evil.example/'}, None)
         with mock.patch.object(v.OPENER, 'open', side_effect=redirect):
-            with self.assertRaises(v.Unverified): v.request(artifact, v.PUBLIC_READ)
+            with self.assertRaises(v.Unverified): v.request(artifact, b'synthetic-token')
 
     def test_unsuccessful_or_wrong_run_is_rejected(self):
         for key, value in [('conclusion', 'failure'), ('status', 'in_progress'), ('event', 'pull_request'),

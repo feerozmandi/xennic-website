@@ -56,54 +56,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  public-release-evidence:
-    # One-time real public-evidence regression for the currently published dev.
-    if: github.event_name == 'pull_request' && github.head_ref == 'arena/9afb4091-xennic-website'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Verify actual public release without credentials
-        run: |
-          python3 - <<'PY'
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('release_verifier', 'scripts/preview-release-verifier.py')
-          v = importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
-          original_open = v.OPENER.open
-          def observed_open(request, *args, **kwargs):
-              try:
-                  return original_open(request, *args, **kwargs)
-              except v.urllib.error.HTTPError as exc:
-                  if exc.code not in (301, 302, 303, 307, 308):
-                      import urllib.parse
-                      path = urllib.parse.urlsplit(request.full_url).path
-                      kind = ('artifact-zip' if path.endswith('/zip') else
-                              'artifact-list' if path.endswith('/artifacts') else
-                              'workflow-runs' if path.endswith('/runs') else
-                              'commit' if path.endswith('/commits/dev') else 'storage')
-                      print(f'::error::Public {kind} HTTP status {exc.code}')
-                  raise
-          v.OPENER.open = observed_open
-          release = {'repository': 'feerozmandi/xennic-website',
-                     'commit': '09a9d00f25cee181a24fa39d645256869b6dc221',
-                     'run_number': 151,
-                     'digest': 'sha256:9e70bfceebafb0dd83152fb09f2e4d34b2e109497c34a1dad827e5046a31071f',
-                     'platform': 'linux/amd64'}
-          try:
-              v.assert_current(release, v.PUBLIC_READ)
-          except v.Unverified as exc:
-              print('::error::Public current-tip verification failed: ' + str(exc))
-              raise SystemExit(1)
-          try:
-              result = v.verify(release, v.PUBLIC_READ)
-          except v.Unverified as exc:
-              print('::error::Public publication verification failed: ' + str(exc))
-              raise SystemExit(1)
-          if result != 42642887548:
-              print('::error::Publication run mismatch')
-              raise SystemExit(1)
-          print('::notice::Actual public dev artifact verified without a GitHub credential')
-          PY
-
   compose-smoke:
     runs-on: ubuntu-latest
     env:

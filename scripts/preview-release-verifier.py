@@ -15,8 +15,6 @@ import zipfile
 BASE = 'https://api.github.com/repos/feerozmandi/xennic-website'
 MAX_JSON = 2 * 1024 * 1024
 MAX_ZIP = 1024 * 1024
-# Explicit public-repository access; an invalid credential never falls back.
-PUBLIC_READ = b'public-read'
 
 
 class Unverified(RuntimeError):
@@ -36,15 +34,14 @@ def request(url, token=None, maximum=MAX_JSON):
     host = (parsed.hostname or '').lower()
     if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port not in (None, 443):
         raise Unverified('invalid evidence endpoint')
-    is_api = host == 'api.github.com' and url.startswith(BASE + '/')
-    is_storage = host.endswith('.blob.core.windows.net') or host.endswith('.actions.githubusercontent.com')
-    if token is None:
-        if not is_storage: raise Unverified('invalid artifact storage endpoint')
-    elif not is_api:
-        raise Unverified('invalid GitHub endpoint')
+    if token is not None:
+        if host != 'api.github.com' or not url.startswith(BASE + '/'):
+            raise Unverified('invalid GitHub endpoint')
+    elif not (host.endswith('.blob.core.windows.net') or host.endswith('.actions.githubusercontent.com')):
+        raise Unverified('invalid artifact storage endpoint')
     headers = {'User-Agent': 'xennic-preview-release-check', 'Accept': 'application/vnd.github+json',
                'X-GitHub-Api-Version': '2022-11-28'}
-    if token is not None and token != PUBLIC_READ:
+    if token is not None:
         headers['Authorization'] = 'Bearer ' + token.decode('ascii')
     req = urllib.request.Request(url, headers=headers, method='GET')
     try:

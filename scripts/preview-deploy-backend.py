@@ -107,7 +107,7 @@ class FixedRunner:
         payload = json.dumps(release, separators=(",", ":"), sort_keys=True).encode("ascii") + b"\n"
         if phase in token_phases:
             if not isinstance(token, bytes) or not token or len(token) > 4096 or any(x < 33 or x > 126 for x in token):
-                raise BackendError("GHCR token is missing")
+                raise BackendError("release access input is missing")
             payload += token + b"\n"
         # Root-owned operations must be rechecked before every invocation.
         self.verify_helpers()
@@ -176,7 +176,10 @@ class Backend:
             raise BackendError("release verification does not match local state")
         return {"initial": decision["initial"], "rollback_safe": decision["rollback_safe"]}
 
-    def pull_image(self, release): self.runner.call("pull-image", release, self.token)
+    # The current package is public. The independently scoped API credential is
+    # never assumed to grant registry access. If public pull fails, stop; do
+    # not retry with the API credential or bypass the provenance check.
+    def pull_image(self, release): self.runner.call("pull-image", release, b"public-read")
     def backup_and_verify(self, release): self.runner.call("backup-verify", release)
     def assert_current(self, release): self.runner.call("current-check", release, self.token)
     def mark_inflight(self, release):
