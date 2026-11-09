@@ -20,7 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
-| ۲۰۲۶-۱۰-۲۹ | [مسیر یکپارچهٔ gateway](reports/2026-10-29-gateway-integrated-path.md) | انتشار dev موفق؛ verifier مستقل و پذیرش عملیاتی در پیگیری |
+| ۲۰۲۶-۱۰-۲۹ | [مسیر یکپارچهٔ gateway](reports/2026-10-29-gateway-integrated-path.md) | انتشار و verifier مستقل موفق؛ اتصال VPS و پذیرش عملیاتی در پیگیری |
 | ۲۰۲۶-۱۰-۲۹ | [توقف موقت ثبت healthy](reports/2026-10-29-gateway-fail-closed.md) | guard موقت؛ gateway عملیاتی و CI نصب نخست هنوز کامل نیست |
 | ۲۰۲۶-۱۰-۲۹ | [کنترل‌های مقدماتی gateway](reports/2026-10-29-gateway-policy-checks.md) | اعتبارسنجی و probe واحد؛ اتصال به activation و پذیرش نهایی باز |
 | ۲۰۲۶-۱۰-۲۹ | [اتصال gateway به زنجیرهٔ نصب‌شده](reports/2026-10-29-installed-gateway-regression.md) | رگرسیون با Caddy واقعی و gate مصنوعی؛ پذیرش نهایی و استقرار مسدود |

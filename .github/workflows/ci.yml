@@ -55,44 +55,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  # One-time independent verification of the just-published dev release.
-  # No deployment credentials or package write permissions are granted.
-  verify-published-release:
-    if: github.event_name == 'pull_request' && github.head_ref == 'arena/1fdceb8d-xennic-website'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v6
-      - name: Run the existing verifier against the published digest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 - <<'PY'
-          import importlib.util, os, re, subprocess
-          from pathlib import Path
-          token = os.environ.pop('GH_TOKEN').encode('ascii')
-          login = subprocess.run(['docker', 'login', 'ghcr.io', '-u', os.environ['GITHUB_ACTOR'], '--password-stdin'],
-                                 input=token + b'\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-          if login.returncode: raise SystemExit('registry login failed')
-          commit = '09a9d00f25cee181a24fa39d645256869b6dc221'
-          image = 'ghcr.io/feerozmandi/xennic-website:sha-' + commit
-          result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', image],
-                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-          if result.returncode: raise SystemExit('published image inspection failed')
-          match = re.search(r'(?m)^Digest:\s+(sha256:[0-9a-f]{64})\s*$', result.stdout)
-          if not match: raise SystemExit('published digest missing')
-          release = {'repository': 'feerozmandi/xennic-website', 'commit': commit,
-                     'digest': match.group(1), 'platform': 'linux/amd64', 'run_number': 151}
-          spec = importlib.util.spec_from_file_location('release_verifier', Path('scripts/preview-release-verifier.py'))
-          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
-          verifier.assert_current(release, token)
-          run_id = verifier.verify(release, token)
-          print(f'::notice::Verified published commit {commit}, digest {release["digest"]}, run {run_id}')
-          PY
-
   compose-smoke:
     runs-on: ubuntu-latest
     env:

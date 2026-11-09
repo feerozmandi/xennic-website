@@ -2,7 +2,7 @@
 
 - **تاریخ گزارش:** ۲۰۲۶-۱۰-۲۹؛ ساعت محیط و GitHub تاریخ دیگری نشان می‌دهد.
 - **مبنا:** PR پیش‌نویس #21، `17a012a`.
-- **وضعیت:** با مجوز مالک PR ادغام و انتشار در `dev` موفق شد؛ verifier مستقل، پذیرش عملیاتی و گذار VPS باز است.
+- **وضعیت:** با مجوز مالک PR ادغام، انتشار و verifier مستقل موفق شد؛ پذیرش عملیاتی و گذار VPS باز است.
 
 ## خلاصهٔ مدیریتی
 
@@ -25,12 +25,13 @@
 | نصب نخست، قطع gate بی‌نشست، peer ناشناس، ارتقا و rollback با helper نصب‌شده | [CI 42632292430](https://github.com/feerozmandi/xennic-website/actions/runs/42632292430)، `6310d6e` | job `installed-sftp` موفق؛ این اجرا probe قبلی مبتنی بر App داشت. job مستقل `production-preview` نخست شکست خورد، اما اجرای مجدد آن و کل CI موفق شدند؛ علت شکست اولیه معلوم نشد. |
 | probe مستقل میزبان | [CI 42634082538](https://github.com/feerozmandi/xennic-website/actions/runs/42634082538)، `a491203` | هر پنج job موفق؛ دسترسی میزبان به bridge و اجرای زنجیره در runner دورریختنی اثبات شد، نه VPS. |
 | زنجیرهٔ کامل و نشست مصنوعی؛ گذار و rollback installer | [CI 42635739994](https://github.com/feerozmandi/xennic-website/actions/runs/42635739994)، `17a012a` | هر پنج job موفق؛ نشست مصنوعی از gateway فعال به App رسید و نصب فایل‌های ثابت، رد فایل ناشناس و rollback در runner دورریختنی آزموده شدند. outage با نشست معتبر اجرا نشد. |
-| انتشار و آزمون image با همان digest | [CI 42642887548](https://github.com/feerozmandi/xennic-website/actions/runs/42642887548)، merge `09a9d00f25cee181a24fa39d645256869b6dc221` | انتشار GHCR، آزمون image منتشرشده و آزمون helper pull موفق؛ verifier مستقل هنوز در جریان است. |
+| انتشار و آزمون image با همان digest | [CI 42642887548](https://github.com/feerozmandi/xennic-website/actions/runs/42642887548)، merge `09a9d00f25cee181a24fa39d645256869b6dc221` | انتشار GHCR، آزمون image منتشرشده و آزمون helper pull موفق. |
+| verifier مستقل | [job 129256180630](https://github.com/feerozmandi/xennic-website/actions/runs/42645113218/job/129256180630) | digest مستقل GHCR و artifact همان انتشار، run 151 و نوک `dev` تأیید شدند: `sha256:9e70bfceebafb0dd83152fb09f2e4d34b2e109497c34a1dad827e5046a31071f`. دسترسی موقت Actions فقط‌خواندنی بود. |
 | OAuth واقعی، TLS عمومی، DNS و VPS | عملیاتی | انجام نشده. |
 
 ## خطرها و پیگیری
 
-با وجود CI موفق هیچ نسخه‌ای هنوز نامزد استقرار نیست. گذار جدید installer برای وضعیت واقعی VPS اثبات نشده و تنظیم runtime OAuth و secretها را تهیه یا بازنویسی نمی‌کند؛ وجود فایل مقصد نامعلوم مانع است. قطع برق یا فایل نیمه‌نوشته به بررسی دستی نیاز دارد و اجرای مجدد کورکورانه مجاز نیست. verifier مستقل انتشار، پس از انتشار مجاز نسخهٔ مناسب و بدون تغییر وضعیت PR، باید جداگانه اجرا شود. بررسی دوبارهٔ listener/NAT و ظرفیت، scope نهایی OAuth، پذیرش چند دستگاه و backup واقعی مستقل باقی‌اند. هیچ secret، volume یا سرویس موجود حذف یا تغییر نمی‌شود.
+انتشار و verifier موفق‌اند، اما اینها اثبات آمادگی VPS یا OAuth واقعی نیستند. گذار installer برای وضعیت واقعی VPS اثبات نشده و تنظیم runtime OAuth و secretها را تهیه یا بازنویسی نمی‌کند؛ وجود فایل مقصد نامعلوم مانع است. قطع برق یا فایل نیمه‌نوشته به بررسی دستی نیاز دارد و اجرای مجدد کورکورانه مجاز نیست. اتصال SSH از Arena پیش از دریافت کلید سرور reset شد؛ بررسی‌های فقط‌خواندنی از مالک در نشست VPS خواسته شد. DNS بازگشتی در بررسی فعلی برای preview پاسخ NXDOMAIN داشت؛ اعتبار پنل و zone هنوز باید رسماً روشن شود. بررسی دوبارهٔ listener/NAT و ظرفیت، scope نهایی OAuth، پذیرش چند دستگاه و backup واقعی مستقل باقی‌اند. هیچ secret، volume یا سرویس موجود حذف یا تغییر نشده است.
 
 ## تصمیم‌ها و درخواست از مدیرکل
 
