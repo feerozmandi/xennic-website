@@ -2,7 +2,7 @@
 
 - **تاریخ گزارش:** ۲۰۲۶-۱۰-۲۹؛ تاریخ محیط GitHub تأیید نشده است.
 - **مبنا:** [PR #26](https://github.com/feerozmandi/xennic-website/pull/26)، پایهٔ dev `00d78f4f9a08dbcfa5703937c8752ccfb9fec82f`.
-- **وضعیت:** گذار آماده و آزمون محلی شده؛ **روی VPS اجرا یا نصب نشده است.**
+- **وضعیت:** گذار آماده، CI شاخه سبز؛ **روی VPS اجرا یا نصب نشده است.**
 
 ## چه چیزی اضافه شد
 
@@ -18,7 +18,7 @@
 | `tests/preview-installer-apex.py` | محلی | ۷ تست موفق: سیاست OAuth apex/preview، جایگزینی خط‌دقیق origin و هش فایل‌های بازبینی‌شده |
 | `tests/preview-network-topology.py` | محلی | ۱۸ تست موفق: استخراج authority از فایل، رد فایل ناشناخته/لینک و probe fail-closed |
 | `tests/preview-deploy-readiness.py` | محلی | ۸ تست موفق |
-| CI کامل شاخه | GitHub Actions | در انتظار نتیجه |
+| CI کامل شاخه | [run 42717419323](https://github.com/feerozmandi/xennic-website/actions/runs/42717419323)، head `30705a7` | پنج job موفق؛ publish در PR رد می‌شود |
 
 این آزمون‌ها گذار روی VPS، ACME عمومی، ورود OAuth واقعی و اولین migration/seed را ثابت نمی‌کنند.
 
