@@ -1,0 +1,50 @@
+# Fixed dedicated edge. Only Caddy may publish host ports.
+name: xennic-preview-gateway
+services:
+  caddy:
+    image: caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e
+    logging: {driver: none}
+    mem_limit: 96m
+    environment:
+      GATE_ADDR: gate:4180
+      APP_ADDR: app:3000
+      PUBLIC_AUTHORITY: preview.xennic.ir
+    ports:
+      - "${PREVIEW_EDGE_IP:?required}:${PREVIEW_EDGE_HTTP:?required}:80"
+      - "${PREVIEW_EDGE_IP:?required}:${PREVIEW_EDGE_HTTPS:?required}:443"
+    volumes:
+      - /srv/xennic-preview/config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/xennic-preview/config/routes.caddy:/etc/caddy/routes.caddy:ro
+      - /srv/xennic-preview/config/oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
+      - /srv/xennic-preview/config/upstream.caddy:/etc/caddy/upstream.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      gateway: {}
+      auth:
+        ipv4_address: 172.28.190.2
+  gate:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
+    user: "0:0"
+    logging: {driver: none}
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["--config=/etc/oauth2-proxy.cfg"]
+    volumes:
+      - /srv/xennic-preview/secrets/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
+    networks:
+      auth:
+        ipv4_address: 172.28.190.3
+networks:
+  gateway:
+    external: true
+    name: xennic-preview_gateway
+  auth:
+    ipam:
+      config:
+        - subnet: 172.28.190.0/24
+volumes:
+  caddy_data:
+  caddy_config:

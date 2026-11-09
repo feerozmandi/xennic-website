@@ -106,7 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install disposable fixture dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age nginx openssl
+        run: sudo apt-get update -qq && sudo apt-get install -y openssh-server age nginx openssl python3-msgpack python3-lz4 python3-cryptography
       - name: Install and exercise the root-owned preview helpers
         run: |
           if ! bash tests/preview-sftp-installed-ci.sh > "$RUNNER_TEMP/installed-preview-ci.log" 2>&1; then

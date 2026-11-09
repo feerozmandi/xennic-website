@@ -41,7 +41,7 @@ BACKUP = PARENT / '.xennic-preview-previous'
 ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
-NETWORK_MANIFEST = 'f5ff9e085509e18ed48360481632bff45dba7d5bb8b9c56732efa37220fd3548'
+NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836930b'
 OLD_COMPOSE = '18a97bc2c21a6d623a54c81d07a49e44f6468cd225f0ce34a73f3760d3d0a373'
 NETWORK_COMPOSE = '44639d7d7f3678c8cb772d02768a8c51320ae4f71e7ccd3829b3d9d5126f2b7c'
 INCOMING_NETWORK = SOURCE / 'incoming-network'
@@ -50,6 +50,13 @@ COMPOSE = ROOT / 'config/compose.yml'
 COMPOSE_BACKUP = ROOT / 'config/.compose-before-network.yml'
 COMPOSE_NEW = ROOT / 'config/.compose-network-update.yml'
 COMPOSE_ROLLBACK = ROOT / 'config/.compose-network-rollback.yml'
+GATEWAY_FILES = {
+    'gateway.yml': ('preview-gateway-compose.yml', 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b'),
+    'Caddyfile': ('preview-Caddyfile', 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7'),
+    'routes.caddy': ('routes.caddy', 'd089cbb65414cd01600383df1bfbea10c0ab6c8e423ad4701324cb368e902033'),
+    'oauth-gateway.caddy': ('oauth-gateway.caddy', '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195'),
+    'upstream.caddy': ('upstream.caddy', '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8'),
+}
 
 
 def check_dir(path):
@@ -216,7 +223,7 @@ def upgrade_network():
         raise RuntimeError('unexpected staging contents')
     if {p.name for p in INCOMING.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py'}:
         raise RuntimeError('unexpected current staging contents')
-    if {p.name for p in INCOMING_NETWORK.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'preview-compose.yml'}:
+    if {p.name for p in INCOMING_NETWORK.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'preview-compose.yml'} | {source for source, _ in GATEWAY_FILES.values()}:
         raise RuntimeError('unexpected network staging contents')
     for path in (NEW_DIR, BACKUP_NETWORK, COMPOSE_BACKUP, COMPOSE_NEW, COMPOSE_ROLLBACK):
         if os.path.lexists(path): raise RuntimeError('previous or incomplete network update exists')
@@ -231,6 +238,14 @@ def upgrade_network():
     if (hashlib.sha256(old_compose).hexdigest() != OLD_COMPOSE or
             hashlib.sha256(new_compose).hexdigest() != NETWORK_COMPOSE):
         raise RuntimeError('compose version is not approved')
+    gateway = {}
+    for destination, (source, expected) in GATEWAY_FILES.items():
+        data = read_private(INCOMING_NETWORK / source)
+        if hashlib.sha256(data).hexdigest() != expected:
+            raise RuntimeError('gateway version is not approved')
+        if os.path.lexists(ROOT / 'config' / destination):
+            raise RuntimeError('existing gateway configuration requires review')
+        gateway[destination] = data
     locks = module(TARGET / 'preview-deploy-lock.py', 'installer_network_lock')
     with locks.acquire_lock(nonblocking=True):
         installed_matches(BACKUP, previous); installed_matches(TARGET, current)
@@ -247,14 +262,31 @@ def upgrade_network():
         write_exclusive(COMPOSE_NEW, new_compose)
         sync_dir(COMPOSE.parent)
         renamed_old = renamed_new = replaced_compose = False
+        created_gateway = {}
         try:
             os.rename(TARGET, BACKUP_NETWORK); renamed_old = True; sync_parent()
             os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
             os.replace(COMPOSE_NEW, COMPOSE); replaced_compose = True; sync_dir(COMPOSE.parent)
+            for name, data in gateway.items():
+                path = ROOT / 'config' / name
+                write_exclusive(path, data)
+                created_gateway[path] = (os.lstat(path).st_ino, data)
+            sync_dir(COMPOSE.parent)
             installed_matches(TARGET, candidate)
             if read_private(COMPOSE) != new_compose: raise RuntimeError('new compose verification failed')
+            for path, (_, data) in created_gateway.items():
+                if read_private(path) != data: raise RuntimeError('gateway verification failed')
             verify_backend()
         except BaseException:
+            # Only remove files this attempt created and which are still exact.
+            # Any changed or partially written file remains for manual review.
+            for path, (inode, data) in created_gateway.items():
+                try:
+                    if os.lstat(path).st_ino == inode and read_private(path) == data:
+                        path.unlink()
+                except (OSError, RuntimeError):
+                    pass
+            sync_dir(COMPOSE.parent)
             if replaced_compose:
                 write_exclusive(COMPOSE_ROLLBACK, old_compose)
                 os.replace(COMPOSE_ROLLBACK, COMPOSE); sync_dir(COMPOSE.parent)
