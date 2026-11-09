@@ -42,6 +42,7 @@ jobs:
           python3 tests/preview-deploy-manifest.py
           python3 tests/preview-release-evidence.py
           python3 tests/preview-release-verifier.py
+          python3 tests/preview-pull-image.py
           python3 tests/preview-deploy-client.py
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py
@@ -54,6 +55,28 @@ jobs:
           python3 tests/preview-network-topology.py
       - name: Build
         run: npm run build
+
+  public-release-evidence:
+    # One-time real public-evidence regression for the currently published dev.
+    if: github.event_name == 'pull_request' && github.head_ref == 'arena/9afb4091-xennic-website'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify actual public release without credentials
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('release_verifier', 'scripts/preview-release-verifier.py')
+          v = importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
+          release = {'repository': 'feerozmandi/xennic-website',
+                     'commit': '09a9d00f25cee181a24fa39d645256869b6dc221',
+                     'run_number': 151,
+                     'digest': 'sha256:9e70bfceebafb0dd83152fb09f2e4d34b2e109497c34a1dad827e5046a31071f',
+                     'platform': 'linux/amd64'}
+          v.assert_current(release, v.PUBLIC_READ)
+          assert v.verify(release, v.PUBLIC_READ) == 42642887548
+          print('::notice::Actual public dev artifact verified without a GitHub credential')
+          PY
 
   compose-smoke:
     runs-on: ubuntu-latest

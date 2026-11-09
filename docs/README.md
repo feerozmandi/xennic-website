@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [دسترسی عمومی انتشار](reports/2026-10-29-public-release-read.md) | شواهد انتشار، آماده‌سازی VPS و آزمون پیشنهادی بی‌نام؛ activation هنوز باز |
 | ۲۰۲۶-۱۰-۲۹ | [مسیر یکپارچهٔ gateway](reports/2026-10-29-gateway-integrated-path.md) | CI موفق probe مستقل، نشست مصنوعی و گذار installer؛ پذیرش عملیاتی باز |
 | ۲۰۲۶-۱۰-۲۹ | [توقف موقت ثبت healthy](reports/2026-10-29-gateway-fail-closed.md) | guard موقت؛ gateway عملیاتی و CI نصب نخست هنوز کامل نیست |
 | ۲۰۲۶-۱۰-۲۹ | [کنترل‌های مقدماتی gateway](reports/2026-10-29-gateway-policy-checks.md) | اعتبارسنجی و probe واحد؛ اتصال به activation و پذیرش نهایی باز |

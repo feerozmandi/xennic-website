@@ -30,3 +30,7 @@ PY
 # The short-lived job token is passed only via stdin; no PR job receives it.
 { cat "$scratch/release.json"; printf '%s\n' "$GHCR_TOKEN"; } | sudo /usr/local/libexec/xennic-preview/pull-image
 printf 'PASS: installed pull helper retrieved and inspected the published GHCR digest\n'
+# This repository/package is currently public. Public mode is explicit, uses a
+# fresh empty Docker config, and still inspects the exact immutable digest.
+{ cat "$scratch/release.json"; printf 'public-read\n'; } | sudo /usr/local/libexec/xennic-preview/pull-image
+printf 'PASS: installed pull helper retrieved the same published digest without registry credentials\n'
