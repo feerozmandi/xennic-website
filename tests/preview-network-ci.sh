@@ -50,6 +50,16 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
 HTTPServer(('0.0.0.0', 3000), Handler).serve_forever()
 PY
+# Exercise the candidate apex Caddyfile with a test-only internal CA. The
+# runtime candidate itself has no internal CA and is not installed by this test.
+python3 - "$PWD/config/apex-Caddyfile" "$scratch/apex-Caddyfile" <<'PY'
+import pathlib, sys
+candidate = pathlib.Path(sys.argv[1]).read_text()
+site = 'https://xennic.ir {\n'
+if candidate.count(site) != 1 or 'tls internal' in candidate:
+    raise SystemExit('unexpected apex candidate')
+pathlib.Path(sys.argv[2]).write_text(candidate.replace(site, site + '    tls internal\n', 1))
+PY
 cat > "$scratch/gateway.yml" <<EOF
 services:
   caddy:
@@ -90,7 +100,7 @@ services:
       APP_ADDR: app:3000
       PUBLIC_AUTHORITY: xennic.ir
     volumes:
-      - $PWD/config/preview-Caddyfile:/etc/caddy/Caddyfile:ro
+      - $scratch/apex-Caddyfile:/etc/caddy/Caddyfile:ro
       - $PWD/config/routes.caddy:/etc/caddy/routes.caddy:ro
       - $PWD/config/oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
       - $PWD/config/upstream.caddy:/etc/caddy/upstream.caddy:ro
@@ -236,6 +246,55 @@ def walk(v):
 walk(x); print("CI_GATE_MATCHERS="+json.dumps(found,separators=(",",":"))[:4000])' || true
   exit 1
 fi
+# Only the disposable CA certificate is copied; its private key never leaves Caddy.
+# This validates a private TLS fixture, not public ACME, DNS or VPS reachability.
+fixture_ca=$("${gate[@]}" exec -T caddy-apex-app sh -c '
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    test -s /data/caddy/pki/authorities/local/root.crt && exec cat /data/caddy/pki/authorities/local/root.crt
+    sleep 1
+  done
+  exit 1
+')
+"${app[@]}" exec -T -e "FIXTURE_CA=$fixture_ca" app node - <<'JS'
+const https = require('node:https');
+const http = require('node:http');
+const assert = require('node:assert/strict');
+const ca = process.env.FIXTURE_CA;
+if (!ca?.includes('BEGIN CERTIFICATE')) throw Error('fixture CA missing');
+const secure = (path, {host='xennic.ir', servername='xennic.ir', method='GET', headers={}} = {}) => new Promise((resolve, reject) => {
+  const req = https.request({hostname:'caddy-apex-app', port:443, servername, ca, path, method,
+    headers:{Host:host, ...headers}}, res => {
+    const chunks=[]; res.on('data', x => chunks.push(x));
+    res.on('end', () => resolve({status:res.statusCode, headers:res.headers, body:Buffer.concat(chunks).toString()}));
+    res.on('error', reject);
+  });
+  req.setTimeout(10000, () => req.destroy(new Error('TLS fixture timeout')));
+  req.on('error', reject); req.end();
+});
+const cleartext = () => new Promise((resolve, reject) => {
+  const req = http.request({hostname:'caddy-apex-app', port:80, path:'/company', headers:{Host:'xennic.ir'}}, res => {
+    res.resume(); resolve({status:res.statusCode, location:res.headers.location});
+  });
+  req.setTimeout(10000, () => req.destroy(new Error('redirect fixture timeout')));
+  req.on('error', reject); req.end();
+});
+(async () => {
+  const root = await secure('/');
+  assert.equal(root.status, 200, 'public TLS page');
+  assert.ok(root.body.includes('<html'), 'TLS page is not application HTML');
+  assert.equal((await secure('/', {method:'HEAD'})).status, 200, 'public TLS HEAD');
+  assert.equal((await secure('/admin')).status, 302, 'admin gate on TLS');
+  assert.equal((await secure('/api/pages')).status, 401, 'API gate on TLS');
+  assert.equal((await secure('/api/pages', {headers:{Cookie:'__Host-preview_gate=ci-valid'}})).status, 200, 'synthetic gate session on TLS');
+  assert.equal((await secure('/media/missing.png')).status, 302, 'media gate on TLS');
+  assert.ok([404,421].includes((await secure('/', {host:'unapproved.example.invalid'})).status), 'foreign Host reached site');
+  await assert.rejects(secure('/', {servername:'unapproved.example.invalid'}), 'foreign SNI was accepted');
+  const redirect = await cleartext();
+  assert.equal(redirect.status, 308, 'HTTP must only redirect');
+  assert.equal(redirect.location, 'https://xennic.ir/company', 'incorrect HTTPS redirect');
+  console.log('PASS: isolated apex HTTPS and HTTP redirect with test CA; no public TLS or OAuth tested');
+})().catch(error => { console.error(error.message); process.exit(1); });
+JS
 # Exercise Payload through real Caddy and the synthetic gate at apex authority.
 # Credentials, data, network and database are disposable CI-only fixtures.
 "${app[@]}" exec -T app node - <<'JS'
@@ -280,9 +339,30 @@ const request = (path, {method='GET', headers={}, body} = {}) => new Promise((re
   r = await request('/api/graphql', {method:'POST', headers:{Cookie:gate, Authorization:'Bearer ' + token, Origin:origin}, body:{query:'query { meStaff { user { email } } }'}});
   const graphql = JSON.parse(r.body);
   assert.equal(graphql.data?.meStaff?.user?.email, email, 'GraphQL bearer passes Caddy');
-  console.log('PASS: apex Caddy, synthetic gate and real Payload auth; OAuth and TLS not tested');
+  console.log('PASS: apex Caddy, synthetic gate and real Payload auth; OAuth not tested');
 })().catch(error => { console.error(error.message); process.exit(1); });
 JS
+# Valid synthetic gate session must not bypass protection when the gate stops.
+"${gate[@]}" stop gate
+"${app[@]}" exec -T -e "FIXTURE_CA=$fixture_ca" app node - <<'JS'
+const https = require('node:https');
+const assert = require('node:assert/strict');
+const request = (path, cookie) => new Promise((resolve, reject) => {
+  const req = https.request({hostname:'caddy-apex-app', port:443, servername:'xennic.ir', ca:process.env.FIXTURE_CA,
+    path, headers:{Host:'xennic.ir', ...(cookie ? {Cookie:cookie} : {})}}, res => {res.resume(); resolve(res.statusCode)});
+  req.setTimeout(10000, () => req.destroy(new Error('outage fixture timeout')));
+  req.on('error', reject); req.end();
+});
+(async () => {
+  for (const cookie of [undefined, '__Host-preview_gate=ci-valid']) {
+    for (const path of ['/admin', '/api/pages', '/media/missing.png'])
+      assert.ok((await request(path, cookie)) >= 500, 'gate outage did not close ' + path);
+  }
+  assert.equal(await request('/'), 200, 'public page unavailable during synthetic gate outage');
+  console.log('PASS: gate outage closed protected TLS routes even with synthetic session');
+})().catch(error => { console.error(error.message); process.exit(1); });
+JS
+unset fixture_ca
 # Run the real installed health logic over Docker's internal exec path.
 python3 - "$PWD/config/preview-compose.yml" "$app_project" <<'PY'
 import importlib.util, os, sys

@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [آزمون HTTPS و قطع gate دامنهٔ اصلی](reports/2026-10-29-apex-tls-fixture.md) | fixture با CA داخلی؛ TLS و OAuth واقعی باز |
 | ۲۰۲۶-۱۰-۲۹ | [بررسی مقدماتی ورودی دامنهٔ اصلی](reports/2026-10-29-apex-listener-nat-check.md) | listener، پورت Docker، NAT و نشانی؛ دسترسی بیرونی اثبات نشده |
 | ۲۰۲۶-۱۰-۲۹ | [آزمون جداسازی سربرگ در gateway](reports/2026-10-29-apex-header-fixture.md) | fixture دامنهٔ اصلی؛ استقرار و OAuth واقعی باز |
 | ۲۰۲۶-۱۰-۲۹ | [آمادگی راه‌اندازی عمومی](reports/2026-10-29-public-launch-readiness.md) | جداسازی پیشنهادی مسیرها و CI مصنوعی، انتشار و موارد عملیاتی باز |

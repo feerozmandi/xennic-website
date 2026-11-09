@@ -1,0 +1,14 @@
+# Candidate only. Do not install or expose this listener until the reviewed
+# apex gateway configuration, OAuth, health guards and upgrade are complete.
+{
+    admin off
+}
+
+https://xennic.ir {
+    import /etc/caddy/routes.caddy
+}
+
+# Internal Docker-only probe, never a substitute for identity/TLS validation.
+:8080 {
+    import /etc/caddy/routes.caddy
+}
