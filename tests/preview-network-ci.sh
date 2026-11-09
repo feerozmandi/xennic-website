@@ -83,7 +83,7 @@ for project, service, networks in (
     if set(net['Networks']) != networks: raise RuntimeError('fixture network is not isolated')
 print('PASS: app, database, Caddy and synthetic gate have no host ports and use only exact fixture networks')
 PY
-"${app[@]}" exec -T app node - <<'JS'
+if ! "${app[@]}" exec -T app node - <<'JS'
 (async () => {
   const base = 'http://caddy:8080';
   const call = (path, cookie, host = 'preview.xennic.ir', method = 'GET') => fetch(base + path, {redirect: 'manual', method, headers: {
@@ -98,7 +98,7 @@ PY
   if (!html.includes('<html')) throw Error('app HTML missing');
   for (const path of ['/', '/company', '/company/about', '/services', '/track-record', '/knowledge', '/platform', '/contact']) {
     const result = await call(path, null, 'xennic.ir');
-    if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status);
+    if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status + ' location=' + result.headers.get('location'));
   }
   const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
   if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
@@ -122,6 +122,20 @@ PY
   console.log('PASS: exact apex public routes and protected management routes; internal CI only, gate synthetic');
 })().catch(e => { console.error(e.message); process.exit(1); });
 JS
+then
+  # Disposable synthetic fixture only: show adapted matchers, not secrets or requests.
+  "${gate[@]}" exec -T caddy caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null | python3 -c '
+import json, sys
+x=json.load(sys.stdin); found=[]
+def walk(v):
+    if isinstance(v,dict):
+        if "match" in v: found.append(v["match"])
+        for child in v.values(): walk(child)
+    elif isinstance(v,list):
+        for child in v: walk(child)
+walk(x); print("CI_GATE_MATCHERS="+json.dumps(found,separators=(",",":"))[:4000])' || true
+  exit 1
+fi
 # Run the real installed health logic over Docker's internal exec path.
 python3 - "$PWD/config/preview-compose.yml" "$app_project" <<'PY'
 import importlib.util, os, sys
