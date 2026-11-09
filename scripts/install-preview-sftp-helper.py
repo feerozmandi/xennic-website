@@ -45,7 +45,7 @@ ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
 NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836930b'
-ACTIVATION_MANIFEST = 'bc6fefdba12d97f74303d6781acf2b08a15532708d17458918190354768bd717'
+ACTIVATION_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
 INCOMING_ACTIVATION = SOURCE / 'incoming-activation'
 BACKUP_ACTIVATION = PARENT / '.xennic-preview-before-activation'
 ACTIVATION_ROUTE_HASH = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
