@@ -94,6 +94,30 @@ class GatewayOptionsTest(unittest.TestCase):
                 with self.assertRaises(fixed.Rejected):
                     fixed.validate_gateway_oauth(as_toml(config), '172.20.0.2')
 
+    def test_apex_requires_exact_callback_and_whitelist(self):
+        config = oauth_config()
+        config['redirect_url'] = 'https://xennic.ir/oauth2/callback'
+        config['whitelist_domains'] = ['xennic.ir']
+        fixed.validate_gateway_oauth(as_toml(config), '172.20.0.2', authority='xennic.ir')
+        with self.assertRaises(fixed.Rejected):
+            fixed.validate_gateway_oauth(as_toml(config), '172.20.0.2')
+        for key, value in (
+            ('redirect_url', 'https://preview.xennic.ir/oauth2/callback'),
+            ('redirect_url', 'http://xennic.ir/oauth2/callback'),
+            ('redirect_url', 'https://www.xennic.ir/oauth2/callback'),
+            ('whitelist_domains', ['xennic.ir', 'preview.xennic.ir']),
+            ('whitelist_domains', ['.xennic.ir']),
+            ('cookie_secure', False), ('trusted_proxy_ips', ['0.0.0.0/0']),
+            ('skip_auth_preflight', True), ('github_users', []),
+        ):
+            with self.subTest(key=key, value=value):
+                bad = config.copy(); bad[key] = value
+                with self.assertRaises(fixed.Rejected):
+                    fixed.validate_gateway_oauth(as_toml(bad), '172.20.0.2', authority='xennic.ir')
+        for authority in ('www.xennic.ir', 'xennic.ir.evil.example', '', None):
+            with self.subTest(authority=authority), self.assertRaises(fixed.Rejected):
+                fixed.validate_gateway_oauth(as_toml(config), '172.20.0.2', authority=authority)
+
     def test_peer_address_cannot_be_selected_by_config(self):
         with self.assertRaises(fixed.Rejected):
             fixed.validate_gateway_oauth(as_toml(oauth_config()), '172.20.0.3')
@@ -162,6 +186,56 @@ class IngressProbeTest(unittest.TestCase):
             internal.assert_called_once_with()
             identity.assert_called_once_with('a' * 64)
             ingress.assert_not_called()
+
+
+class ApexIngressProbeTest(unittest.TestCase):
+    def run_probe(self, mode):
+        seen = []
+        class Response:
+            def __init__(self, case):
+                method, path, host, expected = case
+                self.expected = expected
+                self.status = expected
+                if mode == 'private-open' and path == '/admin': self.status = 200
+                if mode == 'gate-down' and path == '/api/pages': self.status = 502
+                if mode == 'public-down' and path == '/' and host == 'xennic.ir': self.status = 503
+                if mode == 'foreign-open' and host == 'www.xennic.ir': self.status = 200
+            def getheader(self, name):
+                if name == 'Location':
+                    return 'https://evil.example/' if mode == 'bad-redirect' else '/oauth2/sign_in'
+                if name == 'Content-Type':
+                    return 'application/json' if mode == 'bad-content' else 'text/html; charset=utf-8'
+                return None
+        class Connection:
+            def __init__(self, host, port, timeout):
+                if (host, port, timeout) != ('172.20.0.3', 8080, 4): raise AssertionError('wrong peer')
+            def request(self, method, path, headers):
+                case = fixed.APEX_INGRESS_CASES[len(seen) % len(fixed.APEX_INGRESS_CASES)] if mode == 'valid' else next(
+                    (c for c in fixed.APEX_INGRESS_CASES if c[:3] == (method, path, headers.get('Host'))), None)
+                if case is None or headers != {'Host':case[2], 'Authorization':'Bearer invalid-probe',
+                                               'X-Forwarded-User':'untrusted-probe', 'X-Auth-Request-User':'untrusted-probe'}:
+                    raise AssertionError('unexpected apex probe request')
+                seen.append(case); self.case = case
+            def getresponse(self): return Response(self.case)
+            def close(self): pass
+        with mock.patch.object(fixed.http.client, 'HTTPConnection', Connection), mock.patch.object(fixed.time, 'sleep'):
+            if mode == 'valid':
+                fixed.check_apex_ingress_protection('172.20.0.3')
+                self.assertEqual(seen, list(fixed.APEX_INGRESS_CASES))
+            else:
+                with self.assertRaises(fixed.Rejected): fixed.check_apex_ingress_protection('172.20.0.3')
+
+    def test_apex_probe_all_fixed_cases(self): self.run_probe('valid')
+
+    def test_public_private_outage_and_spoof_fail_closed(self):
+        for mode in ('private-open', 'gate-down', 'public-down', 'foreign-open', 'bad-redirect', 'bad-content'):
+            with self.subTest(mode=mode): self.run_probe(mode)
+
+    def test_peer_address_and_network_errors_are_rejected(self):
+        for ip in ('127.0.0.1', '8.8.8.8', 'bad;command', None):
+            with self.subTest(ip=ip), self.assertRaises(fixed.Rejected): fixed.check_apex_ingress_protection(ip)
+        with mock.patch.object(fixed.http.client, 'HTTPConnection', side_effect=OSError('offline')), mock.patch.object(fixed.time, 'sleep'):
+            with self.assertRaises(fixed.Rejected): fixed.check_apex_ingress_protection('172.20.0.3')
 
 
 if __name__ == '__main__': unittest.main()

@@ -343,8 +343,45 @@ const request = (path, {method='GET', headers={}, body} = {}) => new Promise((re
   console.log('PASS: apex Caddy, synthetic gate and real Payload auth; OAuth not tested');
 })().catch(error => { console.error(error.message); process.exit(1); });
 JS
+# Exercise the exact candidate host-side probe against this disposable gateway.
+# CI has not performed the real installed gateway identity checks.
+python3 - "$gate_project" "$app_project" online <<'PY'
+import importlib.util, json, subprocess, sys
+from pathlib import Path
+sys.dont_write_bytecode = True
+project, app, mode = sys.argv[1:]
+cid = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=' + project,
+                               '--filter', 'label=com.docker.compose.service=caddy-apex-app'], text=True).strip()
+if not cid or '\n' in cid: raise RuntimeError('missing apex fixture gateway')
+item = json.loads(subprocess.check_output(['docker', 'inspect', cid]))[0]
+ip = item['NetworkSettings']['Networks'][app + '_gateway']['IPAddress']
+spec = importlib.util.spec_from_file_location('apex_fixed_fixture', Path('scripts/preview-fixed-operations.py'))
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.check_apex_ingress_protection(ip)
+print('PASS: fixed apex probe accepted expected public/private routes; fixture identity not operational acceptance')
+PY
 # Valid synthetic gate session must not bypass protection when the gate stops.
 "${gate[@]}" stop gate
+python3 - "$gate_project" "$app_project" <<'PY'
+import importlib.util, json, subprocess, sys
+from pathlib import Path
+sys.dont_write_bytecode = True
+project, app = sys.argv[1:]
+cid = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=' + project,
+                               '--filter', 'label=com.docker.compose.service=caddy-apex-app'], text=True).strip()
+if not cid or '\n' in cid: raise RuntimeError('missing apex fixture gateway')
+item = json.loads(subprocess.check_output(['docker', 'inspect', cid]))[0]
+ip = item['NetworkSettings']['Networks'][app + '_gateway']['IPAddress']
+spec = importlib.util.spec_from_file_location('apex_fixed_outage', Path('scripts/preview-fixed-operations.py'))
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.time.sleep = lambda _: None  # Faster retries only in this disposable fixture.
+try:
+    m.check_apex_ingress_protection(ip)
+except m.Rejected:
+    print('PASS: fixed apex probe rejected synthetic gate outage')
+else:
+    raise RuntimeError('fixed apex probe accepted gate outage')
+PY
 "${app[@]}" exec -T -e "FIXTURE_CA=$fixture_ca" app node - <<'JS'
 const https = require('node:https');
 const assert = require('node:assert/strict');

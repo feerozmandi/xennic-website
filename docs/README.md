@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [کنترل OAuth و سلامت ورودی دامنهٔ اصلی](reports/2026-10-29-apex-guard-candidate.md) | نامزد guard؛ اتصال عملیاتی و CI باز |
 | ۲۰۲۶-۱۰-۲۹ | [آزمون HTTPS و قطع gate دامنهٔ اصلی](reports/2026-10-29-apex-tls-fixture.md) | fixture با CA داخلی؛ TLS و OAuth واقعی باز |
 | ۲۰۲۶-۱۰-۲۹ | [بررسی مقدماتی ورودی دامنهٔ اصلی](reports/2026-10-29-apex-listener-nat-check.md) | listener، پورت Docker، NAT و نشانی؛ دسترسی بیرونی اثبات نشده |
 | ۲۰۲۶-۱۰-۲۹ | [آزمون جداسازی سربرگ در gateway](reports/2026-10-29-apex-header-fixture.md) | fixture دامنهٔ اصلی؛ استقرار و OAuth واقعی باز |

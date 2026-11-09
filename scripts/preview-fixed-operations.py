@@ -50,6 +50,16 @@ INGRESS_CASES = (('GET', '/', 302), ('GET', '/admin', 302),
                  ('GET', '/api/pages', 401), ('POST', '/api/graphql', 401),
                  ('GET', '/media/missing.png', 302), ('GET', '/health', 302))
 
+# Candidate probe only: not wired into the preview activation path. No caller
+# can provide paths or hostnames; verify the gateway identity independently.
+APEX_INGRESS_CASES = (
+    ('GET', '/', 'xennic.ir', 200), ('HEAD', '/', 'xennic.ir', 200),
+    ('GET', '/admin', 'xennic.ir', 302), ('GET', '/api/pages', 'xennic.ir', 401),
+    ('POST', '/api/graphql', 'xennic.ir', 401), ('GET', '/media/missing.png', 'xennic.ir', 302),
+    ('GET', '/health', 'xennic.ir', 302), ('POST', '/', 'xennic.ir', 302),
+    ('GET', '/', 'preview.xennic.ir', 302), ('GET', '/', 'www.xennic.ir', 302),
+)
+
 
 def load(name, filename):
     spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(filename))
@@ -116,14 +126,19 @@ def approval(previous, candidate):
     return item
 
 
-def validate_gateway_oauth(raw, caddy_ip):
+def validate_gateway_oauth(raw, caddy_ip, *, authority='preview.xennic.ir'):
     """Validate one effective OAuth config; does not itself establish identity.
 
     This deliberately rejects extra options, including alternate auth routes and
     provider endpoints. The caller must independently verify the exact running
     Caddy peer and supply its inspected IP, not an address from the config.
-    This validator is not yet wired into activation; the gateway remains blocked.
+    The operational caller still selects the existing preview policy; apex
+    validation is not wired into activation and cannot enable the listener.
     """
+    # The caller must select a fixed reviewed mode, never an untrusted host or
+    # request argument. The existing operational path remains preview-only.
+    if authority not in ('preview.xennic.ir', 'xennic.ir'):
+        raise Rejected('gateway authority not approved')
     try:
         config = tomllib.loads(raw.decode('utf-8'))
         address = ipaddress.ip_address(caddy_ip)
@@ -137,8 +152,8 @@ def validate_gateway_oauth(raw, caddy_ip):
         'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email',
         'reverse_proxy': True, 'trusted_proxy_ips': [str(address) + '/32'],
         'http_address': '0.0.0.0:4180',
-        'redirect_url': 'https://preview.xennic.ir/oauth2/callback',
-        'upstreams': ['static://202'], 'whitelist_domains': ['preview.xennic.ir'],
+        'redirect_url': f'https://{authority}/oauth2/callback',
+        'upstreams': ['static://202'], 'whitelist_domains': [authority],
         'cookie_name': '__Host-preview_gate', 'cookie_secure': True,
         'cookie_httponly': True, 'cookie_samesite': 'lax',
         'cookie_expire': '8h', 'cookie_refresh': '0',
@@ -444,6 +459,39 @@ def check_ingress_protection(caddy_ip):
             return
         except (OSError, http.client.HTTPException, Rejected) as exc:
             if attempt == 11: raise Rejected('entry protection check failed') from exc
+            time.sleep(1)
+
+
+def check_apex_ingress_protection(caddy_ip):
+    """Candidate apex probe; identity, actual TLS and OAuth are separate checks.
+
+    This is intentionally not wired into activation yet. Callers must first
+    verify the exact gateway container and use its independently inspected IP.
+    """
+    try:
+        addr = ipaddress.ip_address(caddy_ip)
+        if addr.version != 4 or not addr.is_private or addr.is_loopback:
+            raise ValueError('invalid peer')
+    except (ValueError, TypeError) as exc:
+        raise Rejected('invalid Caddy probe address') from exc
+    for attempt in range(12):
+        try:
+            for method, path, authority, expected in APEX_INGRESS_CASES:
+                headers = {'Host': authority, 'Authorization': 'Bearer invalid-probe',
+                           'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
+                conn = http.client.HTTPConnection(str(addr), 8080, timeout=4)
+                try:
+                    conn.request(method, path, headers=headers)
+                    response = conn.getresponse()
+                    if (response.status != expected or
+                            (expected == 302 and response.getheader('Location') != '/oauth2/sign_in') or
+                            (expected == 200 and (response.getheader('Content-Type') or '').split(';', 1)[0].strip().lower() != 'text/html')):
+                        raise Rejected('apex entry protection check failed')
+                finally:
+                    conn.close()
+            return
+        except (OSError, http.client.HTTPException, Rejected) as exc:
+            if attempt == 11: raise Rejected('apex entry protection check failed') from exc
             time.sleep(1)
 
 
