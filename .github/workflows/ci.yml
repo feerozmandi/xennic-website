@@ -56,40 +56,6 @@ jobs:
       - name: Build
         run: npm run build
 
-  # Temporary independent check of the current published dev release.
-  verify-published-release:
-    if: github.event_name == 'pull_request' && github.head_ref == 'arena/7976d20c-xennic-website'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v6
-      - name: Independently verify current dev publication
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 - <<'PY'
-          import importlib.util, os, re, subprocess
-          from pathlib import Path
-          token = os.environ.pop('GH_TOKEN').encode('ascii')
-          commit = 'd19c7c58302226c9fd76334f8e9587efcc1b7003'
-          image = 'ghcr.io/feerozmandi/xennic-website:sha-' + commit
-          result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', image],
-                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-          if result.returncode: raise SystemExit('anonymous published image inspection failed')
-          match = re.search(r'(?m)^Digest:\s+(sha256:[0-9a-f]{64})\s*$', result.stdout)
-          if not match: raise SystemExit('published digest missing')
-          release = {'repository': 'feerozmandi/xennic-website', 'commit': commit,
-                     'digest': match.group(1), 'platform': 'linux/amd64', 'run_number': 166}
-          spec = importlib.util.spec_from_file_location('release_verifier', Path('scripts/preview-release-verifier.py'))
-          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
-          verifier.assert_current(release, token)
-          run_id = verifier.verify(release, token)
-          if run_id != 42691292301: raise SystemExit('unexpected publication run')
-          print(f'::notice::Verified published commit {commit}, digest {release["digest"]}, run {run_id}')
-          PY
-
   compose-smoke:
     runs-on: ubuntu-latest
     env:

@@ -2,7 +2,7 @@
 
 ## وضعیت و شاهد
 
-مالک خواست سایت عمومی روی `https://xennic.ir` راه‌اندازی شود و اعلام کرد مقصد SFTP برای backup خارج VPS در اختیار ندارد. تصمیم جدید، HTTPS برای خود سایت را تغییر نداده است. [PR #24](https://github.com/feerozmandi/xennic-website/pull/24) با commit `d19c7c58302226c9fd76334f8e9587efcc1b7003` ادغام شد؛ [انتشار dev run 166](https://github.com/feerozmandi/xennic-website/actions/runs/42691292301) با شش job موفق است. تأیید مستقل این نوک در حال اجراست. در این نشست هیچ DNS، سرویس یا داده‌ای تغییر نکرده و deployment، migration و seed عملیاتی انجام نشده‌اند. ساعت محیط/GitHub و تاریخ نشست اختلاف تأییدنشده دارند.
+مالک خواست سایت عمومی روی `https://xennic.ir` راه‌اندازی شود و اعلام کرد مقصد SFTP برای backup خارج VPS در اختیار ندارد. تصمیم جدید، HTTPS برای خود سایت را تغییر نداده است. [PR #24](https://github.com/feerozmandi/xennic-website/pull/24) با commit `d19c7c58302226c9fd76334f8e9587efcc1b7003` ادغام شد؛ [انتشار dev run 166](https://github.com/feerozmandi/xennic-website/actions/runs/42691292301) با شش job موفق است. [تأیید مستقل](https://github.com/feerozmandi/xennic-website/actions/runs/42693878103/job/129420437245) تطبیق commit، run، artifact و digest `sha256:a21da442a6ca58851b0618975377cbfb60dbbc4f19d7237edd426c1644a38fad` را تأیید کرد؛ job موقت از پیش‌نویس حذف شد. در این نشست هیچ DNS، سرویس یا داده‌ای تغییر نکرده و deployment، migration و seed عملیاتی انجام نشده‌اند. ساعت محیط/GitHub و تاریخ نشست اختلاف تأییدنشده دارند.
 
 ## موانع واقعی، نه مجوز دور زدن
 
