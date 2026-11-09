@@ -2,7 +2,7 @@
 
 - **تاریخ گزارش:** ۲۰۲۶-۱۰-۲۹؛ ساعت محیط و GitHub تاریخ دیگری نشان می‌دهد.
 - **مبنا:** PR پیش‌نویس #21، `17a012a`.
-- **وضعیت:** CI یکپارچه و ارتقای آزمایشی موفق؛ پذیرش عملیاتی، verifier انتشار و گذار VPS باز است؛ ادغام و استقرار مجاز نیست.
+- **وضعیت:** با مجوز مالک PR ادغام و انتشار در `dev` موفق شد؛ verifier مستقل، پذیرش عملیاتی و گذار VPS باز است.
 
 ## خلاصهٔ مدیریتی
 
@@ -25,6 +25,7 @@
 | نصب نخست، قطع gate بی‌نشست، peer ناشناس، ارتقا و rollback با helper نصب‌شده | [CI 42632292430](https://github.com/feerozmandi/xennic-website/actions/runs/42632292430)، `6310d6e` | job `installed-sftp` موفق؛ این اجرا probe قبلی مبتنی بر App داشت. job مستقل `production-preview` نخست شکست خورد، اما اجرای مجدد آن و کل CI موفق شدند؛ علت شکست اولیه معلوم نشد. |
 | probe مستقل میزبان | [CI 42634082538](https://github.com/feerozmandi/xennic-website/actions/runs/42634082538)، `a491203` | هر پنج job موفق؛ دسترسی میزبان به bridge و اجرای زنجیره در runner دورریختنی اثبات شد، نه VPS. |
 | زنجیرهٔ کامل و نشست مصنوعی؛ گذار و rollback installer | [CI 42635739994](https://github.com/feerozmandi/xennic-website/actions/runs/42635739994)، `17a012a` | هر پنج job موفق؛ نشست مصنوعی از gateway فعال به App رسید و نصب فایل‌های ثابت، رد فایل ناشناس و rollback در runner دورریختنی آزموده شدند. outage با نشست معتبر اجرا نشد. |
+| انتشار و آزمون image با همان digest | [CI 42642887548](https://github.com/feerozmandi/xennic-website/actions/runs/42642887548)، merge `09a9d00f25cee181a24fa39d645256869b6dc221` | انتشار GHCR، آزمون image منتشرشده و آزمون helper pull موفق؛ verifier مستقل هنوز در جریان است. |
 | OAuth واقعی، TLS عمومی، DNS و VPS | عملیاتی | انجام نشده. |
 
 ## خطرها و پیگیری
