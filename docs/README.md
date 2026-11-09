@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [کنترل‌های مقدماتی gateway](reports/2026-10-29-gateway-policy-checks.md) | اعتبارسنجی و probe واحد؛ اتصال به activation و پذیرش نهایی باز |
 | ۲۰۲۶-۱۰-۲۹ | [اتصال gateway به زنجیرهٔ نصب‌شده](reports/2026-10-29-installed-gateway-regression.md) | رگرسیون با Caddy واقعی و gate مصنوعی؛ پذیرش نهایی و استقرار مسدود |
 | ۲۰۲۶-۱۰-۲۹ | [اصلاح شبکهٔ داخلی پیش‌نمایش](reports/2026-10-29-private-network-correction.md) | CI موفق با gate مصنوعی؛ ادغام gateway واقعی و استقرار همچنان مسدود |
 | ۲۰۲۶-۱۰-۲۹ | [ارتقای helperهای VPS](reports/2026-10-29-vps-helper-upgrade.md) | نتیجهٔ گزارش‌شدهٔ مالک و پیش‌شرط‌های باز |

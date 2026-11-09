@@ -4,8 +4,11 @@
 Install identical copies under the fixed phase names. Entry is root-only and
 requires a validated manifest on stdin. SSH/automatic deployment remains disabled.
 """
+import base64
+import binascii
 import hashlib
 import importlib.util
+import ipaddress
 import io
 import json
 import os
@@ -15,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tomllib
 from urllib.parse import unquote, urlsplit
 
 sys.dont_write_bytecode = True
@@ -24,6 +28,30 @@ COMPOSE = [DOCKER, 'compose', '--project-name', 'xennic-preview', '--env-file',
            '/srv/xennic-preview/secrets/preview.env', '-f', '/srv/xennic-preview/config/compose.yml']
 SAFE = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C'}
 PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback'})
+
+# Fixed probe for the reviewed Caddy route set. The internal endpoint is not a
+# substitute for validating the actual Caddy container and effective config.
+# It is not wired to the transaction until that identity check is implemented.
+INGRESS_PROBE = r"""
+(async () => {
+  const cases = [
+    ['GET', '/', 302], ['GET', '/admin', 302],
+    ['GET', '/api/pages', 401], ['POST', '/api/graphql', 401],
+    ['GET', '/media/missing.png', 302], ['GET', '/health', 302]
+  ];
+  for (const [method, path, expected] of cases) {
+    const result = await fetch('http://caddy:8080' + path, {
+      method, redirect: 'manual', signal: AbortSignal.timeout(4000),
+      headers: {Host: 'preview.xennic.ir', Authorization: 'Bearer invalid-probe',
+        'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
+    });
+    if (result.status !== expected ||
+        (expected === 302 && result.headers.get('location') !== '/oauth2/sign_in')) {
+      throw Error('entry protection check failed');
+    }
+  }
+})().catch(() => process.exit(1));
+"""
 
 
 def load(name, filename):
@@ -89,6 +117,61 @@ def approval(previous, candidate):
             len(set(item['previous_migrations'])) != len(item['previous_migrations'])):
         raise Rejected('migration transition not approved for rollback')
     return item
+
+
+def validate_gateway_oauth(raw, caddy_ip):
+    """Validate one effective OAuth config; does not itself establish identity.
+
+    This deliberately rejects extra options, including alternate auth routes and
+    provider endpoints. The caller must independently verify the exact running
+    Caddy peer and supply its inspected IP, not an address from the config.
+    This validator is not yet wired into activation; the gateway remains blocked.
+    """
+    try:
+        config = tomllib.loads(raw.decode('utf-8'))
+        address = ipaddress.ip_address(caddy_ip)
+    except (ValueError, TypeError, UnicodeError, AttributeError) as exc:
+        raise Rejected('invalid gateway configuration') from exc
+    private_ranges = (ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('172.16.0.0/12'),
+                      ipaddress.ip_network('192.168.0.0/16'))
+    if address.version != 4 or not any(address in network for network in private_ranges):
+        raise Rejected('invalid Caddy peer address')
+    fixed = {
+        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email',
+        'reverse_proxy': True, 'trusted_proxy_ips': [str(address) + '/32'],
+        'http_address': '0.0.0.0:4180',
+        'redirect_url': 'https://preview.xennic.ir/oauth2/callback',
+        'upstreams': ['static://202'], 'whitelist_domains': ['preview.xennic.ir'],
+        'cookie_name': '__Host-preview_gate', 'cookie_secure': True,
+        'cookie_httponly': True, 'cookie_samesite': 'lax',
+        'cookie_expire': '8h', 'cookie_refresh': '0',
+        'skip_jwt_bearer_tokens': False, 'skip_auth_preflight': False,
+        'pass_basic_auth': False, 'pass_authorization_header': False,
+        'set_authorization_header': False, 'pass_access_token': False,
+        'set_xauthrequest': False, 'request_logging': False, 'auth_logging': False,
+    }
+    keys = set(fixed) | {'github_users', 'client_id', 'client_secret', 'cookie_secret'}
+    if set(config) != keys:
+        raise Rejected('gateway options are missing or unexpected')
+    for key, expected in fixed.items():
+        if type(config[key]) is not type(expected) or config[key] != expected:
+            raise Rejected('gateway option differs from reviewed policy')
+    users = config['github_users']
+    if (not isinstance(users, list) or not users or
+            any(not isinstance(user, str) or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?', user)
+                or '--' in user for user in users) or
+            len({user.lower() for user in users}) != len(users)):
+        raise Rejected('gateway user allowlist is invalid')
+    for key in ('client_id', 'client_secret'):
+        value = config[key]
+        if not isinstance(value, str) or not 1 <= len(value) <= 1024 or any(ord(ch) < 33 or ord(ch) > 126 for ch in value):
+            raise Rejected('gateway credentials are invalid')
+    try:
+        secret = config['cookie_secret']
+        if not isinstance(secret, str) or len(base64.b64decode(secret, altchars=b'-_', validate=True)) != 32:
+            raise ValueError('invalid cookie key')
+    except (ValueError, binascii.Error, UnicodeError) as exc:
+        raise Rejected('gateway cookie key is invalid') from exc
 
 
 def config_for(release):
@@ -340,6 +423,17 @@ def verify_backup(release):
         if h.hexdigest() != backup['sha256']: raise Rejected('backup changed')
     except (OSError, ValueError, ready.NotReady) as exc:
         raise Rejected('verified backup record missing') from exc
+
+
+def check_ingress_protection(app_id):
+    """Probe only the fixed Caddy route from the already identified app.
+
+    A successful denial probe is not proof of OAuth or gateway identity. The
+    caller must verify those separately before using this as a health gate.
+    """
+    if not re.fullmatch('[0-9a-f]{12,64}', app_id):
+        raise Rejected('invalid probe container')
+    run([DOCKER, 'exec', app_id, 'node', '-e', INGRESS_PROBE], timeout=45)
 
 
 def check_health(release):
