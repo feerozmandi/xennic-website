@@ -357,7 +357,11 @@ item = json.loads(subprocess.check_output(['docker', 'inspect', cid]))[0]
 ip = item['NetworkSettings']['Networks'][app + '_gateway']['IPAddress']
 spec = importlib.util.spec_from_file_location('apex_fixed_fixture', Path('scripts/preview-fixed-operations.py'))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-m.check_apex_ingress_protection(ip)
+# Test-only: bind the fixture edge to the approved apex mode. The reviewed hash
+# mapping itself is covered by tests/preview-installer-apex.py.
+m._probe_cases = lambda authority: m.APEX_INGRESS_CASES if authority == 'xennic.ir' else ()
+m.edge_authority = lambda: 'xennic.ir'
+m.check_ingress_protection(ip)
 print('PASS: fixed apex probe accepted expected public/private routes; fixture identity not operational acceptance')
 PY
 # Valid synthetic gate session must not bypass protection when the gate stops.
@@ -375,8 +379,10 @@ ip = item['NetworkSettings']['Networks'][app + '_gateway']['IPAddress']
 spec = importlib.util.spec_from_file_location('apex_fixed_outage', Path('scripts/preview-fixed-operations.py'))
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 m.time.sleep = lambda _: None  # Faster retries only in this disposable fixture.
+m._probe_cases = lambda authority: m.APEX_INGRESS_CASES
+m.edge_authority = lambda: 'xennic.ir'
 try:
-    m.check_apex_ingress_protection(ip)
+    m.check_ingress_protection(ip)
 except m.Rejected:
     print('PASS: fixed apex probe rejected synthetic gate outage')
 else:

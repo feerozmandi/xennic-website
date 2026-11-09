@@ -110,8 +110,17 @@ class ReadinessTest(unittest.TestCase):
                 self.put('config/backup.json', json.dumps(dict(config, **patch)))
                 with self.assertRaises(readiness.NotReady): self.check()
         self.put('config/backup.json', json.dumps(config))
+        # The owner approved the public apex; only the two reviewed origins are
+        # accepted, and the no-real-customer-data attestation still applies.
         env.write_text(env.read_text().replace('https://preview.xennic.ir', 'https://xennic.ir'))
-        with self.assertRaises(readiness.NotReady): self.check()
+        self.assertIsNone(self.check())
+        for origin in ('https://www.xennic.ir', 'http://xennic.ir', 'https://xennic.ir.evil.example'):
+            with self.subTest(origin=origin):
+                env.write_text(env.read_text().replace('PREVIEW_ORIGIN=https://xennic.ir',
+                                                       'PREVIEW_ORIGIN=' + origin))
+                with self.assertRaises(readiness.NotReady): self.check()
+                env.write_text(env.read_text().replace('PREVIEW_ORIGIN=' + origin,
+                                                       'PREVIEW_ORIGIN=https://xennic.ir'))
         env.write_text(env.read_text().replace('https://xennic.ir', 'https://preview.xennic.ir'))
         (self.root / 'secrets/backup-identity').unlink()
         with self.assertRaises(readiness.NotReady): self.check()

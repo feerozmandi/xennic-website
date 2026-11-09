@@ -35,12 +35,23 @@ GATEWAY_IMAGES = {
     'caddy': 'caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e',
     'gate': 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916',
 }
+# Two reviewed edge identities only. The installed Caddyfile hash selects one;
+# a caller can never choose the authority, and any other file aborts.
 GATEWAY_FILES = {
-    'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
-    'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
-    'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
-    'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
-    'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
+    'preview.xennic.ir': {
+        'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
+        'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
+        'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
+        'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
+        'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
+    },
+    'xennic.ir': {
+        'config/gateway.yml': '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed',
+        'config/Caddyfile': '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2',
+        'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
+        'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
+        'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
+    },
 }
 PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback'})
 
@@ -50,8 +61,8 @@ INGRESS_CASES = (('GET', '/', 302), ('GET', '/admin', 302),
                  ('GET', '/api/pages', 401), ('POST', '/api/graphql', 401),
                  ('GET', '/media/missing.png', 302), ('GET', '/health', 302))
 
-# Candidate probe only: not wired into the preview activation path. No caller
-# can provide paths or hostnames; verify the gateway identity independently.
+# Public apex pages answer directly; every private path and every other host is
+# gated. Probes are fixed constants, never caller input.
 APEX_INGRESS_CASES = (
     ('GET', '/', 'xennic.ir', 200), ('HEAD', '/', 'xennic.ir', 200),
     ('GET', '/admin', 'xennic.ir', 302), ('GET', '/api/pages', 'xennic.ir', 401),
@@ -132,11 +143,11 @@ def validate_gateway_oauth(raw, caddy_ip, *, authority='preview.xennic.ir'):
     This deliberately rejects extra options, including alternate auth routes and
     provider endpoints. The caller must independently verify the exact running
     Caddy peer and supply its inspected IP, not an address from the config.
-    The operational caller still selects the existing preview policy; apex
-    validation is not wired into activation and cannot enable the listener.
+    The operational caller selects the mode from the installed Caddyfile hash
+    (see edge_authority); no request, environment value or argv can choose it.
     """
-    # The caller must select a fixed reviewed mode, never an untrusted host or
-    # request argument. The existing operational path remains preview-only.
+    # Only the two reviewed edges exist. Anything else is rejected before the
+    # file is parsed, so an arbitrary host can never become the policy.
     if authority not in ('preview.xennic.ir', 'xennic.ir'):
         raise Rejected('gateway authority not approved')
     try:
@@ -430,11 +441,34 @@ def verify_backup(release):
         raise Rejected('verified backup record missing') from exc
 
 
+def edge_authority():
+    """Derive the reviewed authority from the installed Caddyfile hash only.
+
+    No caller, request or environment value selects the mode. A file that is
+    not one of the reviewed edges aborts, so an unknown edge never looks valid.
+    """
+    try:
+        digest = hashlib.sha256(ready._read(ROOT, 'config/Caddyfile', 0)).hexdigest()
+    except ready.NotReady as exc:
+        raise Rejected('gateway files are missing or unsafe') from exc
+    for authority, files in GATEWAY_FILES.items():
+        if digest == files['config/Caddyfile']:
+            return authority
+    raise Rejected('gateway configuration differs from reviewed files')
+
+
+def _probe_cases(authority):
+    if authority == 'preview.xennic.ir':
+        return tuple((method, path, authority, expected) for method, path, expected in INGRESS_CASES)
+    return APEX_INGRESS_CASES
+
+
 def check_ingress_protection(caddy_ip):
-    """Probe fixed routes directly from the trusted host, not the candidate app.
+    """Probe the fixed routes from the trusted host, for the installed edge.
 
     A denial probe is not proof of OAuth or gateway identity: the caller must
-    verify the gateway and obtain this address from its inspected container.
+    verify the gateway container and pass its independently inspected address.
+    The public page must be the site itself, and private paths must stay gated.
     """
     try:
         addr = ipaddress.ip_address(caddy_ip)
@@ -442,17 +476,20 @@ def check_ingress_protection(caddy_ip):
             raise ValueError('invalid peer')
     except (ValueError, TypeError) as exc:
         raise Rejected('invalid Caddy probe address') from exc
-    headers = {'Host': 'preview.xennic.ir', 'Authorization': 'Bearer invalid-probe',
-               'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
+    cases = _probe_cases(edge_authority())
     for attempt in range(12):
         try:
-            for method, path, expected in INGRESS_CASES:
+            for method, path, authority, expected in cases:
+                headers = {'Host': authority, 'Authorization': 'Bearer invalid-probe',
+                           'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
                 conn = http.client.HTTPConnection(str(addr), 8080, timeout=4)
                 try:
                     conn.request(method, path, headers=headers)
                     response = conn.getresponse()
+                    content_type = (response.getheader('Content-Type') or '').split(';', 1)[0].strip().lower()
                     if (response.status != expected or
-                            (expected == 302 and response.getheader('Location') != '/oauth2/sign_in')):
+                            (expected == 302 and response.getheader('Location') != '/oauth2/sign_in') or
+                            (expected == 200 and content_type != 'text/html')):
                         raise Rejected('entry protection check failed')
                 finally:
                     conn.close()
@@ -462,43 +499,11 @@ def check_ingress_protection(caddy_ip):
             time.sleep(1)
 
 
-def check_apex_ingress_protection(caddy_ip):
-    """Candidate apex probe; identity, actual TLS and OAuth are separate checks.
-
-    This is intentionally not wired into activation yet. Callers must first
-    verify the exact gateway container and use its independently inspected IP.
-    """
-    try:
-        addr = ipaddress.ip_address(caddy_ip)
-        if addr.version != 4 or not addr.is_private or addr.is_loopback:
-            raise ValueError('invalid peer')
-    except (ValueError, TypeError) as exc:
-        raise Rejected('invalid Caddy probe address') from exc
-    for attempt in range(12):
-        try:
-            for method, path, authority, expected in APEX_INGRESS_CASES:
-                headers = {'Host': authority, 'Authorization': 'Bearer invalid-probe',
-                           'X-Forwarded-User': 'untrusted-probe', 'X-Auth-Request-User': 'untrusted-probe'}
-                conn = http.client.HTTPConnection(str(addr), 8080, timeout=4)
-                try:
-                    conn.request(method, path, headers=headers)
-                    response = conn.getresponse()
-                    if (response.status != expected or
-                            (expected == 302 and response.getheader('Location') != '/oauth2/sign_in') or
-                            (expected == 200 and (response.getheader('Content-Type') or '').split(';', 1)[0].strip().lower() != 'text/html')):
-                        raise Rejected('apex entry protection check failed')
-                finally:
-                    conn.close()
-            return
-        except (OSError, http.client.HTTPException, Rejected) as exc:
-            if attempt == 11: raise Rejected('apex entry protection check failed') from exc
-            time.sleep(1)
-
-
 def gateway_configuration():
     """Accept only the reviewed fixed files and fixed private OAuth policy."""
+    authority = edge_authority()
     try:
-        for path, expected in GATEWAY_FILES.items():
+        for path, expected in GATEWAY_FILES[authority].items():
             if hashlib.sha256(ready._read(ROOT, path, 0)).hexdigest() != expected:
                 raise Rejected('gateway configuration differs from reviewed files')
         env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
@@ -508,8 +513,9 @@ def gateway_configuration():
         # The public edge accepts only standard HTTP/HTTPS host ports.
         if (edge, ports) not in (('0.0.0.0', ('80', '443')), ('127.0.0.2', ('18080', '18443'))):
             raise Rejected('edge bind address or ports not approved')
-        validate_gateway_oauth(ready._read(ROOT, 'secrets/oauth2-proxy.cfg', 0), '172.28.190.2')
-        return edge, ports
+        validate_gateway_oauth(ready._read(ROOT, 'secrets/oauth2-proxy.cfg', 0), '172.28.190.2',
+                               authority=authority)
+        return edge, ports, authority
     except ready.NotReady as exc:
         raise Rejected('gateway files are missing or unsafe') from exc
 
@@ -555,7 +561,7 @@ def start_gateway(app_id):
 def require_verified_gateway(app_id):
     """Require exact container images, configuration and network peers."""
     if not re.fullmatch('[0-9a-f]{12,64}', app_id): raise Rejected('invalid app identity')
-    edge, edge_ports = gateway_configuration()
+    edge, edge_ports, authority = gateway_configuration()
     images = gateway_image_ids()
     ids = {}
     items = {}
@@ -603,7 +609,7 @@ def require_verified_gateway(app_id):
             raise Rejected('Caddy command mismatch')
         base_env = dict(entry.split('=', 1) for entry in (base.get('Env') or []) if '=' in entry)
         if service == 'caddy':
-            base_env.update({'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000', 'PUBLIC_AUTHORITY': 'preview.xennic.ir'})
+            base_env.update({'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000', 'PUBLIC_AUTHORITY': authority})
         actual_env = config.get('Env') or []
         parsed_env = dict(entry.split('=', 1) for entry in actual_env if '=' in entry)
         if len(parsed_env) != len(actual_env) or parsed_env != base_env:
@@ -626,7 +632,7 @@ def require_verified_gateway(app_id):
                 raise Rejected('Caddy port mapping mismatch')
             env = dict(entry.split('=', 1) for entry in (config.get('Env') or []) if '=' in entry)
             if any(env.get(k) != v for k, v in {'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000',
-                                                 'PUBLIC_AUTHORITY': 'preview.xennic.ir'}.items()) or 'CADDY_SITE' in env:
+                                                 'PUBLIC_AUTHORITY': authority}.items()) or 'CADDY_SITE' in env:
                 raise Rejected('Caddy effective configuration is unsafe')
     expected_mounts = {
         'gate': {'/etc/oauth2-proxy.cfg': str(ROOT / 'secrets/oauth2-proxy.cfg')},
