@@ -141,6 +141,8 @@ PREVIEW_PAYLOAD_SECRET=disposable-ci-secret-not-real
 PREVIEW_PORT=33019
 PREVIEW_ORIGIN=https://preview.xennic.ir
 PREVIEW_EDGE_IP=127.0.0.2
+PREVIEW_EDGE_HTTP=18080
+PREVIEW_EDGE_HTTPS=18443
 EOF
 sudo install -o root -g root -m 0600 "$scratch/preview.env" /srv/xennic-preview/secrets/preview.env
 compose=(sudo docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml)

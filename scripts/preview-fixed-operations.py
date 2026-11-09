@@ -35,7 +35,7 @@ GATEWAY_IMAGES = {
     'gate': 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916',
 }
 GATEWAY_FILES = {
-    'config/gateway.yml': 'ad8f765d05581bb6cd982a2bcf3b1f18853e3c130d36e5005add909a2ab04017',
+    'config/gateway.yml': '8d904c781015254396f3aa5251b6a1e53b0963f440be3d1888c0694028ff576f',
     'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
     'config/routes.caddy': 'd089cbb65414cd01600383df1bfbea10c0ab6c8e423ad4701324cb368e902033',
     'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
@@ -457,12 +457,13 @@ def gateway_configuration():
                 raise Rejected('gateway configuration differs from reviewed files')
         env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
         edge = env.get('PREVIEW_EDGE_IP')
-        # Loopback is safe for an isolated test; public service requires the
-        # dedicated edge to bind all interfaces. It never enables another port.
-        if edge not in ('0.0.0.0', '127.0.0.2'):
-            raise Rejected('edge bind address not approved')
+        ports = (env.get('PREVIEW_EDGE_HTTP'), env.get('PREVIEW_EDGE_HTTPS'))
+        # A loopback-only fixture must not collide with the runner's registry.
+        # The public edge accepts only standard HTTP/HTTPS host ports.
+        if (edge, ports) not in (('0.0.0.0', ('80', '443')), ('127.0.0.2', ('18080', '18443'))):
+            raise Rejected('edge bind address or ports not approved')
         validate_gateway_oauth(ready._read(ROOT, 'secrets/oauth2-proxy.cfg', 0), '172.28.190.2')
-        return edge
+        return edge, ports
     except ready.NotReady as exc:
         raise Rejected('gateway files are missing or unsafe') from exc
 
@@ -508,7 +509,7 @@ def start_gateway(app_id):
 def require_verified_gateway(app_id):
     """Require exact container images, configuration and network peers."""
     if not re.fullmatch('[0-9a-f]{12,64}', app_id): raise Rejected('invalid app identity')
-    edge = gateway_configuration()
+    edge, edge_ports = gateway_configuration()
     images = gateway_image_ids()
     ids = {}
     items = {}
@@ -564,8 +565,9 @@ def require_verified_gateway(app_id):
                 raise Rejected('gate effective configuration is unsafe')
         else:
             bindings = host.get('PortBindings') or {}
-            if set(bindings) != {'80/tcp', '443/tcp'} or any(
-                    bindings[p] != [{'HostIp': edge, 'HostPort': p.split('/')[0]}] for p in bindings):
+            expected_ports = {'80/tcp': edge_ports[0], '443/tcp': edge_ports[1]}
+            if set(bindings) != set(expected_ports) or any(
+                    bindings[p] != [{'HostIp': edge, 'HostPort': expected_ports[p]}] for p in bindings):
                 raise Rejected('Caddy port mapping mismatch')
             env = dict(entry.split('=', 1) for entry in (config.get('Env') or []) if '=' in entry)
             if any(env.get(k) != v for k, v in {'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000',

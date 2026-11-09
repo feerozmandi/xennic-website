@@ -10,8 +10,8 @@ services:
       APP_ADDR: app:3000
       PUBLIC_AUTHORITY: preview.xennic.ir
     ports:
-      - "${PREVIEW_EDGE_IP:?required}:80:80"
-      - "${PREVIEW_EDGE_IP:?required}:443:443"
+      - "${PREVIEW_EDGE_IP:?required}:${PREVIEW_EDGE_HTTP:?required}:80"
+      - "${PREVIEW_EDGE_IP:?required}:${PREVIEW_EDGE_HTTPS:?required}:443"
     volumes:
       - /srv/xennic-preview/config/Caddyfile:/etc/caddy/Caddyfile:ro
       - /srv/xennic-preview/config/routes.caddy:/etc/caddy/routes.caddy:ro
