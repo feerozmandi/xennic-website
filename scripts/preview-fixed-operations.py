@@ -35,7 +35,7 @@ GATEWAY_IMAGES = {
     'gate': 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916',
 }
 GATEWAY_FILES = {
-    'config/gateway.yml': '8d904c781015254396f3aa5251b6a1e53b0963f440be3d1888c0694028ff576f',
+    'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
     'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
     'config/routes.caddy': 'd089cbb65414cd01600383df1bfbea10c0ab6c8e423ad4701324cb368e902033',
     'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
@@ -536,7 +536,9 @@ def require_verified_gateway(app_id):
     caddy_net = caddy['NetworkSettings']['Networks']; gate_net = gate['NetworkSettings']['Networks']
     if (set(caddy_net) != {'xennic-preview_gateway', 'xennic-preview-gateway_auth'} or
             set(gate_net) != {'xennic-preview-gateway_auth'} or
-            caddy_net['xennic-preview-gateway_auth'].get('IPAddress') != '172.28.190.2'):
+            caddy_net['xennic-preview-gateway_auth'].get('IPAddress') != '172.28.190.2' or
+            gate_net['xennic-preview-gateway_auth'].get('IPAddress') != '172.28.190.3' or
+            gate_net['xennic-preview-gateway_auth'].get('NetworkID') != caddy_net['xennic-preview-gateway_auth'].get('NetworkID')):
         raise Rejected('gateway network mismatch')
     for network, expected in ((caddy_net['xennic-preview_gateway'], {app_id, ids['caddy']}),
                               (caddy_net['xennic-preview-gateway_auth'], {ids['caddy'], ids['gate']})):
@@ -553,6 +555,13 @@ def require_verified_gateway(app_id):
             raise Rejected('gateway entrypoint mismatch')
         if service == 'caddy' and config.get('Cmd') != base.get('Cmd'):
             raise Rejected('Caddy command mismatch')
+        base_env = dict(entry.split('=', 1) for entry in (base.get('Env') or []) if '=' in entry)
+        if service == 'caddy':
+            base_env.update({'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000', 'PUBLIC_AUTHORITY': 'preview.xennic.ir'})
+        actual_env = config.get('Env') or []
+        parsed_env = dict(entry.split('=', 1) for entry in actual_env if '=' in entry)
+        if len(parsed_env) != len(actual_env) or parsed_env != base_env:
+            raise Rejected('gateway environment mismatch')
         if (host.get('NetworkMode') == 'host' or host.get('PublishAllPorts') or host.get('Privileged') or
                 host.get('Devices') or host.get('PidMode') == 'host' or host.get('IpcMode') == 'host' or
                 host.get('ExtraHosts') or host.get('CapAdd') or host.get('LogConfig', {}).get('Type') != 'none'):

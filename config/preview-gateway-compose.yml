@@ -34,7 +34,9 @@ services:
     command: ["--config=/etc/oauth2-proxy.cfg"]
     volumes:
       - /srv/xennic-preview/secrets/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
-    networks: [auth]
+    networks:
+      auth:
+        ipv4_address: 172.28.190.3
 networks:
   gateway:
     external: true
