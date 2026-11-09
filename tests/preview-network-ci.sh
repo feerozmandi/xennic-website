@@ -85,9 +85,20 @@ print('PASS: app, database, Caddy and synthetic gate have no host ports and use 
 PY
 if ! "${app[@]}" exec -T app node - <<'JS'
 (async () => {
-  const base = 'http://caddy:8080';
-  const call = (path, cookie, host = 'preview.xennic.ir', method = 'GET') => fetch(base + path, {redirect: 'manual', method, headers: {
-    Host: host, ...(cookie ? {Cookie: cookie} : {})}});
+  // Node fetch normalizes Host to the URL authority, so use http.request to
+  // test Caddy's actual host matcher rather than an ignored Host override.
+  const http = require('node:http');
+  const call = (path, cookie, host = 'preview.xennic.ir', method = 'GET') => new Promise((resolve, reject) => {
+    const req = http.request({hostname:'caddy', port:8080, path, method, headers:{
+      Host:host, ...(cookie ? {Cookie:cookie} : {})}}, response => {
+      const chunks=[]; response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve({status:response.statusCode, headers:new Headers(response.headers),
+        text:async () => Buffer.concat(chunks).toString('utf8')}));
+      response.on('error', reject);
+    });
+    req.setTimeout(10000, () => req.destroy(new Error('fixture request timeout')));
+    req.on('error', reject); req.end();
+  });
   const page = await call('/');
   if (page.status !== 302) throw Error('missing session did not block page');
   const api = await call('/api/pages');
@@ -110,7 +121,6 @@ if ! "${app[@]}" exec -T app node - <<'JS'
   if ((await call('/api/graphql', null, 'xennic.ir', 'POST')).status !== 401) throw Error('GraphQL was not gated');
   if ((await call('/', null, 'xennic.ir', 'POST')).status !== 302) throw Error('public POST was not gated');
   if ((await call('/', null, 'www.xennic.ir')).status !== 302) throw Error('unapproved host was not gated');
-  const http = require('node:http');
   for (const path of ['/services/%2e%2e/admin', '/_next/static/%2e%2e/%2e%2e/admin', '/services%2f..%2fadmin']) {
     const status = await new Promise((resolve, reject) => {
       const req = http.request({hostname:'caddy', port:8080, path, method:'GET', headers:{Host:'xennic.ir'}},
