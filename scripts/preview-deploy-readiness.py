@@ -87,8 +87,9 @@ def backup_config(root=ROOT, owner_uid=0):
                 not re.fullmatch(r"age1[023456789acdefghjklmnpqrstuvwxyz]{58}", backup["age_recipient"])):
             raise NotReady("temporary staging backup policy is not explicitly approved")
         env = _env(_read(Path(root), "secrets/preview.env", owner_uid))
-        if env.get("PREVIEW_ORIGIN") != "https://preview.xennic.ir":
-            raise NotReady("temporary backup policy is limited to preview staging")
+        # Only the two reviewed website origins, never an arbitrary host.
+        if env.get("PREVIEW_ORIGIN") not in ("https://preview.xennic.ir", "https://xennic.ir"):
+            raise NotReady("temporary backup policy is limited to the reviewed staging origins")
         _read(Path(root), "secrets/backup-identity", owner_uid)
         return backup
     keys = {"approved", "transport", "host", "port", "user", "remote_directory", "age_recipient"}

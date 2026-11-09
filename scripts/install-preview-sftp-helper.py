@@ -9,6 +9,7 @@ Neither path installs sudoers, SSH access, or deploys the application.
 """
 import hashlib
 import importlib.util
+import ipaddress
 import os
 from pathlib import Path
 import shutil
@@ -44,7 +45,7 @@ ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
 NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836930b'
-ACTIVATION_MANIFEST = '2a4a7e5a25dd199cd3a62056e1d03c22b6f0e9e69399c73421e5fc637e6b779c'
+ACTIVATION_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
 INCOMING_ACTIVATION = SOURCE / 'incoming-activation'
 BACKUP_ACTIVATION = PARENT / '.xennic-preview-before-activation'
 ACTIVATION_ROUTE_HASH = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
@@ -307,6 +308,200 @@ def upgrade_network():
     print('Fixed preview helpers and Compose upgraded; both previous versions preserved; no deployment started.')
 
 
+# Reviewed pre-first-deployment switch of the public edge from the private
+# preview host to the approved apex. Helpers, files and secrets change together
+# or not at all; both the previous helpers and originals are preserved.
+APEX_MANIFEST = ACTIVATION_MANIFEST
+INCOMING_APEX = SOURCE / 'incoming-apex'
+BACKUP_APEX = PARENT / '.xennic-preview-before-apex'
+APEX_STATE = ROOT / 'config/.apex-before'
+EDGE_PREVIEW = {'Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
+                'gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b'}
+APEX_SOURCES = {'apex-Caddyfile': ('Caddyfile', '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2'),
+                'apex-gateway-compose.yml': ('gateway.yml', '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed')}
+APEX_ORIGIN = ('https://preview.xennic.ir', 'https://xennic.ir')
+
+
+def _toml_value(value):
+    if type(value) is bool:
+        return 'true' if value else 'false'
+    if type(value) is int:
+        return str(value)
+    if isinstance(value, str):
+        if any(ord(ch) < 33 or ord(ch) > 126 for ch in value):
+            raise RuntimeError('unsupported gateway value')
+        return '"' + value + '"'
+    if isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+        return '[' + ', '.join(_toml_value(item) for item in value) + ']'
+    raise RuntimeError('unsupported gateway value')
+
+
+def _canonical_toml(config):
+    # Fixed key order is not required for TOML; deterministic output is.
+    return ''.join(f'{key} = {_toml_value(config[key])}\n' for key in sorted(config)).encode('ascii')
+
+
+def _exact_replace(raw, old, new, label):
+    # Whole-line replacement only: a suffixed or embedded look-alike (for
+    # example https://preview.xennic.ir.evil) must never be accepted.
+    lines = raw.split(b'\n')
+    if lines.count(old) != 1:
+        raise RuntimeError(f'{label} is not in the expected state')
+    return b'\n'.join(new if line == old else line for line in lines)
+
+
+def upgrade_apex():
+    """Switch the reviewed edge to the approved apex; no deployment started."""
+    for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT, ROOT):
+        check_dir(path)
+    private_dir(SOURCE)
+    private_dir(ROOT / 'config')
+    private_dir(ROOT / 'secrets')
+    private_dir(INCOMING_APEX)
+    if {p.name for p in SOURCE.iterdir()} != set(ACTIVATION_FILES) | {
+            'install-preview-sftp-helper.py', 'incoming-apex'}:
+        raise RuntimeError('unexpected staging contents')
+    if {p.name for p in INCOMING_APEX.iterdir()} != set(ACTIVATION_FILES) | {
+            'install-preview-sftp-helper.py'} | set(APEX_SOURCES):
+        raise RuntimeError('unexpected apex staging contents')
+    for path in (APEX_STATE, BACKUP_APEX):
+        if os.path.lexists(path):
+            raise RuntimeError('previous apex switch exists; review it first')
+    candidate = verified_sources(INCOMING_APEX, APEX_MANIFEST, ACTIVATION_FILES)
+    for source, (_, expected) in APEX_SOURCES.items():
+        if hashlib.sha256(read_private(INCOMING_APEX / source)).hexdigest() != expected:
+            raise RuntimeError('edge file is not approved')
+    # This switch is only for the reviewed pre-deployment installation.
+    if os.path.lexists(ROOT / 'state/release-state.json') or any((ROOT / 'state').iterdir()) \
+            or any((ROOT / 'work').iterdir()):
+        raise RuntimeError('deployment state exists; apex switch requires a pristine install')
+    for name, expected in EDGE_PREVIEW.items():
+        if hashlib.sha256(read_private(ROOT / 'config' / name)).hexdigest() != expected:
+            raise RuntimeError('installed edge differs from approved preview version')
+    for name, expected in (('routes.caddy', ACTIVATION_ROUTE_HASH),):
+        if hashlib.sha256(read_private(ROOT / 'config' / name)).hexdigest() != expected:
+            raise RuntimeError('installed routes are not approved')
+    if not os.path.isdir(TARGET):
+        raise RuntimeError('helper directory is missing')
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_apex_lock')
+    with locks.acquire_lock(nonblocking=True):
+        # Previous helper install must be one of the reviewed versions before
+        # its directory is replaced; aliases must still be identical copies.
+        aliases = EXECUTABLES['preview-fixed-operations.py']
+        contents = {read_private(TARGET / name) for name in aliases}
+        if len(contents) != 1:
+            raise RuntimeError('installed guard aliases differ')
+        for name in candidate:
+            if name == 'preview-fixed-operations.py':
+                continue
+            for installed in EXECUTABLES.get(name, (name,)):
+                if read_private(TARGET / installed) != candidate[name]:
+                    raise RuntimeError('installed helper differs from approved version')
+        oauth_path, env_path = ROOT / 'secrets/oauth2-proxy.cfg', ROOT / 'secrets/preview.env'
+        oauth_raw, env_raw = read_private(oauth_path), read_private(env_path)
+        # The guard is installed only under its fixed executable aliases.
+        fixed = module(TARGET / 'release-check', 'installer_apex_guard')
+        try:
+            existing = __import__('tomllib').loads(oauth_raw.decode('utf-8'))
+            fixed.validate_gateway_oauth(oauth_raw, str(ipaddress.ip_address(
+                existing['trusted_proxy_ips'][0].split('/')[0])))
+        except (ValueError, KeyError, IndexError, UnicodeError) as exc:
+            raise RuntimeError('installed gateway policy is not the approved preview version') from exc
+        updated = dict(existing)
+        updated['redirect_url'] = 'https://xennic.ir/oauth2/callback'
+        updated['whitelist_domains'] = ['xennic.ir']
+        oauth_new = _canonical_toml(updated)
+        fixed.validate_gateway_oauth(oauth_new, str(ipaddress.ip_address(
+            updated['trusted_proxy_ips'][0].split('/')[0])), authority='xennic.ir')
+        env_new = _exact_replace(env_raw, f'PREVIEW_ORIGIN={APEX_ORIGIN[0]}'.encode('ascii'),
+                                 f'PREVIEW_ORIGIN={APEX_ORIGIN[1]}'.encode('ascii'), 'staging origin')
+        readiness = module(TARGET / 'preview-deploy-readiness.py', 'installer_apex_env')
+        parsed_env = readiness._env(env_new)
+        if parsed_env.get('PREVIEW_ORIGIN') != APEX_ORIGIN[1]:
+            raise RuntimeError('staging origin was not switched exactly')
+        APEX_STATE.mkdir(mode=0o700)
+        for name, raw in (('Caddyfile', read_private(ROOT / 'config/Caddyfile')),
+                          ('gateway.yml', read_private(ROOT / 'config/gateway.yml')),
+                          ('oauth2-proxy.cfg', oauth_raw), ('preview.env', env_raw)):
+            write_exclusive(APEX_STATE / name, raw)
+        sync_dir(APEX_STATE)
+        NEW_DIR.mkdir(mode=0o700)
+        for name in ACTIVATION_FILES:
+            for installed in EXECUTABLES.get(name, (name,)):
+                write_exclusive(NEW_DIR / installed, candidate[name], 0o700 if name in EXECUTABLES else 0o600)
+        sync_dir(NEW_DIR)
+        installed_matches(NEW_DIR, candidate)
+        staged = {}
+        for source, (destination, _) in APEX_SOURCES.items():
+            staged[destination] = read_private(INCOMING_APEX / source)
+        staged['oauth2-proxy.cfg'], staged['preview.env'] = oauth_new, env_new
+        temps = {}
+        for name, raw in staged.items():
+            target = ROOT / ('config' if name in ('Caddyfile', 'gateway.yml') else 'secrets') / name
+            temp = target.with_name('.' + name + '.apex-update')
+            if os.path.lexists(temp): raise RuntimeError('incomplete apex update exists')
+            write_exclusive(temp, raw)
+            temps[name] = (temp, target)
+        renamed_old = renamed_new = False
+        try:
+            os.rename(TARGET, BACKUP_APEX); renamed_old = True; sync_parent()
+            os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            for temp, target in temps.values():
+                os.replace(temp, target)
+            sync_dir(ROOT / 'config'); sync_dir(ROOT / 'secrets')
+            verify_backend()
+            if hashlib.sha256(read_private(ROOT / 'config/Caddyfile')).hexdigest() != \
+                    APEX_SOURCES['apex-Caddyfile'][1]:
+                raise RuntimeError('installed edge verification failed')
+        except BaseException:
+            for temp, _ in temps.values():
+                if os.path.lexists(temp): os.unlink(temp)
+            for name, raw in (('Caddyfile', APEX_STATE / 'Caddyfile'), ('gateway.yml', APEX_STATE / 'gateway.yml')):
+                restore = ROOT / 'config' / name
+                if os.path.lexists(restore): os.unlink(restore)
+                write_exclusive(restore, read_private(raw))
+            for name, raw in (('oauth2-proxy.cfg', APEX_STATE / 'oauth2-proxy.cfg'),
+                              ('preview.env', APEX_STATE / 'preview.env')):
+                restore = ROOT / 'secrets' / name
+                if os.path.lexists(restore): os.unlink(restore)
+                write_exclusive(restore, read_private(raw))
+            sync_dir(ROOT / 'config'); sync_dir(ROOT / 'secrets')
+            if renamed_new: os.rename(TARGET, NEW_DIR)
+            if renamed_old: os.rename(BACKUP_APEX, TARGET)
+            sync_parent()
+            raise
+    print('Public edge switched to the approved apex; originals preserved; no deployment started.')
+
+
+def rollback_apex():
+    """Restore the reviewed preview edge and previous helpers from the switch."""
+    for path in (Path('/root'), PARENT, ROOT):
+        check_dir(path)
+    if not os.path.lexists(APEX_STATE) or not os.path.lexists(BACKUP_APEX):
+        raise RuntimeError('no completed apex switch to roll back')
+    private_dir(APEX_STATE)
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_apex_rollback_lock')
+    with locks.acquire_lock(nonblocking=True):
+        if os.path.lexists(ROOT / 'state/release-state.json') or any((ROOT / 'work').iterdir()):
+            raise RuntimeError('deployment state exists; review before rollback')
+        for name in ('Caddyfile', 'gateway.yml'):
+            original = read_private(APEX_STATE / name)
+            current = ROOT / 'config' / name
+            if os.path.lexists(current): os.unlink(current)
+            write_exclusive(current, original)
+        for name in ('oauth2-proxy.cfg', 'preview.env'):
+            original = read_private(APEX_STATE / name)
+            current = ROOT / 'secrets' / name
+            if os.path.lexists(current): os.unlink(current)
+            write_exclusive(current, original)
+        sync_dir(ROOT / 'config'); sync_dir(ROOT / 'secrets')
+        os.rename(TARGET, PARENT / '.xennic-preview-apex-rejected')
+        os.rename(BACKUP_APEX, TARGET)
+        sync_parent()
+        verify_backend()
+    print('Rolled back to the reviewed preview edge; rejected apex helpers preserved.')
+
+
 def upgrade_activation():
     """Only the verified network install before first deployment; no configuration changes."""
     for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
@@ -376,6 +571,10 @@ def upgrade_activation():
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('root required')
+    if sys.argv[1:] == ['--upgrade-apex']:
+        return upgrade_apex()
+    if sys.argv[1:] == ['--rollback-apex']:
+        return rollback_apex()
     if sys.argv[1:] == ['--upgrade']:
         if os.path.lexists(INCOMING_ACTIVATION): return upgrade_activation()
         return upgrade_network() if os.path.lexists(INCOMING_NETWORK) else upgrade()
