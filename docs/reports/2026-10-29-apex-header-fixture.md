@@ -12,7 +12,7 @@
 
 - به fixture موجود یک نمونهٔ جداگانهٔ Caddy با authority صریح `xennic.ir` و upstream مصنوعی افزوده شد؛ این تغییر فایل‌های پیکربندی عملیاتی و installer را تغییر نمی‌دهد.
 - آزمون بررسی می‌کند bearer به gate نرسد، بدون نشست gate به API دسترسی ندهد، cookie gate به برنامه نرسد، cookie برنامه و Origin و bearer حفظ شوند و هویت و host جعلی بازنویسی شوند. مقادیر و پاسخ‌های echo مصنوعی‌اند.
-- یک مسیر CI دیگر برای آزمون Payload واقعی از طریق Caddy با authority و origin دامنهٔ اصلی، gate مصنوعی و دادهٔ ساختگی اضافه شده است؛ ثبت Staff، ورود، Bearer، cookie، Origin و GraphQL را بررسی می‌کند. نتیجهٔ این بخش هنوز در انتظار CI است.
+- یک مسیر CI دیگر برای آزمون Payload واقعی از طریق Caddy با authority و origin دامنهٔ اصلی، gate مصنوعی و دادهٔ ساختگی اضافه شده است؛ ثبت Staff، ورود، Bearer، cookie، Origin و GraphQL را بررسی می‌کند. این آزمون با [CI 42706932221](https://github.com/feerozmandi/xennic-website/actions/runs/42706932221) موفق بود.
 
 ## آزمون‌ها و شواهد
 
