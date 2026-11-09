@@ -123,7 +123,25 @@ for directory in (ROOT / 'state', ROOT / 'work'):
 # Successful first install performs migration, seed, health, encrypted backup,
 # isolated restore, a second health check, then records the real first release.
 select('previous')
-result = backend.run_checked(json.dumps(previous).encode(), b'synthetic-token', backend.Backend(b'synthetic-token'))
+try:
+    result = backend.run_checked(json.dumps(previous).encode(), b'synthetic-token', backend.Backend(b'synthetic-token'))
+except backend.transaction.DeploymentFailed:
+    # Keep this test failing: successful first installation is still required.
+    # Nevertheless verify the actual installed failure path preserves the data
+    # and closes the app while the gateway guard is intentionally in place.
+    failed = backend.states.Journal().read()
+    if (not failed['blocked'] or failed['current'] is not None or failed['pending'] != previous or
+            failed.get('failure') != 'initial-deployment-failed'):
+        raise AssertionError('initial failure left an unsafe journal')
+    marker = ROOT / 'state' / f"activation-{previous['run_number']}.json"
+    if not marker.is_file(): raise AssertionError('initial failure occurred before activation')
+    failed_id = subprocess.check_output(compose + ['ps', '--all', '-q', 'app'], env=initial_env, text=True).strip()
+    if subprocess.check_output(['/usr/bin/docker', 'inspect', '-f', '{{.State.Running}}', failed_id], text=True).strip() != 'false':
+        raise AssertionError('initial failure left the app running')
+    for volume in ('xennic-preview_preview_db', 'xennic-preview_preview_media'):
+        subprocess.check_call(['/usr/bin/docker', 'volume', 'inspect', volume], stdout=subprocess.DEVNULL)
+    print('PASS: failed initial activation remains blocked, app stopped, volumes preserved; success is still required', flush=True)
+    raise
 journal = backend.states.Journal().read()
 record = json.loads((ROOT / 'state' / f"backup-{previous['run_number']}.json").read_text())
 if result != previous or journal['blocked'] or journal['current'] != previous or journal['previous']:
