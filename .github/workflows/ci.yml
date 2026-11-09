@@ -73,8 +73,19 @@ jobs:
                      'run_number': 151,
                      'digest': 'sha256:9e70bfceebafb0dd83152fb09f2e4d34b2e109497c34a1dad827e5046a31071f',
                      'platform': 'linux/amd64'}
-          v.assert_current(release, v.PUBLIC_READ)
-          assert v.verify(release, v.PUBLIC_READ) == 42642887548
+          try:
+              v.assert_current(release, v.PUBLIC_READ)
+          except v.Unverified as exc:
+              print('::error::Public current-tip verification failed: ' + str(exc))
+              raise SystemExit(1)
+          try:
+              result = v.verify(release, v.PUBLIC_READ)
+          except v.Unverified as exc:
+              print('::error::Public publication verification failed: ' + str(exc))
+              raise SystemExit(1)
+          if result != 42642887548:
+              print('::error::Publication run mismatch')
+              raise SystemExit(1)
           print('::notice::Actual public dev artifact verified without a GitHub credential')
           PY
 
