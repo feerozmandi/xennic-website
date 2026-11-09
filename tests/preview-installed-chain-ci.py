@@ -90,7 +90,30 @@ if (not journal['blocked'] or journal['current'] is not None or journal['pending
         journal.get('failure') != 'initial-deployment-failed'):
     raise AssertionError('failed initial install did not record a blocked failure')
 marker = ROOT / 'state' / f"activation-{second['run_number']}.json"
-if not marker.is_file(): raise AssertionError('initial failure did not reach activation')
+if not marker.is_file():
+    # Disposable-fixture diagnostics only; never print OAuth config or secrets.
+    print('CI diagnostic: activation marker absent; inspecting fixed gateway state', flush=True)
+    diagnostic = ['/usr/bin/docker', 'compose', '-p', 'xennic-preview-gateway', '--env-file',
+                  str(ROOT / 'secrets/preview.env'), '-f', str(ROOT / 'config/gateway.yml')]
+    subprocess.run(diagnostic + ['config', '--quiet'], check=False)
+    subprocess.run(diagnostic + ['ps', '--all'], check=False)
+    for service in ('caddy', 'gate'):
+        ids = subprocess.check_output(diagnostic + ['ps', '--all', '-q', service], text=True).split()
+        if len(ids) == 1:
+            data = json.loads(subprocess.check_output(['/usr/bin/docker', 'inspect', ids[0]]))[0]
+            print('CI diagnostic:', service, 'state=', data.get('State', {}).get('Status'),
+                  'error=', data.get('State', {}).get('Error'), flush=True)
+    import importlib.machinery
+    loader = importlib.machinery.SourceFileLoader('installed_fixed_diagnostic', str(LIBEXEC / 'activate'))
+    diagnostic_spec = importlib.util.spec_from_loader(loader.name, loader)
+    diagnostic_module = importlib.util.module_from_spec(diagnostic_spec); loader.exec_module(diagnostic_module)
+    try:
+        diagnostic_module.gateway_configuration()
+        diagnostic_module.gateway_image_ids()
+        print('CI diagnostic: fixed gateway files and images verified', flush=True)
+    except (RuntimeError, ValueError, OSError) as exc:
+        print('CI diagnostic: fixed gateway preflight failed:', str(exc), flush=True)
+    raise AssertionError('initial failure did not reach activation')
 initial_env = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent',
                'PREVIEW_IMAGE': 'ghcr.io/feerozmandi/xennic-website@' + second['digest']}
 compose = ['/usr/bin/docker', 'compose', '-p', 'xennic-preview', '--env-file', str(ROOT / 'secrets/preview.env'),
