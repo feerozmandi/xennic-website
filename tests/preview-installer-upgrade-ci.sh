@@ -143,7 +143,18 @@ for f in "${files[@]}" install-preview-sftp-helper.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-network/$f"
 done
 sudo install -o root -g root -m 0600 config/preview-compose.yml /root/xennic-preview-install/incoming-network/preview-compose.yml
+for f in preview-gateway-compose.yml preview-Caddyfile routes.caddy oauth-gateway.caddy upstream.caddy; do
+  sudo install -o root -g root -m 0600 "config/$f" "/root/xennic-preview-install/incoming-network/$f"
+done
 new_installer=/root/xennic-preview-install/incoming-network/install-preview-sftp-helper.py
+printf 'unknown gateway\n' | sudo tee /srv/xennic-preview/config/Caddyfile >/dev/null
+sudo chmod 0600 /srv/xennic-preview/config/Caddyfile
+if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Existing gateway accepted' >&2; exit 1; fi
+sudo grep -qx 'unknown gateway' /srv/xennic-preview/config/Caddyfile
+sudo rm /srv/xennic-preview/config/Caddyfile # disposable fixture only
+printf 'unknown gateway version\n' | sudo tee /root/xennic-preview-install/incoming-network/routes.caddy >/dev/null
+if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Unknown gateway source accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-network/routes.caddy
 printf 'unknown compose\n' | sudo tee /srv/xennic-preview/config/compose.yml >/dev/null
 if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Unknown previous compose accepted' >&2; exit 1; fi
 sudo install -o root -g root -m 0600 "$scratch/old-compose.yml" /srv/xennic-preview/config/compose.yml
@@ -173,7 +184,8 @@ m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
 m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
 if m.read_private(m.COMPOSE) != m.read_private(m.COMPOSE_BACKUP): raise AssertionError('old Compose not restored')
 if m.BACKUP_NETWORK.exists() or not m.NEW_DIR.exists(): raise AssertionError('old helper directory not restored')
-print('PASS: network upgrade failure restored previous helper and Compose')
+if any((m.ROOT / 'config' / name).exists() for name in m.GATEWAY_FILES): raise AssertionError('created gateway files survived rollback')
+print('PASS: network upgrade failure restored previous helper and Compose, removed only created gateway files')
 PY
 sudo rm -rf /usr/local/libexec/.xennic-preview-update # disposable fixture only
 sudo rm /srv/xennic-preview/config/.compose-before-network.yml # disposable fixture only
@@ -187,8 +199,12 @@ m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_M
 m.installed_matches(m.BACKUP_NETWORK, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
 m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
 if m.read_private(m.COMPOSE_BACKUP) == m.read_private(m.COMPOSE): raise AssertionError('Compose not upgraded')
+import hashlib
+for name, (source, expected) in m.GATEWAY_FILES.items():
+    if hashlib.sha256(m.read_private(m.ROOT / 'config' / name)).hexdigest() != expected:
+        raise AssertionError('gateway file not installed exactly')
 m.verify_backend()
-print('PASS: isolated-network helpers and Compose installed; both previous helper sets and Compose retained')
+print('PASS: isolated-network helpers, Compose and fixed gateway installed; previous helpers and Compose retained')
 PY
 after=$(sudo sha256sum /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 [[ "$before" == "$after" ]] || { echo 'Protected fixture changed' >&2; exit 1; }
