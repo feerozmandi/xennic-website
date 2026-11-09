@@ -287,7 +287,8 @@ const cleartext = () => new Promise((resolve, reject) => {
   assert.equal((await secure('/api/pages')).status, 401, 'API gate on TLS');
   assert.equal((await secure('/api/pages', {headers:{Cookie:'__Host-preview_gate=ci-valid'}})).status, 200, 'synthetic gate session on TLS');
   assert.equal((await secure('/media/missing.png')).status, 302, 'media gate on TLS');
-  assert.ok([404,421].includes((await secure('/', {host:'unapproved.example.invalid'})).status), 'foreign Host reached site');
+  const foreignHost = await secure('/', {host:'unapproved.example.invalid'});
+  assert.equal(foreignHost.status, 421, 'mismatched Host/SNI was not rejected: ' + foreignHost.status);
   await assert.rejects(secure('/', {servername:'unapproved.example.invalid'}), 'foreign SNI was accepted');
   const redirect = await cleartext();
   assert.equal(redirect.status, 308, 'HTTP must only redirect');

@@ -2,6 +2,10 @@
 # apex gateway configuration, OAuth, health guards and upgrade are complete.
 {
     admin off
+    # Reject HTTPS requests whose Host differs from the TLS server name.
+    servers {
+        strict_sni_host on
+    }
 }
 
 https://xennic.ir {
