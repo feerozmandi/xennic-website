@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Restricted preview backend. Not wired to SSH or enabled for live deployment.
+"""Restricted preview backend using the fixed installed privileged operations.
 
-The privileged operations are fixed, root-owned programs below. They are NOT
-installed or implemented by this module. In particular, a real, independently
-reviewed backup/restore driver is a prerequisite, not a successful stub.
+The CLI requires root and a validated two-line request on stdin. SSH access
+requires a separately configured, fixed forced receiver; this is not a provisioner.
 """
 import importlib.util
 import json
@@ -69,7 +68,7 @@ class FixedRunner:
                 raise BackendError("preview helper directory is unsafe")
         if os.lstat(HELPER_DIR).st_mode & 0o077:
             raise BackendError("preview helper directory is not private")
-        executables = (*PHASES.values(), HELPER_DIR / "sftp-transfer")
+        executables = (*PHASES.values(), HELPER_DIR / "sftp-transfer", HELPER_DIR / "deploy-receiver")
         modules = tuple(HELPER_DIR / name for name in (
             "preview-deploy-backend.py", "preview-deploy-transaction.py", "preview-deploy-lock.py",
             "preview-deploy-readiness.py", "preview-deploy-state.py", "preview-deploy-manifest.py",
@@ -232,11 +231,30 @@ def run_checked(raw_manifest, token, backend):
     return transaction.deploy(raw_manifest, backend)
 
 
+def run_request(raw):
+    # Exact existing two-line protocol; all data is revalidated before any lock.
+    if not isinstance(raw, bytes) or len(raw) > manifest.MAX_MANIFEST_BYTES + 4098:
+        raise BackendError("invalid preview deployment request")
+    lines = raw.split(b"\n")
+    if len(lines) != 3 or lines[2] or not lines[1] or len(lines[1]) > 4096 or any(x < 33 or x > 126 for x in lines[1]):
+        raise BackendError("invalid preview deployment request")
+    token = lines[1]
+    return run_checked(lines[0], token, Backend(token))
+
+
 def main():
-    # No production entry point until helpers, trusted setup and full integration
-    # are independently reviewed. The existing SSH receiver remains disabled.
-    print("Preview privileged backend is disabled; no server changes made.", file=sys.stderr)
-    return 1
+    if os.geteuid() != 0 or len(sys.argv) != 1:
+        print("Preview backend requires root and no arguments.", file=sys.stderr)
+        return 1
+    os.umask(0o077)
+    try:
+        run_request(sys.stdin.buffer.read(manifest.MAX_MANIFEST_BYTES + 4099))
+    except (ValueError, RuntimeError, OSError):
+        # Do not disclose tokens, untrusted input or privileged helper output.
+        print("Preview deployment blocked or failed; review server state.", file=sys.stderr)
+        return 1
+    print("Preview deployment completed; verify release status.")
+    return 0
 
 
 if __name__ == "__main__":

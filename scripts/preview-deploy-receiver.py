@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
-"""Validate the preview SSH protocol. Deployment is intentionally not enabled.
+#!/usr/bin/python3 -I
+"""Root-only fixed-command receiver for the existing two-line protocol.
 
-This is not a provisioner, sudo policy, or a deploy implementation. A future
-root-owned forced-command wrapper must still enforce its own trust boundary.
+It is not an SSH or sudo provisioner. The account and fixed forced command
+must be separately restricted; no arguments or shell commands are accepted.
 """
 import importlib.util
+import os
 from pathlib import Path
 import re
 import sys
@@ -15,11 +16,11 @@ spec = importlib.util.spec_from_file_location(
 )
 manifest = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(manifest)
-ready_spec = importlib.util.spec_from_file_location(
-    "preview_deploy_readiness", Path(__file__).with_name("preview-deploy-readiness.py")
+backend_spec = importlib.util.spec_from_file_location(
+    "preview_deploy_backend_receiver", Path(__file__).with_name("preview-deploy-backend.py")
 )
-readiness = importlib.util.module_from_spec(ready_spec)
-ready_spec.loader.exec_module(readiness)
+backend = importlib.util.module_from_spec(backend_spec)
+backend_spec.loader.exec_module(backend)
 
 COMMAND = "xennic-preview-deploy"
 MAX_TOKEN_BYTES = 4096
@@ -48,22 +49,28 @@ def parse_request(original_command, raw):
     return data, token
 
 
+def dispatch(original_command, raw):
+    parse_request(original_command, raw)
+    # The backend independently validates the request and calls run_checked;
+    # it alone owns the lock, provenance checks, backup, health and rollback.
+    return backend.run_request(raw)
+
+
 def main():
-    # This parser is intentionally not wired to sudo or a privileged operation.
-    # Do not deploy it as the authorized_keys forced-command in its current form.
-    import os
+    if os.geteuid() != 0 or len(sys.argv) != 1:
+        print("Invalid preview receiver invocation.", file=sys.stderr)
+        return 1
+    os.umask(0o077)
     try:
-        _, token = parse_request(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer.read(MAX_INPUT_BYTES + 1))
+        dispatch(os.environ.get("SSH_ORIGINAL_COMMAND", ""), sys.stdin.buffer.read(MAX_INPUT_BYTES + 1))
     except InvalidRequest:
         print("Invalid preview deployment request.", file=sys.stderr)
         return 2
-    try:
-        readiness.check(registry_token=token)
-    except readiness.NotReady as exc:
-        print(f"Preview deployment blocked: {exc}.", file=sys.stderr)
+    except (ValueError, RuntimeError, OSError):
+        print("Preview deployment blocked or failed; review server state.", file=sys.stderr)
         return 1
-    print("Preview deployment receiver is not enabled.", file=sys.stderr)
-    return 1
+    print("Preview deployment completed; verify release status.")
+    return 0
 
 
 if __name__ == "__main__":

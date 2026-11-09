@@ -222,11 +222,25 @@ class BackendTest(unittest.TestCase):
             self.assertEqual(run.call_args.args[0], [str(backend.PHASES['rollback'])])
             self.assertTrue(run.call_args.kwargs['input'].endswith(b'\ninitial-close\n'))
 
-    def test_cli_is_always_disabled(self):
-        result = subprocess.run([sys.executable, str(ROOT / "scripts/preview-deploy-backend.py")],
-                                capture_output=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(b"disabled", result.stderr)
+    def test_request_uses_checked_backend_and_rejects_invalid_structure(self):
+        payload = raw(2) + b'\nsynthetic-token\n'
+        with mock.patch.object(backend, 'Backend', return_value=self.ops) as make, \
+             mock.patch.object(backend, 'run_checked', return_value=release(2)) as checked:
+            self.assertEqual(backend.run_request(payload), release(2))
+            make.assert_called_once_with(b'synthetic-token')
+            checked.assert_called_once_with(raw(2), b'synthetic-token', self.ops)
+        for invalid in (b'', payload[:-1], payload + b'extra\n', raw(2) + b'\nbad token\n',
+                        raw(2) + b'\n' + b'x' * 4097 + b'\n'):
+            with mock.patch.object(backend, 'run_checked') as checked:
+                with self.assertRaises(backend.BackendError): backend.run_request(invalid)
+                checked.assert_not_called()
+
+    def test_cli_rejects_nonroot_and_arguments(self):
+        for uid, args in [(1000, ['backend']), (0, ['backend', 'argument'])]:
+            with self.subTest(uid=uid, args=args), mock.patch.object(backend.os, 'geteuid', return_value=uid), \
+                 mock.patch.object(backend.sys, 'argv', args), mock.patch.object(backend, 'run_request') as run:
+                self.assertEqual(backend.main(), 1)
+                run.assert_not_called()
 
     def test_fixed_runner_rejects_arbitrary_operations_and_paths(self):
         runner = backend.FixedRunner()
