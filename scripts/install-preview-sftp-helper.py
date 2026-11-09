@@ -44,9 +44,14 @@ ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
 NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836930b'
-ACTIVATION_MANIFEST = '9e654575c2e6a7a996e0513060b40c16d5dc585962e0163770b3a4c457a074ab'
+ACTIVATION_MANIFEST = '2a4a7e5a25dd199cd3a62056e1d03c22b6f0e9e69399c73421e5fc637e6b779c'
 INCOMING_ACTIVATION = SOURCE / 'incoming-activation'
 BACKUP_ACTIVATION = PARENT / '.xennic-preview-before-activation'
+ACTIVATION_ROUTE_HASH = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
+ROUTES = ROOT / 'config/routes.caddy'
+ROUTES_BACKUP = ROOT / 'config/.routes-before-activation.caddy'
+ROUTES_NEW = ROOT / 'config/.routes-activation-update.caddy'
+ROUTES_ROLLBACK = ROOT / 'config/.routes-activation-rollback.caddy'
 OLD_COMPOSE = '18a97bc2c21a6d623a54c81d07a49e44f6468cd225f0ce34a73f3760d3d0a373'
 NETWORK_COMPOSE = '44639d7d7f3678c8cb772d02768a8c51320ae4f71e7ccd3829b3d9d5126f2b7c'
 INCOMING_NETWORK = SOURCE / 'incoming-network'
@@ -314,14 +319,17 @@ def upgrade_activation():
         raise RuntimeError('unexpected current staging contents')
     if {p.name for p in INCOMING_NETWORK.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'preview-compose.yml'} | {source for source, _ in GATEWAY_FILES.values()}:
         raise RuntimeError('unexpected network staging contents')
-    if {p.name for p in INCOMING_ACTIVATION.iterdir()} != set(ACTIVATION_FILES) | {'install-preview-sftp-helper.py'}:
+    if {p.name for p in INCOMING_ACTIVATION.iterdir()} != set(ACTIVATION_FILES) | {'install-preview-sftp-helper.py', 'routes.caddy'}:
         raise RuntimeError('unexpected activation staging contents')
-    if os.path.lexists(NEW_DIR) or os.path.lexists(BACKUP_ACTIVATION):
-        raise RuntimeError('previous or incomplete activation update exists')
+    for path in (NEW_DIR, BACKUP_ACTIVATION, ROUTES_BACKUP, ROUTES_NEW, ROUTES_ROLLBACK):
+        if os.path.lexists(path): raise RuntimeError('previous or incomplete activation update exists')
     previous = verified_sources(SOURCE, OLD_MANIFEST)
     intermediate = verified_sources(INCOMING, NEW_MANIFEST)
     current = verified_sources(INCOMING_NETWORK, NETWORK_MANIFEST)
     candidate = verified_sources(INCOMING_ACTIVATION, ACTIVATION_MANIFEST, ACTIVATION_FILES)
+    new_routes = read_private(INCOMING_ACTIVATION / 'routes.caddy')
+    if hashlib.sha256(new_routes).hexdigest() != ACTIVATION_ROUTE_HASH:
+        raise RuntimeError('activation routes are not approved')
     installed_matches(BACKUP, previous)
     installed_matches(BACKUP_NETWORK, intermediate)
     installed_matches(TARGET, current)
@@ -336,24 +344,33 @@ def upgrade_activation():
         for destination, (_, expected) in GATEWAY_FILES.items():
             if hashlib.sha256(read_private(ROOT / 'config' / destination)).hexdigest() != expected:
                 raise RuntimeError('installed gateway differs from approved version')
+        old_routes = read_private(ROUTES)
         NEW_DIR.mkdir(mode=0o700)
         for name in ACTIVATION_FILES:
             for installed in EXECUTABLES.get(name, (name,)):
                 write_exclusive(NEW_DIR / installed, candidate[name], 0o700 if name in EXECUTABLES else 0o600)
         sync_dir(NEW_DIR)
         installed_matches(NEW_DIR, candidate)
-        renamed_old = renamed_new = False
+        write_exclusive(ROUTES_BACKUP, old_routes)
+        write_exclusive(ROUTES_NEW, new_routes)
+        sync_dir(ROUTES.parent)
+        renamed_old = renamed_new = replaced_routes = False
         try:
             os.rename(TARGET, BACKUP_ACTIVATION); renamed_old = True; sync_parent()
             os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            os.replace(ROUTES_NEW, ROUTES); replaced_routes = True; sync_dir(ROUTES.parent)
             installed_matches(TARGET, candidate)
+            if read_private(ROUTES) != new_routes: raise RuntimeError('new routes verification failed')
             verify_backend()
         except BaseException:
+            if replaced_routes:
+                write_exclusive(ROUTES_ROLLBACK, old_routes)
+                os.replace(ROUTES_ROLLBACK, ROUTES); sync_dir(ROUTES.parent)
             if renamed_new: os.rename(TARGET, NEW_DIR)
             if renamed_old: os.rename(BACKUP_ACTIVATION, TARGET)
             sync_parent()
             raise
-    print('Fixed helpers upgraded; previous versions preserved; no deployment or SSH setup started.')
+    print('Fixed helpers and routes upgraded; previous versions preserved; no deployment or SSH setup started.')
 
 
 def main():

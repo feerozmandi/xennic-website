@@ -1,4 +1,6 @@
-# Caddy 2.11.7; imported inside a site block. All app routes require auth.
+# Caddy 2.11.7; public website pages are scoped to the apex HTTPS host.
+# Everything else, including administration, API and media, requires the gate.
+# The currently installed preview Caddyfile does not expose the apex site.
 # The /oauth2/ path is forwarded ONLY to the gate, never to the application.
 # Callback failures can be CSRF, provider API/scope, profile or allowlist errors.
 # Preserve the error class; never expose the upstream body or claim a cause.
@@ -24,6 +26,17 @@ handle /oauth2/* {
 	reverse_proxy {$GATE_ADDR} {
 		import oauth-gateway.caddy
 	}
+}
+
+# Explicit public GET/HEAD routes only; no API, media or administrative paths.
+# The site's HTTPS listener for this host is not enabled by this file alone.
+@public_website {
+	host xennic.ir
+	method GET HEAD
+	path / /company /company/about /company/team /services /services/industrial-electrical-consulting /services/building-electrical-design /services/distribution-supervision /services/energy-audit /services/grounding-lightning-protection /services/technical-training /track-record /knowledge /tools /platform /contact /privacy /terms /cookies /favicon.ico /_next/static/*
+}
+handle @public_website {
+	import upstream.caddy
 }
 
 @api path /api /api/* /graphql /graphql/*

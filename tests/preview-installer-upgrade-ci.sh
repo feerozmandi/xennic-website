@@ -146,7 +146,8 @@ done
 sudo install -o root -g root -m 0600 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/incoming-network/install-preview-sftp-helper.py
 sudo install -o root -g root -m 0600 config/preview-compose.yml /root/xennic-preview-install/incoming-network/preview-compose.yml
 for f in preview-gateway-compose.yml preview-Caddyfile routes.caddy oauth-gateway.caddy upstream.caddy; do
-  sudo install -o root -g root -m 0600 "config/$f" "/root/xennic-preview-install/incoming-network/$f"
+  git show "09a9d00f25cee181a24fa39d645256869b6dc221:config/$f" > "$scratch/network-config-$f"
+  sudo install -o root -g root -m 0600 "$scratch/network-config-$f" "/root/xennic-preview-install/incoming-network/$f"
 done
 new_installer=/root/xennic-preview-install/incoming-network/install-preview-sftp-helper.py
 printf 'unknown gateway\n' | sudo tee /srv/xennic-preview/config/Caddyfile >/dev/null
@@ -156,7 +157,7 @@ sudo grep -qx 'unknown gateway' /srv/xennic-preview/config/Caddyfile
 sudo rm /srv/xennic-preview/config/Caddyfile # disposable fixture only
 printf 'unknown gateway version\n' | sudo tee /root/xennic-preview-install/incoming-network/routes.caddy >/dev/null
 if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Unknown gateway source accepted' >&2; exit 1; fi
-sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-network/routes.caddy
+sudo install -o root -g root -m 0600 "$scratch/network-config-routes.caddy" /root/xennic-preview-install/incoming-network/routes.caddy
 printf 'unknown compose\n' | sudo tee /srv/xennic-preview/config/compose.yml >/dev/null
 if sudo /usr/bin/python3 "$new_installer" --upgrade; then echo 'Unknown previous compose accepted' >&2; exit 1; fi
 sudo install -o root -g root -m 0600 "$scratch/old-compose.yml" /srv/xennic-preview/config/compose.yml
@@ -217,8 +218,12 @@ sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/incoming-ac
 for f in "${files[@]}" preview-deploy-receiver.py install-preview-sftp-helper.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-activation/$f"
 done
+sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
 activation=/root/xennic-preview-install/incoming-activation/install-preview-sftp-helper.py
-before_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/routes.caddy /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+before_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+printf 'unknown routes\n' | sudo tee /root/xennic-preview-install/incoming-activation/routes.caddy >/dev/null
+if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation routes accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
 printf 'unknown helper\n' | sudo tee /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py >/dev/null
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation source accepted' >&2; exit 1; fi
 sudo install -o root -g root -m 0600 scripts/preview-deploy-backend.py /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py
@@ -246,9 +251,11 @@ except RuntimeError as e:
     if str(e) != 'intentional activation failure': raise
 m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_MANIFEST))
 if m.BACKUP_ACTIVATION.exists() or not m.NEW_DIR.exists(): raise AssertionError('helper rollback failed')
-print('PASS: activation upgrade failure restored prior helpers')
+if m.read_private(m.ROUTES) != m.read_private(m.ROUTES_BACKUP): raise AssertionError('routes rollback failed')
+print('PASS: activation upgrade failure restored prior helpers and routes')
 PY
 sudo rm -rf /usr/local/libexec/.xennic-preview-update # disposable CI attempt only
+sudo rm /srv/xennic-preview/config/.routes-before-activation.caddy # disposable CI attempt only
 sudo /usr/bin/python3 "$activation" --upgrade
 sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
 import importlib.util, sys
@@ -259,9 +266,13 @@ m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_ACTIVATION, m.ACTIVA
 m.installed_matches(m.BACKUP_ACTIVATION, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_MANIFEST))
 m.installed_matches(m.BACKUP_NETWORK, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
 m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
+if m.read_private(m.ROUTES) != m.read_private(m.INCOMING_ACTIVATION / 'routes.caddy'):
+    raise AssertionError('new routes were not installed')
+if m.read_private(m.ROUTES_BACKUP) != m.read_private(m.INCOMING_NETWORK / 'routes.caddy'):
+    raise AssertionError('previous routes not retained')
 m.verify_backend()
-print('PASS: exact activation helpers installed; three previous helper sets retained')
+print('PASS: exact activation helpers and routes installed; previous versions retained')
 PY
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Repeated activation upgrade accepted' >&2; exit 1; fi
-after_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/routes.caddy /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+after_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 [[ "$before_config" == "$after_config" ]] || { echo 'Protected configuration changed' >&2; exit 1; }

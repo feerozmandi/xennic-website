@@ -209,8 +209,11 @@ timestamp = str(int(time.time()))
 signature = base64.urlsafe_b64encode(hmac.new(seed.encode(), (name + value + timestamp).encode(), hashlib.sha256).digest()).decode('ascii')
 synthetic_cookie = name + '=' + value + '|' + timestamp + '|' + signature
 valid_probe = """(async()=>{const cookie=require('fs').readFileSync(0,'utf8');
-const r=await fetch('http://caddy:8080/',{redirect:'manual',headers:{Host:'preview.xennic.ir',Cookie:cookie},signal:AbortSignal.timeout(5000)});
-if(r.status!==200 || !(await r.text()).includes('<html'))throw Error('synthetic authorized session did not reach app')
+const http=require('node:http'); const result=await new Promise((resolve,reject)=>{
+ const q=http.request({hostname:'caddy',port:8080,path:'/',headers:{Host:'preview.xennic.ir',Cookie:cookie}},r=>{
+  const chunks=[]; r.on('data',x=>chunks.push(x));r.on('end',()=>resolve({status:r.statusCode,body:Buffer.concat(chunks).toString()}));r.on('error',reject)});
+ q.setTimeout(5000,()=>q.destroy(new Error('timeout')));q.on('error',reject);q.end()});
+if(result.status!==200 || !result.body.includes('<html'))throw Error('synthetic authorized session did not reach app')
 })().catch(()=>process.exit(1))"""
 subprocess.run(compose + ['exec', '-T', 'app', 'node', '-e', valid_probe], env=initial_env,
                input=synthetic_cookie, text=True, check=True)
@@ -219,9 +222,11 @@ print('PASS: synthetic session reached the app through the helper-started gatewa
 # The operational helper, not CI, has started this real Caddy and OAuth2 Proxy.
 # Stop only the disposable gate and verify no unauthenticated path reaches app.
 subprocess.check_call(real_gateway + ['stop', 'gate'], env=initial_env)
-offline_probe = """(async()=>{for(const p of ['/','/admin','/api/pages','/api/graphql','/media/missing.png']){
- const r=await fetch('http://caddy:8080'+p,{redirect:'manual',headers:{Host:'preview.xennic.ir'},signal:AbortSignal.timeout(5000)});
- if(r.status<500)throw Error('gate outage did not close '+p)} })().catch(()=>process.exit(1))"""
+offline_probe = """(async()=>{const http=require('node:http');
+for(const p of ['/','/admin','/api/pages','/api/graphql','/media/missing.png']){
+ const status=await new Promise((resolve,reject)=>{const q=http.request({hostname:'caddy',port:8080,path:p,headers:{Host:'preview.xennic.ir'}},
+  r=>{r.resume();resolve(r.statusCode)});q.setTimeout(5000,()=>q.destroy(new Error('timeout')));q.on('error',reject);q.end()});
+ if(status<500)throw Error('gate outage did not close '+p)} })().catch(()=>process.exit(1))"""
 subprocess.check_call(compose + ['exec', '-T', 'app', 'node', '-e', offline_probe], env=initial_env)
 select('first')
 try:
@@ -241,14 +246,19 @@ gateway_compose = ['/usr/bin/docker', 'compose', '-p', 'xennic-ci-gateway', '-f'
                    '/root/xennic-preview-install/ci-gateway/compose.yml']
 probe = r"""
 (async () => {
+  const http = require('node:http');
+  const call = (path, cookie) => new Promise((resolve,reject) => {
+    const q=http.request({hostname:'caddy-fixture',port:8080,path,headers:{Host:'preview.xennic.ir',
+      ...(cookie ? {Cookie:cookie} : {})}},r=>{
+      const chunks=[];r.on('data',x=>chunks.push(x));
+      r.on('end',()=>resolve({status:r.statusCode,body:Buffer.concat(chunks).toString()}));r.on('error',reject)});
+    q.setTimeout(5000,()=>q.destroy(new Error('timeout')));q.on('error',reject);q.end();
+  });
   const paths = ['/', '/admin', '/api/pages', '/api/graphql', '/media/missing.png'];
   for (const path of paths) {
     let response;
     for (let i = 0; i < 20; i++) {
-      response = await fetch('http://caddy-fixture:8080' + path, {
-        redirect: 'manual', headers: {Host: 'preview.xennic.ir'},
-        signal: AbortSignal.timeout(5000)
-      });
+      response = await call(path);
       if (process.argv[1] === 'offline' || response.status < 500) break;
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -260,10 +270,8 @@ probe = r"""
     }
   }
   if (process.argv[1] !== 'offline') {
-    const response = await fetch('http://caddy-fixture:8080/', {redirect:'manual',
-      headers:{Host:'preview.xennic.ir', Cookie:'__Host-preview_gate=ci-valid'},
-      signal:AbortSignal.timeout(5000)});
-    if (response.status !== 200 || !(await response.text()).includes('<html'))
+    const response = await call('/', '__Host-preview_gate=ci-valid');
+    if (response.status !== 200 || !response.body.includes('<html'))
       throw Error('synthetic session did not reach app');
   }
 })().catch(error => { console.error(error.message); process.exit(1); });

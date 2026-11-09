@@ -83,11 +83,22 @@ for project, service, networks in (
     if set(net['Networks']) != networks: raise RuntimeError('fixture network is not isolated')
 print('PASS: app, database, Caddy and synthetic gate have no host ports and use only exact fixture networks')
 PY
-"${app[@]}" exec -T app node - <<'JS'
+if ! "${app[@]}" exec -T app node - <<'JS'
 (async () => {
-  const base = 'http://caddy:8080';
-  const call = (path, cookie) => fetch(base + path, {redirect: 'manual', headers: {
-    Host: 'preview.xennic.ir', ...(cookie ? {Cookie: cookie} : {})}});
+  // Node fetch normalizes Host to the URL authority, so use http.request to
+  // test Caddy's actual host matcher rather than an ignored Host override.
+  const http = require('node:http');
+  const call = (path, cookie, host = 'preview.xennic.ir', method = 'GET') => new Promise((resolve, reject) => {
+    const req = http.request({hostname:'caddy', port:8080, path, method, headers:{
+      Host:host, ...(cookie ? {Cookie:cookie} : {})}}, response => {
+      const chunks=[]; response.on('data', chunk => chunks.push(chunk));
+      response.on('end', () => resolve({status:response.statusCode, headers:new Headers(response.headers),
+        text:async () => Buffer.concat(chunks).toString('utf8')}));
+      response.on('error', reject);
+    });
+    req.setTimeout(10000, () => req.destroy(new Error('fixture request timeout')));
+    req.on('error', reject); req.end();
+  });
   const page = await call('/');
   if (page.status !== 302) throw Error('missing session did not block page');
   const api = await call('/api/pages');
@@ -96,9 +107,55 @@ PY
   if (authorized.status !== 200) throw Error('authorized request did not reach app');
   const html = await authorized.text();
   if (!html.includes('<html')) throw Error('app HTML missing');
-  console.log('PASS: real Caddy and real app route correctly; gate is synthetic, not OAuth');
+  const publicPages = ['/', '/company', '/company/about', '/company/team', '/services',
+    '/services/industrial-electrical-consulting', '/services/building-electrical-design',
+    '/services/distribution-supervision', '/services/energy-audit',
+    '/services/grounding-lightning-protection', '/services/technical-training',
+    '/track-record', '/knowledge', '/tools', '/platform', '/contact', '/privacy', '/terms', '/cookies'];
+  let publicHtml = '';
+  for (const path of publicPages) {
+    const result = await call(path, null, 'xennic.ir');
+    if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status + ' location=' + result.headers.get('location'));
+    if (path === '/') publicHtml = await result.text();
+    if ((await call(path, null, 'xennic.ir', 'HEAD')).status !== 200) throw Error('public HEAD blocked: ' + path);
+  }
+  const assetPath = publicHtml.match(/\/_next\/static\/[^"'?\s<>]+/)?.[0];
+  if (!assetPath || (await call(assetPath, null, 'xennic.ir')).status !== 200) throw Error('rendered static asset not reachable');
+  const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
+  if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
+  for (const path of ['/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
+    const result = await call(path, null, 'xennic.ir');
+    if (result.status !== 302) throw Error('private path was not gated: ' + path);
+  }
+  if ((await call('/api/pages', null, 'xennic.ir')).status !== 401) throw Error('API was not gated');
+  if ((await call('/api/graphql', null, 'xennic.ir', 'POST')).status !== 401) throw Error('GraphQL was not gated');
+  if ((await call('/', null, 'xennic.ir', 'POST')).status !== 302) throw Error('public POST was not gated');
+  if ((await call('/', null, 'www.xennic.ir')).status !== 302) throw Error('unapproved host was not gated');
+  for (const path of ['/services/%2e%2e/admin', '/_next/static/%2e%2e/%2e%2e/admin', '/services%2f..%2fadmin']) {
+    const status = await new Promise((resolve, reject) => {
+      const req = http.request({hostname:'caddy', port:8080, path, method:'GET', headers:{Host:'xennic.ir'}},
+        response => { response.resume(); resolve(response.statusCode); });
+      req.on('error', reject); req.end();
+    });
+    if (![302, 400, 404].includes(status)) throw Error('encoded path escaped gate');
+  }
+  console.log('PASS: exact apex public routes and protected management routes; internal CI only, gate synthetic');
 })().catch(e => { console.error(e.message); process.exit(1); });
 JS
+then
+  # Disposable synthetic fixture only: show adapted matchers, not secrets or requests.
+  "${gate[@]}" exec -T caddy caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile 2>/dev/null | python3 -c '
+import json, sys
+x=json.load(sys.stdin); found=[]
+def walk(v):
+    if isinstance(v,dict):
+        if "match" in v: found.append(v["match"])
+        for child in v.values(): walk(child)
+    elif isinstance(v,list):
+        for child in v: walk(child)
+walk(x); print("CI_GATE_MATCHERS="+json.dumps(found,separators=(",",":"))[:4000])' || true
+  exit 1
+fi
 # Run the real installed health logic over Docker's internal exec path.
 python3 - "$PWD/config/preview-compose.yml" "$app_project" <<'PY'
 import importlib.util, os, sys

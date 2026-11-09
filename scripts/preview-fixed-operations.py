@@ -38,7 +38,7 @@ GATEWAY_IMAGES = {
 GATEWAY_FILES = {
     'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
     'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
-    'config/routes.caddy': 'd089cbb65414cd01600383df1bfbea10c0ab6c8e423ad4701324cb368e902033',
+    'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
     'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
     'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
 }
