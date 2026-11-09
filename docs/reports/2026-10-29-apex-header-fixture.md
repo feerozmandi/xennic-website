@@ -17,9 +17,10 @@
 
 | آزمون یا بررسی | تاریخ و محیط | نتیجه |
 |---|---|---|
-| بررسی syntax و diff | محلی، ۲۰۲۶-۱۰-۲۹ | در حال انجام |
-| Caddy و upstream مصنوعی | GitHub Actions، دادهٔ مصنوعی | در انتظار نتیجه؛ OAuth واقعی نیست |
-| انتشار commit ادغام‌شده | run `42703599903`، شاخهٔ dev | در حال انجام؛ تأیید مستقل انتشار بعد از تکمیل لازم است |
+| بررسی syntax و diff | محلی، ۲۰۲۶-۱۰-۲۹ | موفق؛ `bash -n`، syntax پایتون‌های embedded و `git diff --check` |
+| Caddy و upstream مصنوعی | [CI 42705614834](https://github.com/feerozmandi/xennic-website/actions/runs/42705614834)، دادهٔ مصنوعی | موفق؛ OAuth واقعی نیست |
+| انتشار commit ادغام‌شده | [run 42703599903](https://github.com/feerozmandi/xennic-website/actions/runs/42703599903)، شاخهٔ dev | موفق؛ انتشار به معنی استقرار نیست |
+| verifier مستقل انتشار | [job 129462101869](https://github.com/feerozmandi/xennic-website/actions/runs/42705792085/job/129462101869)، GitHub runner با مجوز فقط‌خواندنی | موفق برای همان commit و digest `sha256:059393c680248e697de9613854251b9694caabb6bd06b7de944acf180fd4a048`؛ مدرک دسترسی واقعی VPS نیست |
 
 ## ریسک‌ها و کارهای باز
 

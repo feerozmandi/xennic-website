@@ -10,41 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  # Temporary read-only verification of the current dev publication; remove
-  # after capturing the evidence. This is not a deployment workflow.
-  verify-published-release:
-    if: github.event_name == 'pull_request' && github.head_ref == 'arena/8577c17f-xennic-website' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v6
-      - name: Independently verify current dev publication
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python3 - <<'PY'
-          import importlib.util, os, re, subprocess
-          from pathlib import Path
-          token = os.environ.pop('GH_TOKEN').encode('ascii')
-          commit = '00d78f4f9a08dbcfa5703937c8752ccfb9fec82f'
-          image = 'ghcr.io/feerozmandi/xennic-website:sha-' + commit
-          result = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', image],
-                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-          if result.returncode: raise SystemExit('anonymous published image inspection failed')
-          match = re.search(r'(?m)^Digest:\s+(sha256:[0-9a-f]{64})\s*$', result.stdout)
-          if not match: raise SystemExit('published digest missing')
-          release = {'repository': 'feerozmandi/xennic-website', 'commit': commit,
-                     'digest': match.group(1), 'platform': 'linux/amd64', 'run_number': 177}
-          spec = importlib.util.spec_from_file_location('release_verifier', Path('scripts/preview-release-verifier.py'))
-          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
-          verifier.assert_current(release, token)
-          run_id = verifier.verify(release, token)
-          if run_id != 42703599903: raise SystemExit('unexpected publication run')
-          print(f'::notice::Verified published commit {commit}, digest {release["digest"]}, run {run_id}')
-          PY
-
   checks:
     runs-on: ubuntu-latest
     env:
