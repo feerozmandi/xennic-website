@@ -26,7 +26,9 @@ FILES = ('preview-backup-sftp.py', 'preview-backup-operation.py', 'preview-pull-
          'preview-deploy-backend.py', 'preview-deploy-transaction.py', 'preview-deploy-lock.py',
          'preview-internal-health.py', 'preview-compose-operations.py', 'preview-release-verifier.py',
          'preview-fixed-operations.py')
-EXECUTABLES = {'preview-backup-sftp.py': ('sftp-transfer',), 'preview-backup-operation.py': ('backup-verify', 'preview-backup-operation.py'),
+ACTIVATION_FILES = FILES + ('preview-deploy-receiver.py',)
+EXECUTABLES = {'preview-deploy-receiver.py': ('deploy-receiver',),
+               'preview-backup-sftp.py': ('sftp-transfer',), 'preview-backup-operation.py': ('backup-verify', 'preview-backup-operation.py'),
                'preview-pull-image.py': ('pull-image',), 'preview-fixed-operations.py':
                ('release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback')}
 
@@ -42,6 +44,9 @@ ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
 NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836930b'
+ACTIVATION_MANIFEST = '9e654575c2e6a7a996e0513060b40c16d5dc585962e0163770b3a4c457a074ab'
+INCOMING_ACTIVATION = SOURCE / 'incoming-activation'
+BACKUP_ACTIVATION = PARENT / '.xennic-preview-before-activation'
 OLD_COMPOSE = '18a97bc2c21a6d623a54c81d07a49e44f6468cd225f0ce34a73f3760d3d0a373'
 NETWORK_COMPOSE = '44639d7d7f3678c8cb772d02768a8c51320ae4f71e7ccd3829b3d9d5126f2b7c'
 INCOMING_NETWORK = SOURCE / 'incoming-network'
@@ -84,10 +89,10 @@ def private_dir(path):
         raise RuntimeError('directory is not private')
 
 
-def verified_sources(directory, expected):
+def verified_sources(directory, expected, files=FILES):
     private_dir(directory)
-    data = {name: read_private(directory / name) for name in FILES}
-    lines = ''.join(f'{hashlib.sha256(data[name]).hexdigest()}  scripts/{name}\n' for name in FILES)
+    data = {name: read_private(directory / name) for name in files}
+    lines = ''.join(f'{hashlib.sha256(data[name]).hexdigest()}  scripts/{name}\n' for name in files)
     if hashlib.sha256(lines.encode('ascii')).hexdigest() != expected:
         raise RuntimeError('helper version is not approved')
     return data
@@ -95,10 +100,10 @@ def verified_sources(directory, expected):
 
 def installed_matches(directory, data):
     private_dir(directory)
-    expected = {installed for name in FILES for installed in EXECUTABLES.get(name, (name,))}
+    expected = {installed for name in data for installed in EXECUTABLES.get(name, (name,))}
     if {p.name for p in directory.iterdir()} != expected:
         raise RuntimeError('unexpected installed helper')
-    for name in FILES:
+    for name in data:
         for installed in EXECUTABLES.get(name, (name,)):
             path = directory / installed
             if read_private(path) != data[name]:
@@ -297,10 +302,65 @@ def upgrade_network():
     print('Fixed preview helpers and Compose upgraded; both previous versions preserved; no deployment started.')
 
 
+def upgrade_activation():
+    """Only the verified network install before first deployment; no configuration changes."""
+    for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
+        check_dir(path)
+    for path in (SOURCE, INCOMING, INCOMING_NETWORK, INCOMING_ACTIVATION):
+        private_dir(path)
+    if {p.name for p in SOURCE.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'incoming', 'incoming-network', 'incoming-activation'}:
+        raise RuntimeError('unexpected staging contents')
+    if {p.name for p in INCOMING.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py'}:
+        raise RuntimeError('unexpected current staging contents')
+    if {p.name for p in INCOMING_NETWORK.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py', 'preview-compose.yml'} | {source for source, _ in GATEWAY_FILES.values()}:
+        raise RuntimeError('unexpected network staging contents')
+    if {p.name for p in INCOMING_ACTIVATION.iterdir()} != set(ACTIVATION_FILES) | {'install-preview-sftp-helper.py'}:
+        raise RuntimeError('unexpected activation staging contents')
+    if os.path.lexists(NEW_DIR) or os.path.lexists(BACKUP_ACTIVATION):
+        raise RuntimeError('previous or incomplete activation update exists')
+    previous = verified_sources(SOURCE, OLD_MANIFEST)
+    intermediate = verified_sources(INCOMING, NEW_MANIFEST)
+    current = verified_sources(INCOMING_NETWORK, NETWORK_MANIFEST)
+    candidate = verified_sources(INCOMING_ACTIVATION, ACTIVATION_MANIFEST, ACTIVATION_FILES)
+    installed_matches(BACKUP, previous)
+    installed_matches(BACKUP_NETWORK, intermediate)
+    installed_matches(TARGET, current)
+    verify_backend()
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_activation_lock')
+    with locks.acquire_lock(nonblocking=True):
+        installed_matches(BACKUP, previous); installed_matches(BACKUP_NETWORK, intermediate)
+        installed_matches(TARGET, current)
+        assert_pristine()
+        if hashlib.sha256(read_private(COMPOSE)).hexdigest() != NETWORK_COMPOSE:
+            raise RuntimeError('installed compose differs from approved version')
+        for destination, (_, expected) in GATEWAY_FILES.items():
+            if hashlib.sha256(read_private(ROOT / 'config' / destination)).hexdigest() != expected:
+                raise RuntimeError('installed gateway differs from approved version')
+        NEW_DIR.mkdir(mode=0o700)
+        for name in ACTIVATION_FILES:
+            for installed in EXECUTABLES.get(name, (name,)):
+                write_exclusive(NEW_DIR / installed, candidate[name], 0o700 if name in EXECUTABLES else 0o600)
+        sync_dir(NEW_DIR)
+        installed_matches(NEW_DIR, candidate)
+        renamed_old = renamed_new = False
+        try:
+            os.rename(TARGET, BACKUP_ACTIVATION); renamed_old = True; sync_parent()
+            os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            installed_matches(TARGET, candidate)
+            verify_backend()
+        except BaseException:
+            if renamed_new: os.rename(TARGET, NEW_DIR)
+            if renamed_old: os.rename(BACKUP_ACTIVATION, TARGET)
+            sync_parent()
+            raise
+    print('Fixed helpers upgraded; previous versions preserved; no deployment or SSH setup started.')
+
+
 def main():
     if os.geteuid() != 0:
         raise RuntimeError('root required')
     if sys.argv[1:] == ['--upgrade']:
+        if os.path.lexists(INCOMING_ACTIVATION): return upgrade_activation()
         return upgrade_network() if os.path.lexists(INCOMING_NETWORK) else upgrade()
     if len(sys.argv) != 1:
         raise RuntimeError('invalid arguments')
@@ -310,7 +370,7 @@ def main():
         raise RuntimeError('target already exists; no update performed')
     staged = []
     try:
-        for name in FILES:
+        for name in ACTIVATION_FILES:
             fd = os.open(SOURCE / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
             info = os.fstat(fd)
             if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o022:

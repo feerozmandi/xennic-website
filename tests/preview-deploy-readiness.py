@@ -57,7 +57,7 @@ class ReadinessTest(unittest.TestCase):
                 p.unlink()
                 with self.assertRaises(readiness.NotReady): self.check()
                 self.put(path, content)
-        with self.assertRaisesRegex(readiness.NotReady, "GHCR"): self.check(b"")
+        with self.assertRaisesRegex(readiness.NotReady, "GitHub API"): self.check(b"")
 
     def test_invalid_empty_values_unapproved_backup_and_bad_permissions_fail(self):
         self.valid()

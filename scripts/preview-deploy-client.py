@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Send a validated preview manifest and short-lived registry token over pinned SSH.
+"""Send a validated preview manifest and short-lived GitHub API token over pinned SSH.
 
 This client does not provision the server, configure trust, or enable deployment.
 The receiving forced-command wrapper must validate all input independently.
@@ -76,9 +76,10 @@ def prepare(env):
         manifest.validate_manifest(raw)
     except manifest.InvalidManifest as exc:
         raise ClientError("invalid manifest") from exc
+    # Retain the existing input name; it carries only the GitHub API credential.
     token = env.get("PREVIEW_GHCR_TOKEN", "")
     if not re.fullmatch(r"[!-~]{1,4096}", token):
-        raise ClientError("invalid registry token")
+        raise ClientError("invalid GitHub API credential")
     key = env.get("PREVIEW_SSH_KEY_FILE", "")
     known_hosts = env.get("PREVIEW_KNOWN_HOSTS_FILE", "")
     for path in (key, known_hosts):

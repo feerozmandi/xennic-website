@@ -16,7 +16,7 @@ cleanup() {
 trap cleanup EXIT
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install
 sudo install -d -o root -g root -m 0755 /usr/local/libexec
-for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py preview-deploy-backend.py preview-deploy-transaction.py preview-deploy-lock.py preview-internal-health.py preview-compose-operations.py preview-release-verifier.py preview-fixed-operations.py; do
+for f in preview-backup-sftp.py preview-backup-operation.py preview-pull-image.py preview-age-backup.py preview-deploy-readiness.py preview-deploy-state.py preview-deploy-manifest.py preview-deploy-backend.py preview-deploy-transaction.py preview-deploy-lock.py preview-internal-health.py preview-compose-operations.py preview-release-verifier.py preview-fixed-operations.py preview-deploy-receiver.py; do
   sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/$f"
 done
 sudo install -o root -g root -m 0700 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/install-preview-sftp-helper.py
@@ -30,3 +30,7 @@ PY
 # The short-lived job token is passed only via stdin; no PR job receives it.
 { cat "$scratch/release.json"; printf '%s\n' "$GHCR_TOKEN"; } | sudo /usr/local/libexec/xennic-preview/pull-image
 printf 'PASS: installed pull helper retrieved and inspected the published GHCR digest\n'
+# This repository/package is currently public. Public mode is explicit, uses a
+# fresh empty Docker config, and still inspects the exact immutable digest.
+{ cat "$scratch/release.json"; printf 'public-read\n'; } | sudo /usr/local/libexec/xennic-preview/pull-image
+printf 'PASS: installed pull helper retrieved the same published digest without registry credentials\n'

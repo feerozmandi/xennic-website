@@ -158,8 +158,19 @@ for directory in (ROOT / 'state', ROOT / 'work'):
 # Successful first install performs migration, seed, health, encrypted backup,
 # isolated restore, a second health check, then records the real first release.
 select('previous')
+receiver = str(LIBEXEC / 'deploy-receiver')
+payload = json.dumps(previous).encode() + b'\nsynthetic-token\n'
+receiver_env = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C',
+                'SSH_ORIGINAL_COMMAND': 'xennic-preview-deploy'}
+wrong_env = dict(receiver_env, SSH_ORIGINAL_COMMAND='xennic-preview-deploy;id')
+rejected = subprocess.run([receiver], input=payload, env=wrong_env, capture_output=True)
+if rejected.returncode == 0 or b'synthetic-token' in rejected.stderr or (ROOT / 'state/release-state.json').exists():
+    raise AssertionError('installed receiver accepted invalid command')
 try:
-    result = backend.run_checked(json.dumps(previous).encode(), b'synthetic-token', backend.Backend(b'synthetic-token'))
+    received = subprocess.run([receiver], input=payload, env=receiver_env, capture_output=True)
+    if received.returncode or b'synthetic-token' in received.stdout + received.stderr:
+        raise backend.transaction.DeploymentFailed('installed receiver failed')
+    result = previous
 except backend.transaction.DeploymentFailed:
     # Keep this test failing: successful first installation is still required.
     # Nevertheless verify the actual installed failure path preserves the data

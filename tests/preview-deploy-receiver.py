@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,17 +79,31 @@ class ReceiverTest(unittest.TestCase):
                 with self.assertRaises(receiver.InvalidRequest):
                     receiver.parse_request(command, raw)
 
-    def test_receiver_cannot_deploy_and_does_not_echo_token(self):
+    def test_dispatch_only_after_original_command_and_payload_validation(self):
+        payload = request()
+        with mock.patch.object(receiver.backend, 'run_request', return_value=data()) as run:
+            self.assertEqual(receiver.dispatch(receiver.COMMAND, payload), data())
+            run.assert_called_once_with(payload)
+            run.reset_mock()
+            for command, raw in [('', payload), ('xennic-preview-deploy;id', payload),
+                                 (receiver.COMMAND, request(token=b'bad token'))]:
+                with self.assertRaises(receiver.InvalidRequest): receiver.dispatch(command, raw)
+                run.assert_not_called()
+
+    def test_invocation_rejects_non_root_or_arguments(self):
+        for uid, args in [(1000, ['receiver']), (0, ['receiver', 'argument'])]:
+            with self.subTest(uid=uid, args=args), mock.patch.object(receiver.os, 'geteuid', return_value=uid), \
+                 mock.patch.object(receiver.sys, 'argv', args), mock.patch.object(receiver.backend, 'run_request') as run:
+                self.assertEqual(receiver.main(), 1)
+                run.assert_not_called()
+
+    def test_receiver_does_not_echo_token(self):
         env = dict(os.environ, SSH_ORIGINAL_COMMAND=receiver.COMMAND)
         script = str(ROOT / "scripts/preview-deploy-receiver.py")
         proc = subprocess.run([sys.executable, script], input=request(), env=env, capture_output=True)
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(proc.stdout, b"")
         self.assertNotIn(b"synthetic-only-token", proc.stderr)
-        self.assertTrue(b"blocked" in proc.stderr or b"not enabled" in proc.stderr)
-        proc = subprocess.run([sys.executable, script], input=request(token=b"bad token"), env=env, capture_output=True)
-        self.assertEqual(proc.returncode, 2)
-        self.assertNotIn(b"bad token", proc.stderr)
 
 
 if __name__ == "__main__":

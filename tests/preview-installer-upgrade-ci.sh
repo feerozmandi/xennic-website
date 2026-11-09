@@ -4,7 +4,7 @@ set -euo pipefail
 [[ ${CI:-} == true && ${GITHUB_ACTIONS:-} == true && -n ${RUNNER_TEMP:-} ]] || exit 1
 for p in /srv/xennic-preview /root/xennic-preview-install /usr/local/libexec/xennic-preview \
   /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous \
-  /usr/local/libexec/.xennic-preview-before-network; do
+  /usr/local/libexec/.xennic-preview-before-network /usr/local/libexec/.xennic-preview-before-activation; do
   if sudo test -e "$p" || sudo test -L "$p"; then echo "Fixture path already exists: $p" >&2; exit 1; fi
 done
 if sudo docker volume inspect xennic-preview_preview_db >/dev/null 2>&1; then
@@ -15,7 +15,7 @@ cleanup() {
   sudo docker volume rm xennic-preview_preview_db >/dev/null 2>&1 || true
   sudo rm -rf /srv/xennic-preview /root/xennic-preview-install /usr/local/libexec/xennic-preview \
     /usr/local/libexec/.xennic-preview-update /usr/local/libexec/.xennic-preview-previous \
-    /usr/local/libexec/.xennic-preview-before-network
+    /usr/local/libexec/.xennic-preview-before-network /usr/local/libexec/.xennic-preview-before-activation
   rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -139,9 +139,11 @@ print(s.replace(old, '    image: ${PREVIEW_IMAGE:?required}\n    pull_policy: ne
 PY
 sudo install -o root -g root -m 0600 "$scratch/old-compose.yml" /srv/xennic-preview/config/compose.yml
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/incoming-network
-for f in "${files[@]}" install-preview-sftp-helper.py; do
-  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-network/$f"
+for f in "${files[@]}"; do
+  git show "09a9d00f25cee181a24fa39d645256869b6dc221:scripts/$f" > "$scratch/network-$f"
+  sudo install -o root -g root -m 0600 "$scratch/network-$f" "/root/xennic-preview-install/incoming-network/$f"
 done
+sudo install -o root -g root -m 0600 scripts/install-preview-sftp-helper.py /root/xennic-preview-install/incoming-network/install-preview-sftp-helper.py
 sudo install -o root -g root -m 0600 config/preview-compose.yml /root/xennic-preview-install/incoming-network/preview-compose.yml
 for f in preview-gateway-compose.yml preview-Caddyfile routes.caddy oauth-gateway.caddy upstream.caddy; do
   sudo install -o root -g root -m 0600 "config/$f" "/root/xennic-preview-install/incoming-network/$f"
@@ -208,3 +210,58 @@ print('PASS: isolated-network helpers, Compose and fixed gateway installed; prev
 PY
 after=$(sudo sha256sum /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 [[ "$before" == "$after" ]] || { echo 'Protected fixture changed' >&2; exit 1; }
+
+# Upgrade the exact installed 09a helpers without touching configuration, data,
+# or either preserved historical helper set. All files here are disposable CI.
+sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/incoming-activation
+for f in "${files[@]}" preview-deploy-receiver.py install-preview-sftp-helper.py; do
+  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-activation/$f"
+done
+activation=/root/xennic-preview-install/incoming-activation/install-preview-sftp-helper.py
+before_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/routes.caddy /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+printf 'unknown helper\n' | sudo tee /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py >/dev/null
+if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation source accepted' >&2; exit 1; fi
+sudo install -o root -g root -m 0600 scripts/preview-deploy-backend.py /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py
+printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.json >/dev/null
+if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Activation upgrade accepted journal' >&2; exit 1; fi
+sudo test -f /srv/xennic-preview/state/release-state.json
+sudo rm /srv/xennic-preview/state/release-state.json # disposable fixture only
+sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('activation_upgrade_ci', sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+original = m.verify_backend
+calls = 0
+def fail_after_replace():
+    global calls
+    calls += 1
+    if calls == 2: raise RuntimeError('intentional activation failure')
+    original()
+m.verify_backend = fail_after_replace
+try:
+    m.upgrade_activation()
+    raise AssertionError('injected failure accepted')
+except RuntimeError as e:
+    if str(e) != 'intentional activation failure': raise
+m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_MANIFEST))
+if m.BACKUP_ACTIVATION.exists() or not m.NEW_DIR.exists(): raise AssertionError('helper rollback failed')
+print('PASS: activation upgrade failure restored prior helpers')
+PY
+sudo rm -rf /usr/local/libexec/.xennic-preview-update # disposable CI attempt only
+sudo /usr/bin/python3 "$activation" --upgrade
+sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+import importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('activation_upgrade_verify', sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.installed_matches(m.TARGET, m.verified_sources(m.INCOMING_ACTIVATION, m.ACTIVATION_MANIFEST, m.ACTIVATION_FILES))
+m.installed_matches(m.BACKUP_ACTIVATION, m.verified_sources(m.INCOMING_NETWORK, m.NETWORK_MANIFEST))
+m.installed_matches(m.BACKUP_NETWORK, m.verified_sources(m.INCOMING, m.NEW_MANIFEST))
+m.installed_matches(m.BACKUP, m.verified_sources(m.SOURCE, m.OLD_MANIFEST))
+m.verify_backend()
+print('PASS: exact activation helpers installed; three previous helper sets retained')
+PY
+if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Repeated activation upgrade accepted' >&2; exit 1; fi
+after_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/routes.caddy /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
+[[ "$before_config" == "$after_config" ]] || { echo 'Protected configuration changed' >&2; exit 1; }

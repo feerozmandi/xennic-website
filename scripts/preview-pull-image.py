@@ -22,6 +22,8 @@ spec.loader.exec_module(manifest)
 
 DOCKER = '/usr/bin/docker'
 RUNTIME = Path('/run/xennic-preview')
+# Explicit public pull; never retry failed authentication anonymously.
+PUBLIC_READ = b'public-read'
 
 
 class PullFailed(RuntimeError):
@@ -67,7 +69,8 @@ def pull(raw, token):
     private_runtime()
     with tempfile.TemporaryDirectory(prefix='ghcr-', dir=RUNTIME) as temporary:
         env = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C', 'DOCKER_CONFIG': temporary}
-        run([DOCKER, 'login', 'ghcr.io', '--username', 'feerozmandi', '--password-stdin'], env, token + b'\n')
+        if token != PUBLIC_READ:
+            run([DOCKER, 'login', 'ghcr.io', '--username', 'feerozmandi', '--password-stdin'], env, token + b'\n')
         run([DOCKER, 'pull', '--platform', 'linux/amd64', reference], env)
         try:
             details = json.loads(run([DOCKER, 'image', 'inspect', reference], env, capture=True))
