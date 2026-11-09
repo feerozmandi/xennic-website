@@ -64,8 +64,8 @@ python3 tests/preview-internal-health-ci.py
 network_log="$RUNNER_TEMP/xennic-network-fixture.log"
 if ! bash tests/preview-network-ci.sh > "$network_log" 2>&1; then
   tail -n 30 "$network_log"
-  details=$(grep -E 'Error:|Error response|error:|ERROR|FAIL|failed|denied|unexpected' "$network_log" | tail -n 4 | tr '\n' ';' | cut -c1-2000 || true)
-  echo "::error::Disposable network fixture failed: ${details:-no classified detail}"
+  details=$(tail -n 28 "$network_log" | tr '\n' ';' | cut -c1-6000)
+  echo "::error::Disposable network fixture tail: ${details:-empty}"
   exit 1
 fi
 tail -n 8 "$network_log"
