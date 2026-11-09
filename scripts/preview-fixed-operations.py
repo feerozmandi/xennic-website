@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 from urllib.parse import unquote, urlsplit
 
@@ -27,6 +28,19 @@ DOCKER = '/usr/bin/docker'
 COMPOSE = [DOCKER, 'compose', '--project-name', 'xennic-preview', '--env-file',
            '/srv/xennic-preview/secrets/preview.env', '-f', '/srv/xennic-preview/config/compose.yml']
 SAFE = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C'}
+GATEWAY_COMPOSE = [DOCKER, 'compose', '--project-name', 'xennic-preview-gateway', '--env-file',
+                   '/srv/xennic-preview/secrets/preview.env', '-f', '/srv/xennic-preview/config/gateway.yml']
+GATEWAY_IMAGES = {
+    'caddy': 'caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e',
+    'gate': 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916',
+}
+GATEWAY_FILES = {
+    'config/gateway.yml': 'ad8f765d05581bb6cd982a2bcf3b1f18853e3c130d36e5005add909a2ab04017',
+    'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
+    'config/routes.caddy': 'd089cbb65414cd01600383df1bfbea10c0ab6c8e423ad4701324cb368e902033',
+    'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
+    'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
+}
 PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback'})
 
 # Fixed probe for the reviewed Caddy route set. The internal endpoint is not a
@@ -312,15 +326,8 @@ def running_app_id(release):
             any((net.get('Ports') or {}).values()) or
             set(net.get('Networks') or {}) != {'xennic-preview_default', 'xennic-preview_gateway'}):
         raise Rejected('running app network or published ports are unsafe')
-    # Until a reviewed gateway identity is enforced, fail closed for every
-    # additional peer. A container name or label alone cannot prove a gate.
-    network_id = net['Networks']['xennic-preview_gateway'].get('NetworkID', '')
-    if not re.fullmatch('[0-9a-f]{12,64}', network_id):
-        raise Rejected('gateway network is invalid')
-    entries = json.loads(run([DOCKER, 'network', 'inspect', network_id], output=True))
-    if len(entries) != 1 or set((entries[0].get('Containers') or {}).keys()) != {app['Id']}:
-        raise Rejected('gateway peer is not yet independently verified')
-    return ids[0]
+    require_verified_gateway(app['Id'])
+    return app['Id']
 
 
 def assert_current_host(previous):
@@ -433,14 +440,156 @@ def check_ingress_protection(app_id):
     """
     if not re.fullmatch('[0-9a-f]{12,64}', app_id):
         raise Rejected('invalid probe container')
-    run([DOCKER, 'exec', app_id, 'node', '-e', INGRESS_PROBE], timeout=45)
+    for attempt in range(12):
+        try:
+            run([DOCKER, 'exec', app_id, 'node', '-e', INGRESS_PROBE], timeout=45)
+            return
+        except Rejected:
+            if attempt == 11: raise
+            time.sleep(1)
+
+
+def gateway_configuration():
+    """Accept only the reviewed fixed files and fixed private OAuth policy."""
+    try:
+        for path, expected in GATEWAY_FILES.items():
+            if hashlib.sha256(ready._read(ROOT, path, 0)).hexdigest() != expected:
+                raise Rejected('gateway configuration differs from reviewed files')
+        env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
+        edge = env.get('PREVIEW_EDGE_IP')
+        # Loopback is safe for an isolated test; public service requires the
+        # dedicated edge to bind all interfaces. It never enables another port.
+        if edge not in ('0.0.0.0', '127.0.0.2'):
+            raise Rejected('edge bind address not approved')
+        validate_gateway_oauth(ready._read(ROOT, 'secrets/oauth2-proxy.cfg', 0), '172.28.190.2')
+        return edge
+    except ready.NotReady as exc:
+        raise Rejected('gateway files are missing or unsafe') from exc
+
+
+def gateway_image_ids():
+    identities = {}
+    for service, reference in GATEWAY_IMAGES.items():
+        items = json.loads(run([DOCKER, 'image', 'inspect', reference], output=True))
+        tagged, digest = reference.split('@', 1)
+        repo = tagged.rsplit(':', 1)[0]
+        acceptable = {reference, repo + '@' + digest}
+        if repo == 'caddy': acceptable.add('docker.io/library/caddy@' + digest)
+        if (not isinstance(items, list) or len(items) != 1 or items[0].get('Os') != 'linux' or
+                items[0].get('Architecture') != 'amd64' or not acceptable.intersection(items[0].get('RepoDigests') or []) or
+                not re.fullmatch(r'sha256:[0-9a-f]{64}', items[0].get('Id', ''))):
+            raise Rejected('gateway image identity mismatch')
+        identities[service] = items[0]['Id']
+    return identities
+
+
+def start_gateway(app_id):
+    """Start the one reviewed project; reject pre-existing unknown resources."""
+    gateway_configuration()
+    gateway_image_ids()
+    existing = run([DOCKER, 'ps', '-aq', '--no-trunc', '--filter',
+                    'label=com.docker.compose.project=xennic-preview-gateway'], output=True).decode('ascii').split()
+    if existing:
+        # Never recreate or replace an existing/unknown proxy or gate.
+        require_verified_gateway(app_id)
+        return
+    for kind in ('network', 'volume'):
+        if run([DOCKER, kind, 'ls', '-q', '--filter',
+                'label=com.docker.compose.project=xennic-preview-gateway'], output=True).strip():
+            raise Rejected('unexpected pre-existing gateway resources')
+    for kind in ('network', 'volume'):
+        names = run([DOCKER, kind, 'ls', '--format', '{{.Name}}'], output=True).decode('utf-8').splitlines()
+        if any(name.startswith('xennic-preview-gateway_') for name in names):
+            raise Rejected('unlabelled gateway resources exist')
+    run(GATEWAY_COMPOSE + ['up', '-d', '--no-build', '--pull', 'never', '--wait'], timeout=180)
+    require_verified_gateway(app_id)
 
 
 def require_verified_gateway(app_id):
-    # Fail closed: an answer on a port is not proof of gateway identity. This
-    # guard must be replaced by exact project, image, configuration and network
-    # checks before any release can be recorded healthy.
-    raise Rejected('gateway identity and startup not yet verified')
+    """Require exact container images, configuration and network peers."""
+    if not re.fullmatch('[0-9a-f]{12,64}', app_id): raise Rejected('invalid app identity')
+    edge = gateway_configuration()
+    images = gateway_image_ids()
+    ids = {}
+    items = {}
+    for service in ('caddy', 'gate'):
+        value = run(GATEWAY_COMPOSE + ['ps', '-q', service], output=True).decode('ascii').split()
+        if len(value) != 1 or not re.fullmatch('[0-9a-f]{12,64}', value[0]):
+            raise Rejected('gateway service unavailable or ambiguous')
+        inspected = json.loads(run([DOCKER, 'inspect', value[0]], output=True))
+        if len(inspected) != 1: raise Rejected('invalid gateway inspection')
+        item = inspected[0]; labels = item.get('Config', {}).get('Labels') or {}
+        expected_hash = run(GATEWAY_COMPOSE + ['config', '--hash', service], output=True).decode('ascii').split()
+        if len(expected_hash) != 2 or expected_hash[0] != service or not re.fullmatch('[0-9a-f]{64}', expected_hash[1]):
+            raise Rejected('gateway compose service hash unavailable')
+        if (not item.get('State', {}).get('Running') or item.get('Image') != images[service] or
+                labels.get('com.docker.compose.project') != 'xennic-preview-gateway' or
+                labels.get('com.docker.compose.service') != service or
+                labels.get('com.docker.compose.config-hash') != expected_hash[1]):
+            raise Rejected('gateway container identity mismatch')
+        ids[service] = item['Id']; items[service] = item
+    running = run([DOCKER, 'ps', '-aq', '--no-trunc', '--filter',
+                   'label=com.docker.compose.project=xennic-preview-gateway'], output=True).decode('ascii').split()
+    if set(running) != set(ids.values()): raise Rejected('unknown gateway service')
+    caddy, gate = items['caddy'], items['gate']
+    caddy_net = caddy['NetworkSettings']['Networks']; gate_net = gate['NetworkSettings']['Networks']
+    if (set(caddy_net) != {'xennic-preview_gateway', 'xennic-preview-gateway_auth'} or
+            set(gate_net) != {'xennic-preview-gateway_auth'} or
+            caddy_net['xennic-preview-gateway_auth'].get('IPAddress') != '172.28.190.2'):
+        raise Rejected('gateway network mismatch')
+    for network, expected in ((caddy_net['xennic-preview_gateway'], {app_id, ids['caddy']}),
+                              (caddy_net['xennic-preview-gateway_auth'], {ids['caddy'], ids['gate']})):
+        network_id = network.get('NetworkID', '')
+        if not re.fullmatch('[0-9a-f]{12,64}', network_id): raise Rejected('invalid gateway network')
+        entries = json.loads(run([DOCKER, 'network', 'inspect', network_id], output=True))
+        if len(entries) != 1 or set((entries[0].get('Containers') or {}).keys()) != expected:
+            raise Rejected('unknown gateway network peer')
+    for service, item in items.items():
+        host = item.get('HostConfig') or {}; config = item.get('Config') or {}
+        image_info = json.loads(run([DOCKER, 'image', 'inspect', GATEWAY_IMAGES[service]], output=True))[0]
+        base = image_info.get('Config') or {}
+        if config.get('Entrypoint') != base.get('Entrypoint'):
+            raise Rejected('gateway entrypoint mismatch')
+        if service == 'caddy' and config.get('Cmd') != base.get('Cmd'):
+            raise Rejected('Caddy command mismatch')
+        if (host.get('NetworkMode') == 'host' or host.get('PublishAllPorts') or host.get('Privileged') or
+                host.get('Devices') or host.get('PidMode') == 'host' or host.get('IpcMode') == 'host' or
+                host.get('ExtraHosts') or host.get('CapAdd') or host.get('LogConfig', {}).get('Type') != 'none'):
+            raise Rejected('gateway host configuration is unsafe')
+        if service == 'gate':
+            if (host.get('PortBindings') or any((item['NetworkSettings'].get('Ports') or {}).values()) or
+                    config.get('User') != '0:0' or config.get('Cmd') != ['--config=/etc/oauth2-proxy.cfg'] or
+                    not host.get('ReadonlyRootfs') or 'ALL' not in (host.get('CapDrop') or []) or
+                    any(entry.startswith('OAUTH2_PROXY_') for entry in (config.get('Env') or []))):
+                raise Rejected('gate effective configuration is unsafe')
+        else:
+            bindings = host.get('PortBindings') or {}
+            if set(bindings) != {'80/tcp', '443/tcp'} or any(
+                    bindings[p] != [{'HostIp': edge, 'HostPort': p.split('/')[0]}] for p in bindings):
+                raise Rejected('Caddy port mapping mismatch')
+            env = dict(entry.split('=', 1) for entry in (config.get('Env') or []) if '=' in entry)
+            if any(env.get(k) != v for k, v in {'GATE_ADDR': 'gate:4180', 'APP_ADDR': 'app:3000',
+                                                 'PUBLIC_AUTHORITY': 'preview.xennic.ir'}.items()) or 'CADDY_SITE' in env:
+                raise Rejected('Caddy effective configuration is unsafe')
+    expected_mounts = {
+        'gate': {'/etc/oauth2-proxy.cfg': str(ROOT / 'secrets/oauth2-proxy.cfg')},
+        'caddy': {'/etc/caddy/Caddyfile': str(ROOT / 'config/Caddyfile'),
+                  '/etc/caddy/routes.caddy': str(ROOT / 'config/routes.caddy'),
+                  '/etc/caddy/oauth-gateway.caddy': str(ROOT / 'config/oauth-gateway.caddy'),
+                  '/etc/caddy/upstream.caddy': str(ROOT / 'config/upstream.caddy')},
+    }
+    for service, mounts in expected_mounts.items():
+        actual = {m.get('Destination'): m for m in items[service].get('Mounts', [])}
+        allowed = set(mounts) | ({'/data', '/config'} if service == 'caddy' else set())
+        if set(actual) != allowed: raise Rejected('gateway mounts are unexpected')
+        for dest, source in mounts.items():
+            item = actual[dest]
+            if item.get('Type') != 'bind' or item.get('Source') != source or item.get('RW') is not False:
+                raise Rejected('gateway config mount mismatch')
+        if service == 'caddy':
+            for dest, name in (('/data', 'xennic-preview-gateway_caddy_data'), ('/config', 'xennic-preview-gateway_caddy_config')):
+                if actual[dest].get('Type') != 'volume' or actual[dest].get('Name') != name:
+                    raise Rejected('Caddy volume mismatch')
 
 
 def check_health(release):
@@ -457,6 +606,8 @@ def check_health(release):
 
 def execute(phase, release, token):
     if phase == 'release-check':
+        gateway_configuration()
+        gateway_image_ids()
         journal = states.Journal()
         initial = journal.absent()
         previous = None if initial else journal.read()['current']
@@ -519,6 +670,13 @@ def execute(phase, release, token):
         image = config_for(release)
         image_id(release)
         run(COMPOSE + ['up', '-d', '--no-deps', '--no-build', '--force-recreate', '--wait', 'app'], image=image, timeout=180)
+        ids = run(COMPOSE + ['ps', '-q', 'app'], image=image, output=True).decode('ascii').split()
+        if len(ids) != 1 or not re.fullmatch('[0-9a-f]{12,64}', ids[0]):
+            raise Rejected('activated app is ambiguous')
+        inspected = json.loads(run([DOCKER, 'inspect', ids[0]], output=True))
+        if len(inspected) != 1 or inspected[0].get('Image') != image_id(release):
+            raise Rejected('activated app image mismatch')
+        start_gateway(inspected[0]['Id'])
         running_app_id(release)
         if reactivation: return None
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)

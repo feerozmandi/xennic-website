@@ -12,7 +12,10 @@ services:
       - ./routes.caddy:/etc/caddy/routes.caddy:ro
       - ./oauth-gateway.caddy:/etc/caddy/oauth-gateway.caddy:ro
       - ./upstream.caddy:/etc/caddy/upstream.caddy:ro
-    networks: [gateway, auth]
+    networks:
+      gateway:
+        aliases: [caddy-fixture]
+      auth: {}
   gate:
     image: python:3.12.8-alpine@sha256:ba13ef990f6e5d13014e9e8d04c02a8fdb0fe53d6dccf6e19147f316e6cc3a84
     command: ['python', '/fixture/gate.py']

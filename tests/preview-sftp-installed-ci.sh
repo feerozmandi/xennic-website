@@ -23,6 +23,9 @@ cleanup() {
     sudo rm -rf /etc/docker/certs.d/ghcr.io
     sudo update-ca-certificates >/dev/null 2>&1 || true
   fi
+  if sudo test -f /srv/xennic-preview/config/gateway.yml && sudo test -f /srv/xennic-preview/secrets/preview.env; then
+    sudo docker compose -p xennic-preview-gateway --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/gateway.yml down --volumes --remove-orphans >/dev/null 2>&1 || true
+  fi
   if sudo test -f /srv/xennic-preview/config/compose.yml && sudo test -f /srv/xennic-preview/secrets/preview.env; then
     sudo env PREVIEW_IMAGE="$(cat "$scratch/old-image" 2>/dev/null || echo fixture-only)" docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml down --volumes --remove-orphans >/dev/null 2>&1 || true
   fi
@@ -137,6 +140,7 @@ PREVIEW_DATABASE_URL=postgresql://preview_ci:disposable-ci-password@postgres:543
 PREVIEW_PAYLOAD_SECRET=disposable-ci-secret-not-real
 PREVIEW_PORT=33019
 PREVIEW_ORIGIN=https://preview.xennic.ir
+PREVIEW_EDGE_IP=127.0.0.2
 EOF
 sudo install -o root -g root -m 0600 "$scratch/preview.env" /srv/xennic-preview/secrets/preview.env
 compose=(sudo docker compose -p xennic-preview --env-file /srv/xennic-preview/secrets/preview.env -f /srv/xennic-preview/config/compose.yml)
@@ -322,10 +326,48 @@ PY
 sudo install -o root -g root -m 0600 "$scratch/chain-github.json" /srv/xennic-preview/config/ci-github-fixture.json
 sudo install -o root -g root -m 0600 "$scratch/chain-transitions.json" /srv/xennic-preview/config/compatible-transitions.json
 printf 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' | sudo tee /srv/xennic-preview/config/verified-host-fingerprint >/dev/null
-printf 'client_id="ci"\nclient_secret="ci"\ncookie_secret="ci"\n' | sudo tee /srv/xennic-preview/secrets/oauth2-proxy.cfg >/dev/null
-sudo chmod 0600 /srv/xennic-preview/config/verified-host-fingerprint /srv/xennic-preview/secrets/oauth2-proxy.cfg
-# Disposable gateway fixture: real Caddy and synthetic gate on the installed
-# application's gateway network. This is not an operational OAuth configuration.
+cat > "$scratch/oauth2-proxy.cfg" <<'EOF'
+provider = "github"
+email_domains = ["*"]
+scope = "user:email"
+reverse_proxy = true
+trusted_proxy_ips = ["172.28.190.2/32"]
+http_address = "0.0.0.0:4180"
+redirect_url = "https://preview.xennic.ir/oauth2/callback"
+upstreams = ["static://202"]
+whitelist_domains = ["preview.xennic.ir"]
+cookie_name = "__Host-preview_gate"
+cookie_secure = true
+cookie_httponly = true
+cookie_samesite = "lax"
+cookie_expire = "8h"
+cookie_refresh = "0"
+skip_jwt_bearer_tokens = false
+skip_auth_preflight = false
+pass_basic_auth = false
+pass_authorization_header = false
+set_authorization_header = false
+pass_access_token = false
+set_xauthrequest = false
+request_logging = false
+auth_logging = false
+github_users = ["ci-user"]
+client_id = "ci-client"
+client_secret = "ci-secret"
+cookie_secret = "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg="
+EOF
+sudo install -o root -g root -m 0600 "$scratch/oauth2-proxy.cfg" /srv/xennic-preview/secrets/oauth2-proxy.cfg
+sudo chmod 0600 /srv/xennic-preview/config/verified-host-fingerprint
+sudo install -o root -g root -m 0600 config/preview-gateway-compose.yml /srv/xennic-preview/config/gateway.yml
+sudo install -o root -g root -m 0600 config/preview-Caddyfile /srv/xennic-preview/config/Caddyfile
+for f in routes.caddy oauth-gateway.caddy upstream.caddy; do
+  sudo install -o root -g root -m 0600 "config/$f" "/srv/xennic-preview/config/$f"
+done
+# Pre-pull fixed image identities before the installed transaction. This is not
+# a real OAuth acceptance and does not provide real credentials.
+sudo docker pull 'caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e'
+sudo docker pull 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916'
+# Preserve the independently started unapproved peer as a negative test only.
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/ci-gateway
 for f in preview-Caddyfile routes.caddy oauth-gateway.caddy upstream.caddy; do
   sudo install -o root -g root -m 0600 "config/$f" "/root/xennic-preview-install/ci-gateway/$f"

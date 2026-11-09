@@ -114,6 +114,9 @@ count = subprocess.check_output(compose + ['exec', '-T', 'postgres', 'psql', '-U
 if count != '1': raise AssertionError('failed initial database was not preserved')
 
 # Reset only this disposable CI fixture; actual VPS data must never be removed.
+real_gateway = ['/usr/bin/docker', 'compose', '-p', 'xennic-preview-gateway', '--env-file',
+                str(ROOT / 'secrets/preview.env'), '-f', str(ROOT / 'config/gateway.yml')]
+subprocess.check_call(real_gateway + ['down', '--volumes', '--remove-orphans'], env=initial_env, stdout=subprocess.DEVNULL)
 subprocess.check_call(compose + ['down', '--volumes', '--remove-orphans'], env=initial_env, stdout=subprocess.DEVNULL)
 for directory in (ROOT / 'state', ROOT / 'work'):
     for path in directory.iterdir():
@@ -149,6 +152,23 @@ if result != previous or journal['blocked'] or journal['current'] != previous or
 if record.get('remote_path') != 'manual-offsite-pending' or not (ROOT / 'work/backup.age').is_file():
     raise AssertionError('first encrypted local backup not verified')
 
+# The operational helper, not CI, has started this real Caddy and OAuth2 Proxy.
+# Stop only the disposable gate and verify no unauthenticated path reaches app.
+subprocess.check_call(real_gateway + ['stop', 'gate'], env=initial_env)
+offline_probe = """(async()=>{for(const p of ['/','/admin','/api/pages','/api/graphql','/media/missing.png']){
+ const r=await fetch('http://caddy:8080'+p,{redirect:'manual',headers:{Host:'preview.xennic.ir'},signal:AbortSignal.timeout(5000)});
+ if(r.status<500)throw Error('gate outage did not close '+p)} })().catch(()=>process.exit(1))"""
+subprocess.check_call(compose + ['exec', '-T', 'app', 'node', '-e', offline_probe], env=initial_env)
+select('first')
+try:
+    runner.call('release-check', first, b'synthetic-token')
+    raise AssertionError('missing gate was accepted by installed helper')
+except backend.BackendError:
+    pass
+subprocess.check_call(real_gateway + ['start', 'gate'], env=initial_env)
+select('previous')
+print('PASS: installed helper gateway outage denied traffic and prevented release preflight', flush=True)
+
 # Negative integration regression: attach a CI-owned Caddy and synthetic gate
 # to the exact installed helper's app, probe protected paths and gate outage,
 # and require the installed release-check to reject this unapproved peer. This
@@ -161,7 +181,7 @@ probe = r"""
   for (const path of paths) {
     let response;
     for (let i = 0; i < 20; i++) {
-      response = await fetch('http://caddy:8080' + path, {
+      response = await fetch('http://caddy-fixture:8080' + path, {
         redirect: 'manual', headers: {Host: 'preview.xennic.ir'},
         signal: AbortSignal.timeout(5000)
       });
@@ -176,7 +196,7 @@ probe = r"""
     }
   }
   if (process.argv[1] !== 'offline') {
-    const response = await fetch('http://caddy:8080/', {redirect:'manual',
+    const response = await fetch('http://caddy-fixture:8080/', {redirect:'manual',
       headers:{Host:'preview.xennic.ir', Cookie:'__Host-preview_gate=ci-valid'},
       signal:AbortSignal.timeout(5000)});
     if (response.status !== 200 || !(await response.text()).includes('<html'))

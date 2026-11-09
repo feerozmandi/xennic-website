@@ -41,7 +41,7 @@ BACKUP = PARENT / '.xennic-preview-previous'
 ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
-NETWORK_MANIFEST = 'b9ae51cae767b4d224fe94d9a2fc1897b85d0690069cf4c98c1324e8560c2dbf'
+NETWORK_MANIFEST = '7964e2e6646f173acb3d5ac9386ca4a15410588b00750ce8ab69550afa50251a'
 OLD_COMPOSE = '18a97bc2c21a6d623a54c81d07a49e44f6468cd225f0ce34a73f3760d3d0a373'
 NETWORK_COMPOSE = '44639d7d7f3678c8cb772d02768a8c51320ae4f71e7ccd3829b3d9d5126f2b7c'
 INCOMING_NETWORK = SOURCE / 'incoming-network'
