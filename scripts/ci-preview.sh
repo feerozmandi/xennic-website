@@ -59,7 +59,16 @@ fi
 python3 tests/preview-internal-health-ci.py
 # Separate disposable project: exact isolated topology, real Caddy/app and a
 # synthetic auth gate. This does not claim real OAuth or VPS acceptance.
-bash tests/preview-network-ci.sh
+# Only this disposable fixture is captured for a short, non-secret failure
+# annotation; this is not an operational server log.
+network_log="$RUNNER_TEMP/xennic-network-fixture.log"
+if ! bash tests/preview-network-ci.sh > "$network_log" 2>&1; then
+  tail -n 30 "$network_log"
+  details=$(grep -E 'Error:|Error response|error:|ERROR|FAIL|failed|denied|unexpected' "$network_log" | tail -n 4 | tr '\n' ';' | cut -c1-2000 || true)
+  echo "::error::Disposable network fixture failed: ${details:-no classified detail}"
+  exit 1
+fi
+tail -n 8 "$network_log"
 printf '\n--- Idle app and database memory ---\n'
 docker stats --no-stream --format 'idle {{.Name}} {{.MemUsage}}' "$("${compose[@]}" ps -q app)" "$("${compose[@]}" ps -q postgres)" | tee -a "$metrics"
 node scripts/wait-for-server.mjs
