@@ -107,10 +107,20 @@ if ! "${app[@]}" exec -T app node - <<'JS'
   if (authorized.status !== 200) throw Error('authorized request did not reach app');
   const html = await authorized.text();
   if (!html.includes('<html')) throw Error('app HTML missing');
-  for (const path of ['/', '/company', '/company/about', '/services', '/track-record', '/knowledge', '/platform', '/contact']) {
+  const publicPages = ['/', '/company', '/company/about', '/company/team', '/services',
+    '/services/industrial-electrical-consulting', '/services/building-electrical-design',
+    '/services/distribution-supervision', '/services/energy-audit',
+    '/services/grounding-lightning-protection', '/services/technical-training',
+    '/track-record', '/knowledge', '/tools', '/platform', '/contact', '/privacy', '/terms', '/cookies'];
+  let publicHtml = '';
+  for (const path of publicPages) {
     const result = await call(path, null, 'xennic.ir');
     if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status + ' location=' + result.headers.get('location'));
+    if (path === '/') publicHtml = await result.text();
+    if ((await call(path, null, 'xennic.ir', 'HEAD')).status !== 200) throw Error('public HEAD blocked: ' + path);
   }
+  const assetPath = publicHtml.match(/\/_next\/static\/[^"'?\s<>]+/)?.[0];
+  if (!assetPath || (await call(assetPath, null, 'xennic.ir')).status !== 200) throw Error('rendered static asset not reachable');
   const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
   if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
   for (const path of ['/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
