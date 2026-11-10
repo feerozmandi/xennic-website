@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import Link from 'next/link'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
@@ -115,9 +116,14 @@ export function Founder({ founder }: { founder: HomeContent['founder'] }) {
             <Action href="/track-record" tone="glass">مطالعهٔ پیشینهٔ حرفه‌ای</Action>
           </div>
           <aside className="founder__aside" aria-label="مشخصات مؤسس">
-            <div className="founder__portrait" role="img" aria-label={`جای رزرو عکس رسمی ${founder.name}`}>
-              <span>عکس رسمی مؤسس</span>
-              <small>پس از دریافت فایل تأییدشده منتشر می‌شود</small>
+            <div className="founder__portrait">
+              <Image
+                src={FOUNDER_PORTRAIT.src}
+                alt={FOUNDER_PORTRAIT.alt}
+                width={FOUNDER_PORTRAIT.width}
+                height={FOUNDER_PORTRAIT.height}
+                sizes="(max-width: 900px) 60vw, 256px"
+              />
             </div>
             <p className="founder__identity">
               <strong>{founder.name}</strong>
