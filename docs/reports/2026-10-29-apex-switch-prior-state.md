@@ -22,6 +22,14 @@
 - **پنج فایل و مجموعهٔ helper اتمی جابه‌جا می‌شوند**، نسخه‌های قبلی در `config/.apex-before/` و `/usr/local/libexec/.xennic-preview-before-apex` نگه داشته می‌شوند و هر خطا همه را برمی‌گرداند. `--rollback-apex` همهٔ پنج فایل و helperها را بازمی‌گرداند.
 - **`scripts/preview-apex-precheck.py`** اضافه شد: فقط‌خواندنی، root، بدون چاپ secret؛ برای هر شرط `PASS/FAIL` و در پایان `READY=PASS` یا `READY=STOP` می‌دهد.
 
+## تصحیح دوم pre-check
+
+اجرای واقعی روی سرور نشان داد pre-check مجموعهٔ helper نصب‌شده را با `deploy-receiver` مقایسه می‌کند، در حالی که این فایل را خودِ گذار نصب می‌کند. مقایسه اکنون فقط شامل مجموعهٔ پیشین است و در صورت اختلاف، نام فایل‌های کم/اضافه را چاپ می‌کند؛ با یک فایل اضافی، خروجی `READY=STOP` و با وضعیت درست `READY=PASS` است.
+
+## تصحیح سوم: بارگذاری alias بدون پسوند
+
+اجرای واقعی `--upgrade-apex` با `AttributeError: 'NoneType' object has no attribute 'loader'` متوقف شد: `importlib` برای فایل‌های نصب‌شده‌ای که پسوند `.py` ندارند (`release-check` و سایر aliasها) spec نمی‌سازد. تابع `module()` در installer اکنون `SourceFileLoader` را صریح می‌سازد و برای هر دو حالت آزمون دارد. این شکست در مرحلهٔ بارگذاری گارد رخ داد، یعنی **پیش از هر نوشتن**؛ هش هر سه فایل config پس از اجرا همان نسخهٔ preview باقی ماند.
+
 ## آزمون‌ها
 
 | آزمون | محیط | نتیجه |

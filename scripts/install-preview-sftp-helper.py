@@ -8,6 +8,7 @@ versions, preserves the previous directory, and refuses uncertain state.
 Neither path installs sudoers, SSH access, or deploys the application.
 """
 import hashlib
+import importlib.machinery
 import importlib.util
 import ipaddress
 import os
@@ -121,7 +122,14 @@ def installed_matches(directory, data):
 
 
 def module(path, name):
-    spec = importlib.util.spec_from_file_location(name, path)
+    # Installed operations are fixed aliases without a .py suffix, so the
+    # source loader must be chosen explicitly; importlib would otherwise
+    # return no spec at all for them.
+    path = Path(path)
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_file_location(name, str(path), loader=loader)
+    if spec is None or spec.loader is None:
+        raise RuntimeError('helper module cannot be loaded')
     obj = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(obj)
     return obj

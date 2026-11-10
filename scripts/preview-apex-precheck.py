@@ -83,11 +83,17 @@ def main():
         print(f'SECRET={name}:{"PASS" if ok else "FAIL"}')
         if not ok:
             problems.append(f'secret {name} is missing or unsafe')
-    expected_names = {name for source in FILES for name in ALIASES.get(source, (source,))}
+    # The receiver is installed by the switch itself, so it is not part of the
+    # installed set that is checked before the switch runs.
+    prior_sources = tuple(name for name in FILES if name != 'preview-deploy-receiver.py')
+    expected_names = {name for source in prior_sources for name in ALIASES.get(source, (source,))}
     present = {path.name for path in TARGET.iterdir()} if TARGET.is_dir() else set()
     target_ok = present == expected_names
     if not target_ok:
-        problems.append('installed helper set is unexpected')
+        missing = sorted(expected_names - present)
+        extra = sorted(present - expected_names)
+        problems.append('installed helper set is unexpected (missing=%s extra=%s)'
+                        % (','.join(missing) or '-', ','.join(extra) or '-'))
     alias_ok = len({digest(TARGET / name) for name in ALIASES['preview-fixed-operations.py']
                     if (TARGET / name).exists()}) == 1
     if not alias_ok:
