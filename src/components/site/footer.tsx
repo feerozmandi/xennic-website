@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Logo } from './logo'
 import { navigation } from '../../lib/navigation'
+import { EMAIL_METHODS, PHONE_METHOD, SOCIAL_METHODS } from '../../lib/contact'
 
 const legal = [
   { href: '/privacy', label: 'حریم خصوصی' },
@@ -26,6 +27,23 @@ export function SiteFooter() {
               زر نور نیرو یکتا (برند تجاری: Xennic) — مهندسی برق قدرت، انرژی و اتوماسیون؛
               مشاوره، طراحی، نظارت و آموزش تخصصی.
             </p>
+            <div className="footer-contact">
+              <a href={PHONE_METHOD.href} dir="ltr">{PHONE_METHOD.value}</a>
+              {EMAIL_METHODS.map((method) => (
+                <a key={method.id} href={method.href} dir="ltr">{method.value}</a>
+              ))}
+            </div>
+            <ul className="footer-socials" aria-label="پیام‌رسان‌ها و شبکه‌های اجتماعی">
+              {SOCIAL_METHODS.map((method) => (
+                <li key={method.id}>
+                  <a href={method.href} target="_blank" rel="noopener noreferrer">
+                    {method.label}
+                    <span aria-hidden="true"> ↗</span>
+                    <span className="sr-only"> (در پنجرهٔ تازه باز می‌شود)</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
           <nav className="footer-col" aria-label="ناوبری فوتر">
             <h2>دسترسی سریع</h2>

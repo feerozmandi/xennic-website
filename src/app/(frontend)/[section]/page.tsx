@@ -7,7 +7,7 @@ import { getPage, getServices, getTrackRecord } from '@/lib/content'
 export const dynamic = 'force-dynamic'
 const placeholders: Record<string, string> = {
   knowledge: 'دانشنامه', tools: 'ابزارهای مهندسی', platform: 'Xennic Platform — به‌زودی',
-  contact: 'تماس با ما', privacy: 'حریم خصوصی', terms: 'شرایط استفاده', cookies: 'کوکی‌ها',
+  privacy: 'حریم خصوصی', terms: 'شرایط استفاده', cookies: 'کوکی‌ها',
 }
 
 export default async function Section({ params }: { params: Promise<{ section: string }> }) {

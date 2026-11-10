@@ -17,6 +17,7 @@ test('approved content is served by the public pages', async () => {
     '/services/grounding-lightning-protection': 'سیستم ارتینگ و صاعقه‌گیر',
     '/services/technical-training': 'به‌زودی',
     '/track-record': 'پیش از تأسیس Xennic',
+    '/contact': 'تماس با Xennic',
   }
   for (const [path, text] of Object.entries(pages)) {
     const response = await fetch(`${base}${path}`)
@@ -54,6 +55,38 @@ test('homepage introduces the approved pillars, track record and platform scope'
   assert.ok(platform.includes('به‌زودی'))
   // The platform is not live: the section must not offer a link or button into it.
   assert.doesNotMatch(platform, /<(?:a|button)\b/i)
+})
+
+test('the contact page publishes only owner-confirmed channels and a real form', async () => {
+  const response = await fetch(`${base}/contact`)
+  assert.equal(response.status, 200)
+  const html = await response.text()
+
+  // Every value below was supplied by the owner; none may be inferred.
+  for (const value of [
+    '۰۹۱۲۴۵۳۳۸۷۸',
+    'tel:+989124533878',
+    'info@xennic.ir',
+    'feerozmandiha@gmail.com',
+    'https://ble.ir/xennic',
+    'https://t.me/xennicco',
+    'https://instagram.com/xennic.ir',
+  ]) {
+    assert.ok(html.includes(value), `missing contact channel: ${value}`)
+  }
+
+  // The founder portrait is the real supplied photo, not a placeholder box.
+  assert.match(html, /founder\.jpg/)
+  assert.doesNotMatch(html, /عکس رسمی مؤسس|جای رزرو/)
+
+  // A real form with labelled fields, and no success message before submission.
+  assert.match(html, /<form[^>]*class="contact-form"/)
+  for (const field of ['name', 'phone', 'email', 'subject', 'message']) {
+    assert.ok(html.includes(`name="${field}"`), `missing field: ${field}`)
+    assert.ok(html.includes(`for="contact-${field}"`), `missing label: ${field}`)
+  }
+  assert.ok(html.includes('ارسال پیام'))
+  assert.doesNotMatch(html, /با موفقیت ثبت|ارسال شد/)
 })
 
 test('unknown routes are not found', async () => {
