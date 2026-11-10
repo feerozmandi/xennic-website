@@ -30,6 +30,10 @@
 
 اجرای واقعی `--upgrade-apex` با `AttributeError: 'NoneType' object has no attribute 'loader'` متوقف شد: `importlib` برای فایل‌های نصب‌شده‌ای که پسوند `.py` ندارند (`release-check` و سایر aliasها) spec نمی‌سازد. تابع `module()` در installer اکنون `SourceFileLoader` را صریح می‌سازد و برای هر دو حالت آزمون دارد. این شکست در مرحلهٔ بارگذاری گارد رخ داد، یعنی **پیش از هر نوشتن**؛ هش هر سه فایل config پس از اجرا همان نسخهٔ preview باقی ماند.
 
+## تصحیح چهارم: اعتبارسنجی با گارد همان نسخه
+
+پس از اصلاح alias، گذار در `TypeError: validate_gateway_oauth() got an unexpected keyword argument 'authority'` متوقف شد: سیاست جدید با گارد **نصب‌شده** (release `09a9d00`) اعتبارسنجی می‌شد که پارامتر authority را ندارد. گذار اکنون هر دو سیاست (preview فعلی و apex جدید) را با گارد و readiness موجود در بستهٔ staging اعتبارسنجی می‌کند و یک تست تضمین می‌کند مسیر بارگذاری گارد همیشه همان نسخهٔ staging باشد. این شکست هم پیش از هر نوشتنی رخ داد و هش سه فایل config بدون تغییر ماند.
+
 ## آزمون‌ها
 
 | آزمون | محیط | نتیجه |
