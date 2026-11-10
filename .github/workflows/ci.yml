@@ -54,6 +54,7 @@ jobs:
           python3 tests/preview-internal-health.py
           python3 tests/preview-network-topology.py
           python3 tests/preview-installer-apex.py
+          python3 tests/preview-installer-scope.py
       - name: Build
         run: npm run build
 

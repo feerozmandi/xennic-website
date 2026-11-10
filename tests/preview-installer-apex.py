@@ -28,7 +28,7 @@ readiness = load('readiness_apex_test', REPO / 'scripts/preview-deploy-readiness
 
 def oauth_config():
     return {
-        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email',
+        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email read:org',
         'reverse_proxy': True, 'trusted_proxy_ips': ['172.28.190.2/32'],
         'http_address': '0.0.0.0:4180',
         'redirect_url': 'https://preview.xennic.ir/oauth2/callback',

@@ -21,3 +21,7 @@ private-fonts/
 *.[eE][oO][tT]
 
 !.env.preview.example
+
+# Python bytecode
+__pycache__/
+*.pyc

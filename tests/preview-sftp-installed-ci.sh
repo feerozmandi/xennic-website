@@ -331,7 +331,7 @@ printf 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' | sudo tee /srv/xe
 cat > "$scratch/oauth2-proxy.cfg" <<'EOF'
 provider = "github"
 email_domains = ["*"]
-scope = "user:email"
+scope = "user:email read:org"
 reverse_proxy = true
 trusted_proxy_ips = ["172.28.190.2/32"]
 http_address = "0.0.0.0:4180"
