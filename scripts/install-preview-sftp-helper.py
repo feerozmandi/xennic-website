@@ -446,23 +446,24 @@ def upgrade_apex():
         _verify_installed_prior()
         oauth_raw = read_private(ROOT / 'secrets/oauth2-proxy.cfg')
         env_raw = read_private(ROOT / 'secrets/preview.env')
-        # The installed guard, not the candidate, must agree with the edge.
-        fixed = module(TARGET / 'release-check', 'installer_apex_guard')
+        # Both policies are validated by the reviewed candidate: the installed
+        # release predates the apex authority parameter and must not be used.
+        guard = module(INCOMING_APEX / 'preview-fixed-operations.py', 'installer_apex_guard')
         try:
             existing = tomllib.loads(oauth_raw.decode('utf-8'))
             trusted = str(ipaddress.ip_address(existing['trusted_proxy_ips'][0].split('/')[0]))
-            fixed.validate_gateway_oauth(oauth_raw, trusted)
+            guard.validate_gateway_oauth(oauth_raw, trusted, authority='preview.xennic.ir')
         except (ValueError, KeyError, IndexError, UnicodeError, AttributeError) as exc:
             raise RuntimeError('installed gateway policy is not the reviewed preview version') from exc
         updated = dict(existing)
         updated['redirect_url'] = f'https://xennic.ir/oauth2/callback'
         updated['whitelist_domains'] = ['xennic.ir']
         staged_edge['oauth2-proxy.cfg'] = _canonical_toml(updated)
-        fixed.validate_gateway_oauth(staged_edge['oauth2-proxy.cfg'], trusted, authority='xennic.ir')
+        guard.validate_gateway_oauth(staged_edge['oauth2-proxy.cfg'], trusted, authority='xennic.ir')
         staged_edge['preview.env'] = _exact_replace(
             env_raw, f'PREVIEW_ORIGIN={APEX_ORIGIN[0]}'.encode('ascii'),
             f'PREVIEW_ORIGIN={APEX_ORIGIN[1]}'.encode('ascii'), 'staging origin')
-        readiness = module(TARGET / 'preview-deploy-readiness.py', 'installer_apex_env')
+        readiness = module(INCOMING_APEX / 'preview-deploy-readiness.py', 'installer_apex_env')
         if readiness._env(staged_edge['preview.env']).get('PREVIEW_ORIGIN') != APEX_ORIGIN[1]:
             raise RuntimeError('staging origin was not switched exactly')
         APEX_STATE.mkdir(mode=0o700)

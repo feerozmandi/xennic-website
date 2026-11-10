@@ -204,8 +204,11 @@ class TransitionSimulationTest(unittest.TestCase):
                           for name in ('Caddyfile', 'gateway.yml', 'routes.caddy')})):
             patch.start(); self.addCleanup(patch.stop)
 
-    @staticmethod
-    def fake_module(path, name):
+    def fake_module(self, path, name):
+        # The switch must validate policies with the staged candidate, never
+        # with the guard of the release that is still installed.
+        self.module_paths = getattr(self, 'module_paths', [])
+        self.module_paths.append((name, Path(path)))
         if 'lock' in name:
             class Lock:
                 def acquire_lock(self, nonblocking=True):
@@ -222,6 +225,13 @@ class TransitionSimulationTest(unittest.TestCase):
 
     def read(self, *parts):
         return (self.root.joinpath(*parts)).read_bytes()
+
+    def test_switch_validates_with_the_staged_candidate(self):
+        installer.upgrade_apex()
+        guard_paths = [path for name, path in self.module_paths if name == 'installer_apex_guard']
+        self.assertTrue(guard_paths)
+        for path in guard_paths:
+            self.assertEqual(path, self.incoming / 'preview-fixed-operations.py')
 
     def test_switch_installs_every_reviewed_file(self):
         installer.upgrade_apex()
