@@ -120,5 +120,51 @@ class EdgeAuthorityTest(unittest.TestCase):
             self.edge('0' * 64)
 
 
+class StagingRootTest(unittest.TestCase):
+    """The staging root tolerates reviewed leftovers and nothing else."""
+
+    def test_reviewed_leftovers_are_accepted(self):
+        root = Path(tempfile.mkdtemp())
+        (root / 'install-preview-sftp-helper.py').write_bytes(b'x')
+        (root / 'incoming-scope').mkdir()
+        (root / 'incoming-apex').mkdir()
+        with mock.patch.object(installer.os, 'lstat', _ownerless_lstat(installer.os.lstat)):
+            installer._check_staging_root(root)
+
+    def test_unknown_entry_is_refused(self):
+        root = Path(tempfile.mkdtemp())
+        (root / 'install-preview-sftp-helper.py').write_bytes(b'x')
+        (root / 'incoming-scope').mkdir()
+        (root / 'payload.py').write_bytes(b'x')
+        with mock.patch.object(installer.os, 'lstat', _ownerless_lstat(installer.os.lstat)):
+            with self.assertRaises(RuntimeError):
+                installer._check_staging_root(root)
+
+
+def _ownerless_lstat(original):
+    class Info:
+        def __init__(self, inner):
+            self._inner = inner
+            self.st_mode = inner.st_mode
+            self.st_uid = 0
+    return lambda path, *args, **kwargs: Info(original(path, *args, **kwargs))
+
+
+class PrecheckManifestTest(unittest.TestCase):
+    def test_staged_files_use_their_own_names(self):
+        spec = importlib.util.spec_from_file_location(
+            'scope_precheck_test', REPO / 'scripts/preview-scope-precheck.py')
+        precheck = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(precheck)
+        staged = Path(tempfile.mkdtemp())
+        for name in precheck.FILES:
+            (staged / name).write_bytes(b'x')
+        lines = ''.join(f'{hashlib.sha256(b"x").hexdigest()}  scripts/{name}\n' for name in precheck.FILES)
+        self.assertEqual(precheck.helper_manifest(staged),
+                         hashlib.sha256(lines.encode('ascii')).hexdigest())
+        with self.assertRaises(OSError):
+            precheck.helper_manifest(staged, aliases=True)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

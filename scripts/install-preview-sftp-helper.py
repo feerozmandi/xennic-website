@@ -545,6 +545,25 @@ def rollback_apex():
 
 
 
+
+def _check_staging_root(source=SOURCE):
+    """Refuse unexpected staging entries without touching any of them.
+
+    The preserved apex directory and superseded helper copies are reviewed
+    artifacts of earlier transitions; this phase never reads them.
+    """
+    allowed = {'install-preview-sftp-helper.py', 'incoming-scope'}
+    if os.path.lexists(source / 'incoming-apex'):
+        allowed.add('incoming-apex')
+    extras = {p.name for p in source.iterdir()} - allowed
+    if not extras <= set(ACTIVATION_FILES):
+        raise RuntimeError('unexpected staging contents')
+    for name in extras:
+        info = os.lstat(source / name)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600:
+            raise RuntimeError('unexpected staging file')
+
+
 def _installed_manifest():
     """Manifest of the helpers installed right now; unknown files fail closed."""
     private_dir(TARGET)
@@ -606,13 +625,7 @@ def upgrade_scope():
     private_dir(INCOMING_SCOPE)
     private_dir(ROOT / 'config')
     private_dir(ROOT / 'secrets')
-    # The preserved apex staging directory is a reviewed artifact of the edge
-    # switch; anything else beside the installer is refused.
-    allowed = {'install-preview-sftp-helper.py', 'incoming-scope'}
-    if os.path.lexists(SOURCE / 'incoming-apex'):
-        allowed.add('incoming-apex')
-    if {p.name for p in SOURCE.iterdir()} != allowed:
-        raise RuntimeError('unexpected staging contents')
+    _check_staging_root(SOURCE)
     if {p.name for p in INCOMING_SCOPE.iterdir()} != set(ACTIVATION_FILES) | {'install-preview-sftp-helper.py'}:
         raise RuntimeError('unexpected scope staging contents')
     for path in (BACKUP_SCOPE, NEW_DIR):
