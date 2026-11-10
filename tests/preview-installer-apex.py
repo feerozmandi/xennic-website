@@ -87,6 +87,22 @@ class ExactReplaceTest(unittest.TestCase):
                 fixed.validate_gateway_oauth(installer._canonical_toml(config), '172.28.190.2', authority='xennic.ir')
 
 
+class ModuleLoadTest(unittest.TestCase):
+    def test_installed_alias_without_suffix_can_be_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'release-check'
+            path.write_text('VALUE = 41\n')
+            self.assertEqual(installer.module(path, 'probe_alias').VALUE, 41)
+            other = Path(directory) / 'preview-deploy-lock.py'
+            other.write_text('VALUE = 7\n')
+            self.assertEqual(installer.module(other, 'probe_module').VALUE, 7)
+
+    def test_missing_helper_module_is_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises((OSError, RuntimeError)):
+                installer.module(Path(directory) / 'missing', 'probe_missing')
+
+
 class ReviewedFileHashTest(unittest.TestCase):
     def test_switch_installs_only_the_pinned_reviewed_files(self):
         for source, (destination, expected) in installer.APEX_SOURCES.items():
