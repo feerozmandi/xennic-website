@@ -1,0 +1,42 @@
+name: Temporary release evidence read-out
+on:
+  push:
+    branches: ['arena/2fcf048f-xennic-website']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUN_NUMBER: '198'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Read and verify the published release evidence
+        run: |
+          python3 - <<'PY'
+          import importlib.util, io, json, os, zipfile
+          spec = importlib.util.spec_from_file_location('verifier', 'scripts/preview-release-verifier.py')
+          verifier = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifier)
+          token = os.environ['GH_TOKEN'].encode()
+          try:
+              runs = verifier.get_json('/actions/workflows/ci.yml/runs?branch=dev&event=push&per_page=100', token)
+              run = next(r for r in runs['workflow_runs'] if str(r['run_number']) == os.environ['RUN_NUMBER'])
+              artifacts = verifier.get_json(f"/actions/runs/{run['id']}/artifacts?per_page=100", token)
+              artifact = next(a for a in artifacts['artifacts'] if a['name'] == 'xennic-preview-release-1')
+              raw = verifier.request(f"{verifier.BASE}/actions/artifacts/{artifact['id']}/zip", token, verifier.MAX_ZIP)
+              with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                  evidence = json.loads(archive.read('xennic-preview-release.json'))
+              release = evidence['release']
+              run_id = verifier.verify({k: release[k] for k in
+                                        ('repository', 'commit', 'digest', 'platform', 'run_number')}, token)
+              print(f"::notice title=RELEASE_VERIFIED::run_id={run_id} commit={release['commit']} run={release['run_number']} digest={release['digest']} platform={release['platform']}")
+          except Exception as exc:
+              print(f"::error title=RELEASE_EVIDENCE_FAILED::{type(exc).__name__}: {exc}")
+              raise
+          PY
