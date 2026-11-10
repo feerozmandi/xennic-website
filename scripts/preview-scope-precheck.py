@@ -75,10 +75,10 @@ def canonical(config):
     return ''.join(f'{key} = {toml_value(config[key])}\n' for key in sorted(config))
 
 
-def helper_manifest(directory):
+def helper_manifest(directory, aliases=False):
     data = {}
     for name in FILES:
-        for installed in ALIASES.get(name, (name,)):
+        for installed in (ALIASES.get(name, (name,)) if aliases else (name,)):
             raw = Path(directory, installed).read_bytes()
             if name in data and data[name] != raw:
                 raise ValueError('alias differs')
@@ -109,7 +109,7 @@ def main():
         problems.append('installed Caddyfile is not a reviewed edge')
     expected, present = installed_names()
     try:
-        manifest = helper_manifest(TARGET)
+        manifest = helper_manifest(TARGET, aliases=True)
     except (OSError, ValueError):
         manifest = ''
     target_ok = present == expected and manifest == CURRENT_MANIFEST
