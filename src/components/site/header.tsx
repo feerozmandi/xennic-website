@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { navigation } from '../../lib/navigation'
+import { LocaleSwitch } from './locale-switch'
 import { Logo } from './logo'
+import { ThemeToggle } from './theme-toggle'
 
 export function SiteHeader() {
   const pathname = usePathname()
@@ -55,7 +57,7 @@ export function SiteHeader() {
       <header className="site-header">
         <div className="container">
           <div className="glass glass--quiet header-bar">
-            <Logo />
+            <Logo size="sm" />
             <nav className="nav-desktop" aria-label="ناوبری اصلی">
               <ul>
                 {navigation.map((item) => (
@@ -68,7 +70,11 @@ export function SiteHeader() {
               </ul>
             </nav>
             <div className="header-actions">
-              <Link href="/contact" className="btn btn--primary header-cta" style={{ minHeight: '2.75rem', padding: '0.45rem 1.2rem' }}>
+              <div className="header-locale">
+                <LocaleSwitch compact />
+              </div>
+              <ThemeToggle />
+              <Link href="/contact" className="btn btn--primary header-cta">
                 درخواست مشاوره
               </Link>
               <button
@@ -96,6 +102,10 @@ export function SiteHeader() {
             </button>
           </div>
           <div className="mobile-sheet__panel">
+            <div className="mobile-sheet__controls">
+              <LocaleSwitch />
+              <ThemeToggle />
+            </div>
             <nav className="mobile-nav" id="mobile-navigation" aria-label="ناوبری موبایل">
               {navigation.map((item) => (
                 <Link

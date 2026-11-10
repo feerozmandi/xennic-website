@@ -118,3 +118,23 @@ test('only public content is anonymously readable and writes remain restricted',
     }
   }
 })
+
+test('the theme resolves before paint and the switches are real controls', async () => {
+  const response = await fetch(`${base}/`)
+  const html = await response.text()
+  // The pre-paint script must be inside <head> so no frame renders in the wrong theme.
+  const head = html.slice(0, html.indexOf('</head>'))
+  assert.match(head, /xennic-theme/, 'theme script is not in <head>')
+  assert.match(head, /root\.dataset\.theme/, 'theme script does not set the attribute')
+  // Exactly one theme switch, exposed as a switch, with a Persian label.
+  const switches = html.match(/role="switch"/g) ?? []
+  assert.equal(switches.length, 1, 'expected a single theme switch in the header')
+  assert.match(html, /class="liquid-switch"/)
+  assert.match(html, /aria-label="حالت (شب|روز)[^"]*"/)
+  // Locale control: the live locale is a link, the unpublished one is not clickable.
+  assert.match(html, /aria-current="true"[^>]*>فا/)
+  assert.match(html, /aria-disabled="true"[^>]*>EN/)
+  assert.doesNotMatch(html, /href="\/en"/i, 'the English tree is not published yet')
+  // Official artwork replaces the retyped wordmark.
+  assert.match(html, /\/brand\/xennic-logo-on-dark\.webp/)
+})
