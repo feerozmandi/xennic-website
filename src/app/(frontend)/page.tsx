@@ -1,21 +1,41 @@
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { DocumentContent, ServiceCards } from '@/components/content'
+import { ContactBand, Founder, Hero, Platform, Principles, Services } from '@/components/home/sections'
 import { getPage, getServices } from '@/lib/content'
+import { buildHomeContent, extractBlocks, type HomeService } from '@/lib/home-content'
+import { notFound } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function Home() {
-  const [page, services, trackRecordIntro] = await Promise.all([getPage('home'), getServices(), getPage('track-record-intro')])
+  const [page, services, about, trackRecord] = await Promise.all([
+    getPage('home'),
+    getServices(),
+    getPage('about'),
+    getPage('track-record-intro'),
+  ])
   if (!page) notFound()
-  return <>
-    <section className="hero"><div className="container hero-content">
-      <h1>{page.title}</h1>{page.summary && <p>{page.summary}</p>}
-      <div className="hero-actions"><button className="button" type="button" disabled>درخواست مشاوره مهندسی</button><Link className="button" href="/services">آشنایی با خدمات</Link></div>
-    </div></section>
-    <section className="container page-section"><h2>چرا Xennic؟</h2><DocumentContent content={page.content} /></section>
-    <section className="surface-muted"><div className="container page-section"><h2>خدمات راهبردی</h2><ServiceCards services={services} /></div></section>
-    <section className="container page-section" data-testid="track-record-intro"><h2>تجربهٔ مهندسی که می‌توان به آن اعتماد کرد</h2>{trackRecordIntro?.summary && <p>{trackRecordIntro.summary}</p>}<Link href="/track-record">مشاهدهٔ پیشینهٔ مهندسی</Link></section>
-    <section className="container page-section" data-testid="platform-intro"><h2>Xennic Platform</h2><span className="badge">به‌زودی</span></section>
-  </>
+
+  const content = buildHomeContent({
+    pageTitle: page.title,
+    pageSummary: page.summary ?? '',
+    blocks: extractBlocks(page.content),
+    aboutBlocks: extractBlocks(about?.content),
+    trackRecord: trackRecord ? { heading: trackRecord.title, summary: trackRecord.summary ?? '' } : undefined,
+    services: services.map<HomeService>((service) => ({
+      slug: service.slug,
+      title: service.title,
+      summary: service.summary ?? '',
+      comingSoon: Boolean(service.comingSoon),
+    })),
+  })
+
+  return (
+    <>
+      <Hero content={content.hero} />
+      <Principles pillars={content.pillars} />
+      <Services services={content.services} />
+      <Founder founder={content.founder} />
+      <Platform platform={content.platform} />
+      <ContactBand contact={content.contact} />
+    </>
+  )
 }

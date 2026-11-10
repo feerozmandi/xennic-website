@@ -29,21 +29,31 @@ test('approved content is served by the public pages', async () => {
   }
 })
 
-test('homepage introductions use the approved copy and platform scope', async () => {
+test('homepage introduces the approved pillars, track record and platform scope', async () => {
   const response = await fetch(`${base}/`)
   assert.equal(response.status, 200)
   const html = await response.text()
+
+  for (const text of ['Engineering First', 'Evidence Based', 'Independent Thinking']) {
+    assert.ok(html.includes(text), `missing approved principle: ${text}`)
+  }
+  // No disabled or fake-interactive calls to action may be rendered.
+  assert.doesNotMatch(html, /<button[^>]*\bdisabled\b/)
+  assert.doesNotMatch(html, /ارسال شد|با موفقیت ثبت/)
+
   const trackRecord = html.match(/<section\b[^>]*data-testid="track-record-intro"[^>]*>([\s\S]*?)<\/section>/)?.[1]
   assert.ok(trackRecord, 'track record section is missing')
   assert.ok(trackRecord.includes('تجربهٔ مهندسی که می‌توان به آن اعتماد کرد'))
   assert.ok(trackRecord.includes('با تجربه و پیشینهٔ حرفه‌ای مؤسس Xennic در صنعت برق، پیش از تأسیس این مجموعه، آشنا شوید.'))
+  assert.ok(trackRecord.includes('احمد فیروزمندی'))
   assert.match(trackRecord, /href="\/track-record"/)
-  assert.ok(trackRecord.includes('مشاهدهٔ پیشینهٔ مهندسی'))
 
   const platform = html.match(/<section\b[^>]*data-testid="platform-intro"[^>]*>([\s\S]*?)<\/section>/)?.[1]
   assert.ok(platform, 'platform section is missing')
-  assert.equal(platform.replace(/<[^>]*>/g, '').trim(), 'Xennic Platformبه‌زودی')
-  assert.doesNotMatch(platform, /<(?:a|p|button)\b/i)
+  assert.ok(platform.includes('Xennic Platform'))
+  assert.ok(platform.includes('به‌زودی'))
+  // The platform is not live: the section must not offer a link or button into it.
+  assert.doesNotMatch(platform, /<(?:a|button)\b/i)
 })
 
 test('unknown routes are not found', async () => {
