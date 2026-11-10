@@ -214,9 +214,13 @@ after=$(sudo sha256sum /srv/xennic-preview/secrets/ci-private /srv/xennic-previe
 
 # Upgrade the exact installed 09a helpers without touching configuration, data,
 # or either preserved historical helper set. All files here are disposable CI.
+# This scenario reproduces the reviewed activation upgrade itself, so every
+# source stays pinned to the release that defined it; later releases must not
+# silently change the fixture.
 sudo install -d -o root -g root -m 0700 /root/xennic-preview-install/incoming-activation
 for f in "${files[@]}" preview-deploy-receiver.py install-preview-sftp-helper.py; do
-  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-install/incoming-activation/$f"
+  git show "da6487b626c163092e33fd576f04594fb6fe7f97:scripts/$f" > "$scratch/activation-$f"
+  sudo install -o root -g root -m 0600 "$scratch/activation-$f" "/root/xennic-preview-install/incoming-activation/$f"
 done
 sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
 activation=/root/xennic-preview-install/incoming-activation/install-preview-sftp-helper.py
@@ -226,7 +230,7 @@ if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation 
 sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
 printf 'unknown helper\n' | sudo tee /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py >/dev/null
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation source accepted' >&2; exit 1; fi
-sudo install -o root -g root -m 0600 scripts/preview-deploy-backend.py /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py
+sudo install -o root -g root -m 0600 "$scratch/activation-preview-deploy-backend.py" /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py
 printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.json >/dev/null
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Activation upgrade accepted journal' >&2; exit 1; fi
 sudo test -f /srv/xennic-preview/state/release-state.json
