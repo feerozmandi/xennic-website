@@ -57,7 +57,7 @@ class TopologyTest(unittest.TestCase):
 
 def oauth_config():
     values = {
-        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email',
+        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email read:org',
         'reverse_proxy': True, 'trusted_proxy_ips': ['172.20.0.2/32'],
         'http_address': '0.0.0.0:4180',
         'redirect_url': 'https://preview.xennic.ir/oauth2/callback',
@@ -88,7 +88,7 @@ class GatewayOptionsTest(unittest.TestCase):
         for key, value in (
             ('cookie_expire', '4h'), ('cookie_secure', False), ('github_users', []),
             ('github_users', ['user', 'USER']), ('github_users', ['bad--name']),
-            ('scope', 'user:email read:org'), ('trusted_proxy_ips', ['0.0.0.0/0']),
+            ('scope', 'user:email'), ('trusted_proxy_ips', ['0.0.0.0/0']),
             ('skip_auth_preflight', True), ('cookie_secret', 'bad'),
             ('upstreams', ['http://app:3000']), ('skip_auth_routes', ['.*']),
             ('client_secret', ''), ('redirect_url', 'http://preview.xennic.ir/oauth2/callback'),

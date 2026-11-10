@@ -160,7 +160,7 @@ def validate_gateway_oauth(raw, caddy_ip, *, authority='preview.xennic.ir'):
     if address.version != 4 or not any(address in network for network in private_ranges):
         raise Rejected('invalid Caddy peer address')
     fixed = {
-        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email',
+        'provider': 'github', 'email_domains': ['*'], 'scope': 'user:email read:org',
         'reverse_proxy': True, 'trusted_proxy_ips': [str(address) + '/32'],
         'http_address': '0.0.0.0:4180',
         'redirect_url': f'https://{authority}/oauth2/callback',

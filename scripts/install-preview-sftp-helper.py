@@ -354,6 +354,21 @@ APEX_FILES = {'Caddyfile': ('config', 'Caddyfile'), 'gateway.yml': ('config', 'g
               'routes.caddy': ('config', 'routes.caddy'), 'oauth2-proxy.cfg': ('secrets', 'oauth2-proxy.cfg'),
               'preview.env': ('secrets', 'preview.env')}
 
+# The reviewed gate policy gains read:org because the pinned GitHub provider
+# reads organization membership before it applies any user restriction. The
+# change is exactly one canonical TOML value; nothing else in the policy moves.
+SCOPE_VALUE = 'user:email read:org'
+SCOPE_OLD = b'scope = "user:email"'
+SCOPE_NEW = b'scope = "user:email read:org"'
+INCOMING_SCOPE = SOURCE / 'incoming-scope'
+BACKUP_SCOPE = PARENT / '.xennic-preview-before-scope'
+REJECTED_SCOPE = PARENT / '.xennic-preview-scope-rejected'
+SCOPE_HELPERS = 'helpers'
+# Manifest of the release installed by the apex switch (activated dev
+# 465278d/da6487b helpers) and of the candidate that carries read:org.
+CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
+SCOPE_MANIFEST = 'de2a97a75819407576a0292900096d8e170878d83ef6c3e09175caa4e0097854'
+
 
 def _toml_value(value):
     if type(value) is bool:
@@ -361,7 +376,9 @@ def _toml_value(value):
     if type(value) is int:
         return str(value)
     if isinstance(value, str):
-        if any(ord(ch) < 33 or ord(ch) > 126 for ch in value):
+        # Interior spaces are required by reviewed multi-value options such as
+        # the GitHub scope; quotes, escapes and control characters are not.
+        if any(ord(ch) < 32 or ord(ch) > 126 or ch in '"\\' for ch in value):
             raise RuntimeError('unsupported gateway value')
         return '"' + value + '"'
     if isinstance(value, list) and value and all(isinstance(item, str) for item in value):
@@ -527,6 +544,158 @@ def rollback_apex():
     print('Rolled back to the reviewed preview edge; rejected apex helpers preserved.')
 
 
+
+def _installed_manifest():
+    """Manifest of the helpers installed right now; unknown files fail closed."""
+    private_dir(TARGET)
+    expected = {installed for name in ACTIVATION_FILES for installed in EXECUTABLES.get(name, (name,))}
+    if {p.name for p in TARGET.iterdir()} != expected:
+        raise RuntimeError('unexpected installed helper')
+    data = {}
+    for name in ACTIVATION_FILES:
+        for installed in EXECUTABLES.get(name, (name,)):
+            raw = read_private(TARGET / installed)
+            if name in data and data[name] != raw:
+                raise RuntimeError('installed helper alias differs')
+            data[name] = raw
+    lines = ''.join(f'{hashlib.sha256(data[name]).hexdigest()}  scripts/{name}\n' for name in ACTIVATION_FILES)
+    return hashlib.sha256(lines.encode('ascii')).hexdigest()
+
+
+def _edge_authority():
+    """Derive the only reviewed authority from the installed Caddyfile hash."""
+    digest = hashlib.sha256(read_private(ROOT / 'config/Caddyfile')).hexdigest()
+    if digest == APEX_SOURCES['apex-Caddyfile'][1]:
+        return 'xennic.ir'
+    if digest == GATEWAY_FILES['Caddyfile'][1]:
+        return 'preview.xennic.ir'
+    raise RuntimeError('installed Caddyfile is not a reviewed edge')
+
+
+def _scope_transition(oauth_raw, guard, authority):
+    """Return the reviewed file with only the scope changed, or raise."""
+    try:
+        existing = tomllib.loads(oauth_raw.decode('utf-8'))
+        trusted = str(ipaddress.ip_address(existing['trusted_proxy_ips'][0].split('/')[0]))
+    except (ValueError, KeyError, IndexError, UnicodeError, AttributeError) as exc:
+        raise RuntimeError('installed gateway policy cannot be read') from exc
+    updated = dict(existing)
+    updated['scope'] = SCOPE_VALUE
+    new_raw = _canonical_toml(updated)
+    # Exactly one canonical value changes: reverting it must reproduce the
+    # installed file byte for byte, so no other drift can ride along.
+    if _exact_replace(new_raw, SCOPE_NEW, SCOPE_OLD, 'gateway scope') != oauth_raw:
+        raise RuntimeError('installed gateway policy differs beyond the scope')
+    guard.validate_gateway_oauth(new_raw, trusted, authority=authority)
+    return new_raw
+
+
+def _restore_scope(oauth_raw):
+    target = ROOT / 'secrets/oauth2-proxy.cfg'
+    if os.path.lexists(target):
+        os.unlink(target)
+    write_exclusive(target, oauth_raw)
+    sync_dir(ROOT / 'secrets')
+
+
+def upgrade_scope():
+    """Add read:org to the installed gate without stopping anything else."""
+    for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT, ROOT):
+        check_dir(path)
+    private_dir(SOURCE)
+    private_dir(INCOMING_SCOPE)
+    private_dir(ROOT / 'config')
+    private_dir(ROOT / 'secrets')
+    # The preserved apex staging directory is a reviewed artifact of the edge
+    # switch; anything else beside the installer is refused.
+    allowed = {'install-preview-sftp-helper.py', 'incoming-scope'}
+    if os.path.lexists(SOURCE / 'incoming-apex'):
+        allowed.add('incoming-apex')
+    if {p.name for p in SOURCE.iterdir()} != allowed:
+        raise RuntimeError('unexpected staging contents')
+    if {p.name for p in INCOMING_SCOPE.iterdir()} != set(ACTIVATION_FILES) | {'install-preview-sftp-helper.py'}:
+        raise RuntimeError('unexpected scope staging contents')
+    for path in (BACKUP_SCOPE, NEW_DIR):
+        if os.path.lexists(path):
+            raise RuntimeError('previous scope update exists; review it first')
+    candidate = verified_sources(INCOMING_SCOPE, SCOPE_MANIFEST, ACTIVATION_FILES)
+    if _installed_manifest() != CURRENT_MANIFEST:
+        raise RuntimeError('installed helpers are not the reviewed release')
+    authority = _edge_authority()
+    guard = module(INCOMING_SCOPE / 'preview-fixed-operations.py', 'installer_scope_guard')
+    oauth_raw = read_private(ROOT / 'secrets/oauth2-proxy.cfg')
+    new_raw = _scope_transition(oauth_raw, guard, authority)
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_scope_lock')
+    with locks.acquire_lock(nonblocking=True):
+        # Recheck under the exact deployment lock.
+        if _installed_manifest() != CURRENT_MANIFEST:
+            raise RuntimeError('installed helpers changed; no scope update performed')
+        if read_private(ROOT / 'secrets/oauth2-proxy.cfg') != oauth_raw:
+            raise RuntimeError('installed gateway policy changed; no scope update performed')
+        BACKUP_SCOPE.mkdir(mode=0o700)
+        write_exclusive(BACKUP_SCOPE / 'oauth2-proxy.cfg', oauth_raw)
+        write_exclusive(BACKUP_SCOPE / 'manifest', (CURRENT_MANIFEST + '\n').encode('ascii'))
+        sync_dir(BACKUP_SCOPE)
+        NEW_DIR.mkdir(mode=0o700)
+        for name in ACTIVATION_FILES:
+            for installed in EXECUTABLES.get(name, (name,)):
+                mode = 0o700 if name in EXECUTABLES else 0o600
+                write_exclusive(NEW_DIR / installed, candidate[name], mode)
+        sync_dir(NEW_DIR)
+        installed_matches(NEW_DIR, candidate)
+        temp = (ROOT / 'secrets/.oauth2-proxy.cfg.scope-update')
+        if os.path.lexists(temp):
+            raise RuntimeError('incomplete scope update exists')
+        write_exclusive(temp, new_raw)
+        renamed_old = renamed_new = replaced_policy = False
+        try:
+            os.rename(TARGET, BACKUP_SCOPE / SCOPE_HELPERS); renamed_old = True; sync_parent()
+            os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            os.replace(temp, ROOT / 'secrets/oauth2-proxy.cfg'); replaced_policy = True
+            sync_dir(ROOT / 'secrets')
+            installed_matches(TARGET, candidate)
+            if read_private(ROOT / 'secrets/oauth2-proxy.cfg') != new_raw:
+                raise RuntimeError('installed gateway policy verification failed')
+            verify_backend()
+        except BaseException:
+            if os.path.lexists(temp):
+                os.unlink(temp)
+            if replaced_policy:
+                _restore_scope(oauth_raw)
+            if renamed_new:
+                os.rename(TARGET, NEW_DIR)
+            if renamed_old:
+                os.rename(BACKUP_SCOPE / SCOPE_HELPERS, TARGET)
+            sync_parent()
+            raise
+    print('Gateway scope updated to user:email read:org; previous helpers and policy preserved; '
+          'the running gate keeps the old policy until the next deployment recreates it.')
+
+
+def rollback_scope():
+    """Restore the preserved helpers and gate policy from the scope update."""
+    for path in (TARGET, SOURCE, PARENT):
+        check_dir(path)
+    if not os.path.lexists(BACKUP_SCOPE):
+        raise RuntimeError('no completed scope update to roll back')
+    private_dir(BACKUP_SCOPE)
+    if not os.path.lexists(BACKUP_SCOPE / SCOPE_HELPERS):
+        raise RuntimeError('preserved helpers are missing')
+    private_dir(BACKUP_SCOPE / SCOPE_HELPERS)
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_scope_rollback_lock')
+    with locks.acquire_lock(nonblocking=True):
+        oauth_raw = read_private(BACKUP_SCOPE / 'oauth2-proxy.cfg')
+        if os.path.lexists(REJECTED_SCOPE):
+            raise RuntimeError('previous rejected helpers exist; review them first')
+        os.rename(TARGET, REJECTED_SCOPE)
+        os.rename(BACKUP_SCOPE / SCOPE_HELPERS, TARGET)
+        sync_parent()
+        _restore_scope(oauth_raw)
+        verify_backend()
+    print('Restored the previous helpers and user:email policy; the rejected helpers are preserved; '
+          'the running gate keeps the new policy until the next deployment recreates it.')
+
+
 def upgrade_activation():
     """Only the verified network install before first deployment; no configuration changes."""
     for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
@@ -600,6 +769,10 @@ def main():
         return upgrade_apex()
     if sys.argv[1:] == ['--rollback-apex']:
         return rollback_apex()
+    if sys.argv[1:] == ['--upgrade-scope']:
+        return upgrade_scope()
+    if sys.argv[1:] == ['--rollback-scope']:
+        return rollback_scope()
     if sys.argv[1:] == ['--upgrade']:
         if os.path.lexists(INCOMING_ACTIVATION): return upgrade_activation()
         return upgrade_network() if os.path.lexists(INCOMING_NETWORK) else upgrade()
