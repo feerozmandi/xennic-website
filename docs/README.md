@@ -20,6 +20,7 @@
 
 | تاریخ | گزارش | موضوع |
 |---|---|---|
+| ۲۰۲۶-۱۰-۲۹ | [تصحیح گذار بر پایهٔ وضعیت واقعی](reports/2026-10-29-apex-switch-prior-state.md) | pin نسخهٔ نصب‌شده، نصب routes و pre-check |
 | ۲۰۲۶-۱۰-۲۹ | [گذار محدود لبه به دامنهٔ اصلی](reports/2026-10-29-apex-edge-switch.md) | CI `42717419323` سبز؛ اجرا روی VPS نشده |
 | ۲۰۲۶-۱۰-۲۹ | [کنترل OAuth و سلامت ورودی دامنهٔ اصلی](reports/2026-10-29-apex-guard-candidate.md) | نامزد guard؛ اتصال عملیاتی و CI باز |
 | ۲۰۲۶-۱۰-۲۹ | [آزمون HTTPS و قطع gate دامنهٔ اصلی](reports/2026-10-29-apex-tls-fixture.md) | fixture با CA داخلی؛ TLS و OAuth واقعی باز |
