@@ -1,9 +1,18 @@
+import type { Metadata } from 'next'
 import { ContactBand, Founder, Hero, Platform, Principles, Services } from '@/components/home/sections'
 import { getPage, getServices } from '@/lib/content'
 import { buildHomeContent, extractBlocks, type HomeService } from '@/lib/home-content'
+import { pageMetadata } from '@/lib/seo'
 import { notFound } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = pageMetadata({
+  title: 'Xennic | مهندسی برق، انرژی و اتوماسیون',
+  description:
+    'زر نور نیرو یکتا (Xennic): مشاوره، طراحی، نظارت و آموزش تخصصی در مهندسی برق قدرت، تأسیسات، انرژی و اتوماسیون.',
+  path: '/',
+})
 
 export default async function Home() {
   const [page, services, about, trackRecord] = await Promise.all([

@@ -138,3 +138,63 @@ test('the theme resolves before paint and the switches are real controls', async
   // Official artwork replaces the retyped wordmark.
   assert.match(html, /\/brand\/xennic-logo-on-dark\.webp/)
 })
+
+test('content pages carry one H1, approved framing and no placeholder text', async () => {
+  const pages = ['/company', '/company/team', '/services', '/services/energy-audit', '/track-record', '/knowledge']
+  for (const path of pages) {
+    const html = await (await fetch(`${base}${path}`)).text()
+    assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${path}: exactly one H1`)
+    assert.ok(!html.includes('ساختار اولیهٔ صفحه'), `${path}: placeholder copy is gone`)
+    assert.ok(!/<button[^>]*\bdisabled\b/.test(html), `${path}: no disabled buttons`)
+  }
+
+  // The service detail page offers a real route to the contact page.
+  const detail = await (await fetch(`${base}/services/energy-audit`)).text()
+  assert.match(detail, /href="\/contact"/)
+  assert.match(detail, /class="btn btn--primary"/)
+
+  // The unpublished service keeps its "soon" badge and offers no request button.
+  const soon = await (await fetch(`${base}/services/technical-training`)).text()
+  assert.ok(soon.includes('به‌زودی'))
+  assert.doesNotMatch(soon, /href="\/contact"[^>]*class="btn btn--primary"/)
+
+  // Track record stays framed as the founder's prior experience, entry by entry.
+  const record = await (await fetch(`${base}/track-record`)).text()
+  const badges = (record.match(/پیش از تأسیس Xennic/g) ?? []).length
+  assert.ok(badges >= 5, 'every track-record entry keeps the prior-experience badge')
+  assert.ok(record.includes('به‌معنای سابقهٔ پروژه‌های شرکت نیست'))
+})
+
+test('SEO policy: published pages are indexable, unpublished and private ones are not', async () => {
+  const indexable = ['/', '/company', '/company/team', '/services', '/services/energy-audit', '/track-record', '/contact']
+  for (const path of indexable) {
+    const html = await (await fetch(`${base}${path}`)).text()
+    assert.ok(!/<meta name="robots"[^>]*noindex/.test(html), `${path}: must stay indexable`)
+    assert.match(html, /<link rel="canonical" href="https:\/\/xennic\.ir/, `${path}: canonical host`)
+    assert.match(html, /<meta property="og:image" content="https:\/\/xennic\.ir\/brand\/og-cover\.png"/, `${path}: share image`)
+    const description = html.match(/<meta name="description" content="([^"]+)"/)?.[1] ?? ''
+    assert.ok(description.length > 40, `${path}: own description`)
+  }
+
+  // Pages that are linked but not approved yet are served with noindex.
+  for (const path of ['/knowledge', '/platform', '/privacy', '/tools']) {
+    const html = await (await fetch(`${base}${path}`)).text()
+    assert.match(html, /<meta name="robots" content="noindex, nofollow"/, `${path}: noindex`)
+  }
+
+  // A service that is still "soon" is not indexed, an open one is.
+  const soon = await (await fetch(`${base}/services/technical-training`)).text()
+  assert.match(soon, /noindex/)
+  const open = await (await fetch(`${base}/services/energy-audit`)).text()
+  assert.ok(!/<meta name="robots"[^>]*noindex/.test(open))
+
+  // Private surfaces never appear in the crawl directives or the sitemap.
+  const robots = await (await fetch(`${base}/robots.txt`)).text()
+  assert.match(robots, /Disallow: \/admin/)
+  assert.match(robots, /Sitemap: https:\/\/xennic\.ir\/sitemap\.xml/)
+  const sitemap = await (await fetch(`${base}/sitemap.xml`)).text()
+  assert.ok(sitemap.includes('https://xennic.ir/contact'))
+  assert.ok(!sitemap.includes('/knowledge'))
+  assert.ok(!sitemap.includes('technical-training'))
+  assert.ok(!sitemap.includes('/admin'))
+})

@@ -5,12 +5,14 @@ import { ContactForm } from '@/components/contact/contact-form'
 import { Container, Eyebrow } from '@/components/ui/primitives'
 import { FOUNDER_NAME } from '@/lib/home-content'
 import { CONTACT_METHODS, EMAIL_METHODS, FOUNDER_HEADLINE, FOUNDER_PORTRAIT, PHONE_METHOD, SOCIAL_METHODS } from '@/lib/contact'
+import { pageMetadata } from '@/lib/seo'
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: 'تماس با ما',
   description:
     'مسیرهای تماس رسمی Xennic: تلفن، رایانامه، بله، تلگرام و اینستاگرام، همراه با فرم درخواست تماس.',
-}
+  path: '/contact',
+})
 
 function MethodLink({ method }: { method: (typeof CONTACT_METHODS)[number] }) {
   return (
