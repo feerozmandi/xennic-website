@@ -188,10 +188,19 @@ test('SEO policy: published pages are indexable, unpublished and private ones ar
   const open = await (await fetch(`${base}/services/energy-audit`)).text()
   assert.ok(!/<meta name="robots"[^>]*noindex/.test(open))
 
-  // Private surfaces never appear in the crawl directives or the sitemap.
+  // Crawl directives follow the deployment mode. The preview image is built with
+  // XENNIC_PREVIEW=1, so there the whole site is closed; production keeps the
+  // public pages open and the private surfaces out. The global noindex may only
+  // be lifted by the owner, so the test accepts both and never assumes which.
   const robots = await (await fetch(`${base}/robots.txt`)).text()
-  assert.match(robots, /Disallow: \/admin/)
-  assert.match(robots, /Sitemap: https:\/\/xennic\.ir\/sitemap\.xml/)
+  const previewMode = /^Disallow: \/$/m.test(robots)
+  if (previewMode) {
+    assert.match(robots, /^Disallow: \/$/m, 'preview must keep the whole site closed')
+    assert.ok(!/^Allow: \//m.test(robots), 'preview must not allow crawling')
+  } else {
+    assert.match(robots, /Disallow: \/admin/)
+    assert.match(robots, /Sitemap: https:\/\/xennic\.ir\/sitemap\.xml/)
+  }
   const sitemap = await (await fetch(`${base}/sitemap.xml`)).text()
   assert.ok(sitemap.includes('https://xennic.ir/contact'))
   assert.ok(!sitemap.includes('/knowledge'))
