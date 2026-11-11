@@ -72,13 +72,13 @@ export default async function Section({ params }: { params: Promise<{ section: s
             <h2 className="h3">تیم و مؤسس</h2>
             <p>معرفی مؤسس و سابقهٔ حرفه‌ای ایشان، جدا از سابقهٔ شرکت.</p>
             <Link className="text-link" href="/company/team">
-              تیم <span aria-hidden="true">←</span>
+              تیم <span className="arrow" aria-hidden="true">←</span>
             </Link>
             <Link className="text-link" href="/track-record">
-              پیشینهٔ مهندسی <span aria-hidden="true">←</span>
+              پیشینهٔ مهندسی <span className="arrow" aria-hidden="true">←</span>
             </Link>
             <Link className="text-link" href="/services">
-              خدمات <span aria-hidden="true">←</span>
+              خدمات <span className="arrow" aria-hidden="true">←</span>
             </Link>
           </aside>
         </div>

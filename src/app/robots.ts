@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { NOT_PUBLISHED_PATHS, SITE_URL } from '@/lib/seo'
+import { NOT_PUBLISHED_PATHS, SITE_URL, twinPath } from '@/lib/seo'
 
 /**
  * Crawl policy.
@@ -14,12 +14,24 @@ export default function robots(): MetadataRoute.Robots {
     return { rules: [{ userAgent: '*', disallow: '/' }] }
   }
 
+  // Both language editions share the same policy, so each unpublished path is
+  // listed in Persian and English.
+  const unpublished = NOT_PUBLISHED_PATHS.filter((path) => path !== '/platform')
+  const disallow = [
+    '/admin',
+    '/en/admin',
+    '/api/',
+    '/health',
+    ...unpublished,
+    ...unpublished.map((path) => twinPath(path, 'en')),
+  ]
+
   return {
     rules: [
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/admin', '/api/', '/health', ...NOT_PUBLISHED_PATHS.filter((path) => path !== '/platform')],
+        disallow,
       },
     ],
     sitemap: `${SITE_URL}/sitemap.xml`,

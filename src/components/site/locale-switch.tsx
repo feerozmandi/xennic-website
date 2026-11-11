@@ -1,46 +1,45 @@
+'use client'
+
 import Link from 'next/link'
-import { ACTIVE_LOCALE, LOCALES } from '@/lib/locales'
+import { usePathname } from 'next/navigation'
+import { alternateHref, getDictionary, LOCALES, type Locale } from '@/lib/i18n'
 
 /**
  * Language switch, drawn with the same liquid-glass language as the theme
- * switch. The active locale is a plain link; locales whose tree is not live yet
- * are rendered as disabled segments with an explicit note, so the control never
- * promises a page that does not exist.
+ * switch. Both editions are live, so the inactive language is a link to the same
+ * page in the other language; `hreflang` is set so browsers and crawlers do not
+ * mistake the twin page for a duplicate.
  */
-export function LocaleSwitch({ compact = false }: { compact?: boolean }) {
+export function LocaleSwitch({ locale, compact = false }: { locale: Locale; compact?: boolean }) {
+  const pathname = usePathname() ?? (locale === 'en' ? '/en' : '/')
+  const dict = getDictionary(locale)
+
   return (
     <div className={`locale-switch${compact ? ' locale-switch--compact' : ''}`}>
-      <span className="sr-only" id="locale-switch-help">
-        زبان سایت. نسخهٔ انگلیسی در حال آماده‌سازی است.
-      </span>
-      <ul className="locale-switch__list" aria-describedby="locale-switch-help">
-        {LOCALES.map((locale) => {
-          const isActive = locale.code === ACTIVE_LOCALE
+      <ul className="locale-switch__list" aria-label={dict.localeSwitch.help}>
+        {LOCALES.map((code) => {
+          const isActive = code === locale
+          const label = dict.localeSwitch[code]
+          const short = code === 'fa' ? 'فا' : 'EN'
+          const dir = code === 'fa' ? 'rtl' : 'ltr'
           return (
-            <li key={locale.code}>
-              {locale.enabled ? (
-                <Link
-                  href={locale.href}
-                  lang={locale.code}
-                  dir={locale.dir}
-                  aria-current={isActive ? 'true' : undefined}
-                  className={`locale-switch__option${isActive ? ' is-active' : ''}`}
-                >
-                  {locale.short}
-                  <span className="sr-only"> — {locale.label}</span>
-                </Link>
-              ) : (
-                <span
-                  className="locale-switch__option is-disabled"
-                  lang={locale.code}
-                  dir={locale.dir}
-                  aria-disabled="true"
-                  title={`${locale.label} — در حال آماده‌سازی`}
-                >
-                  {locale.short}
-                  <span className="locale-switch__badge">به‌زودی</span>
-                  <span className="sr-only"> — {locale.label}، در حال آماده‌سازی</span>
+            <li key={code}>
+              {isActive ? (
+                <span className="locale-switch__option is-active" lang={code} dir={dir} aria-current="true">
+                  {short}
+                  <span className="sr-only"> — {label}</span>
                 </span>
+              ) : (
+                <Link
+                  href={alternateHref(pathname, code)}
+                  hrefLang={code}
+                  lang={code}
+                  dir={dir}
+                  className="locale-switch__option"
+                >
+                  {short}
+                  <span className="sr-only"> — {label}</span>
+                </Link>
               )}
             </li>
           )

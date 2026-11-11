@@ -5,23 +5,30 @@
  *
  * The success state is rendered only after the server action reports that the
  * record exists. There is no optimistic success, no timer and no fake receipt.
+ *
+ * The language is a hidden field: the action answers in the same language the
+ * visitor is reading, so a validation message never switches language halfway
+ * through the form.
  */
 import { useActionState, useEffect, useRef } from 'react'
 import { submitContact } from '@/lib/contact-actions'
 import { INITIAL_CONTACT_STATE } from '@/lib/contact-form'
+import { getDictionary, type Locale } from '@/lib/i18n'
 
-const FIELDS = [
-  { name: 'name', label: 'نام و نام خانوادگی', type: 'text', required: true, autoComplete: 'name' },
-  { name: 'phone', label: 'شمارهٔ تماس', type: 'tel', required: false, autoComplete: 'tel' },
-  { name: 'email', label: 'رایانامه', type: 'email', required: false, autoComplete: 'email' },
-  { name: 'subject', label: 'موضوع', type: 'text', required: false, autoComplete: 'off' },
-] as const
-
-export function ContactForm() {
+export function ContactForm({ locale = 'fa' }: { locale?: Locale }) {
+  const dict = getDictionary(locale)
   const [state, formAction, isPending] = useActionState(submitContact, INITIAL_CONTACT_STATE)
   const statusRef = useRef<HTMLDivElement>(null)
   const errors = state.errors ?? {}
   const hasErrors = Object.keys(errors).length > 0
+  const labels = dict.form
+
+  const fields = [
+    { name: 'name', label: labels.name, type: 'text', required: true, autoComplete: 'name' },
+    { name: 'phone', label: labels.phone, type: 'tel', required: false, autoComplete: 'tel' },
+    { name: 'email', label: labels.email, type: 'email', required: false, autoComplete: 'email' },
+    { name: 'subject', label: labels.subject, type: 'text', required: false, autoComplete: 'off' },
+  ] as const
 
   useEffect(() => {
     if (state.status !== 'idle') statusRef.current?.focus()
@@ -30,21 +37,18 @@ export function ContactForm() {
   if (state.status === 'success') {
     return (
       <div className="form-success" role="status" tabIndex={-1} ref={statusRef}>
-        <h3 className="h3">پیام ثبت شد</h3>
+        <h3 className="h3">{labels.successTitle}</h3>
         <p>{state.message}</p>
-        <p className="form-note">
-          اگر پاسخ فوری لازم دارید، از شمارهٔ تلفن یا پیام‌رسان‌های همین صفحه استفاده کنید.
-        </p>
+        <p className="form-note">{labels.successHint}</p>
       </div>
     )
   }
 
   return (
     <form action={formAction} className="contact-form" aria-labelledby="contact-form-title">
-      <h3 id="contact-form-title" className="h3">فرم درخواست تماس</h3>
-      <p className="form-note">
-        پیام شما در سامانهٔ داخلی Xennic ثبت می‌شود. برای پاسخ سریع‌تر، شمارهٔ تماس یا رایانامه را وارد کنید.
-      </p>
+      <h3 id="contact-form-title" className="h3">{labels.title}</h3>
+      <p className="form-note">{labels.note}</p>
+      <input type="hidden" name="locale" value={locale} />
 
       <div ref={statusRef} tabIndex={-1} className="form-status" aria-live="polite">
         {state.status === 'error' && (
@@ -63,14 +67,14 @@ export function ContactForm() {
         )}
       </div>
 
-      {FIELDS.map((field) => {
+      {fields.map((field) => {
         const id = `contact-${field.name}`
         const error = errors[field.name]
         return (
           <div className="field" key={field.name}>
             <label htmlFor={id}>
               {field.label}
-              {field.required ? <span aria-hidden="true"> *</span> : <span className="field__optional"> (اختیاری)</span>}
+              {field.required ? <span aria-hidden="true"> *</span> : <span className="field__optional"> {labels.optional}</span>}
             </label>
             <input
               id={id}
@@ -93,7 +97,7 @@ export function ContactForm() {
 
       <div className="field">
         <label htmlFor="contact-message">
-          متن پیام<span aria-hidden="true"> *</span>
+          {labels.message}<span aria-hidden="true"> *</span>
         </label>
         <textarea
           id="contact-message"
@@ -112,15 +116,15 @@ export function ContactForm() {
 
       {/* Honeypot: hidden from people and assistive technology, never focusable. */}
       <div className="hp-field" aria-hidden="true">
-        <label htmlFor="contact-company">شرکت</label>
+        <label htmlFor="contact-company">{labels.company}</label>
         <input id="contact-company" name="company" type="text" tabIndex={-1} autoComplete="off" />
       </div>
 
       <div className="form-actions">
         <button type="submit" className="button" disabled={isPending}>
-          {isPending ? 'در حال ارسال…' : 'ارسال پیام'}
+          {isPending ? labels.sending : labels.submit}
         </button>
-        <span className="form-note">برای ارسال، هر دو فیلد ستاره‌دار الزامی است.</span>
+        <span className="form-note">{labels.requiredNote}</span>
       </div>
     </form>
   )

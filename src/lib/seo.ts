@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import type { Locale } from './i18n'
 
 /**
  * SEO policy for the public site.
@@ -10,6 +11,11 @@ import type { Metadata } from 'next'
  *   1. `robots.ts` (crawl rules),
  *   2. per-page `noindex` metadata,
  *   3. `next.config.ts` response headers for `/admin` and `/api`.
+ *
+ * Every page exists twice — `/…` in Persian and `/en/…` in English — so each
+ * metadata set also declares the pair as `hreflang` alternates. A twin page is a
+ * translation, never a duplicate: the canonical always points at the page's own
+ * language, and `x-default` points at Persian.
  */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://xennic.ir').replace(/\/$/, '')
 
@@ -25,27 +31,49 @@ export function isNotPublished(path: string) {
   return (NOT_PUBLISHED_PATHS as readonly string[]).includes(path)
 }
 
+/** The same path in the other language: `/contact` ↔ `/en/contact`. */
+export function twinPath(path: string, locale: Locale): string {
+  const isEnglish = path === '/en' || path.startsWith('/en/')
+  const base = isEnglish ? (path === '/en' ? '/' : path.slice(3)) : path
+  return locale === 'en' ? (base === '/' ? '/en' : `/en${base}`) : base
+}
+
+export function absoluteUrl(path: string): string {
+  return `${SITE_URL}${path === '/' ? '' : path}`
+}
+
 export const NO_INDEX: Metadata['robots'] = { index: false, follow: false }
 
 type PageMetaInput = {
   title: string
   description: string
-  /** Absolute path on this site, e.g. `/contact`. */
+  /** Absolute path on this site in the page's own language, e.g. `/contact`. */
   path: string
   /** When true the page is reachable but must not be indexed. */
   noindex?: boolean
+  /** Language of the page; decides canonical, Open Graph locale and dir. */
+  locale?: Locale
 }
 
-/** Title, description, canonical and social card for one public page. */
-export function pageMetadata({ title, description, path, noindex = false }: PageMetaInput): Metadata {
-  const url = `${SITE_URL}${path === '/' ? '' : path}`
+/** Title, description, canonical, hreflang pair and social card for one page. */
+export function pageMetadata({ title, description, path, noindex = false, locale = 'fa' }: PageMetaInput): Metadata {
+  const url = absoluteUrl(path)
+  const persian = twinPath(path, 'fa')
+  const english = twinPath(path, 'en')
   return {
     title,
     description,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: url,
+      languages: {
+        fa: absoluteUrl(persian),
+        en: absoluteUrl(english),
+        'x-default': absoluteUrl(persian),
+      },
+    },
     openGraph: {
       type: 'website',
-      locale: 'fa_IR',
+      locale: locale === 'en' ? 'en_US' : 'fa_IR',
       siteName: 'Xennic',
       url,
       title,

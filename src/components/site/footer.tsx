@@ -1,69 +1,80 @@
 import Link from 'next/link'
 import { Logo } from './logo'
-import { navigation } from '../../lib/navigation'
-import { EMAIL_METHODS, PHONE_METHOD, SOCIAL_METHODS } from '../../lib/contact'
+import { getDictionary, localeHref, type Locale } from '../../lib/i18n'
+import { en as english } from '../../lib/i18n-content'
+import { navigationFor } from '../../lib/navigation'
+import { EMAIL_METHODS, phoneMethod, SOCIAL_METHODS } from '../../lib/contact'
 
-const legal = [
-  { href: '/privacy', label: 'حریم خصوصی' },
-  { href: '/terms', label: 'شرایط استفاده' },
-  { href: '/cookies', label: 'کوکی‌ها' },
-]
+const LEGAL = [
+  { path: '/privacy', fa: 'حریم خصوصی', en: 'Privacy' },
+  { path: '/terms', fa: 'شرایط استفاده', en: 'Terms of use' },
+  { path: '/cookies', fa: 'کوکی‌ها', en: 'Cookies' },
+] as const
 
-const services = [
-  { href: '/services/industrial-electrical-consulting', label: 'مشاورهٔ برق صنعتی' },
-  { href: '/services/building-electrical-design', label: 'طراحی برق ساختمان' },
-  { href: '/services/distribution-supervision', label: 'نظارت بر توزیع' },
-  { href: '/services/energy-audit', label: 'ممیزی انرژی' },
-]
+const SERVICE_LINKS = [
+  { slug: 'industrial-electrical-consulting', fa: 'مشاورهٔ برق صنعتی' },
+  { slug: 'building-electrical-design', fa: 'طراحی برق ساختمان' },
+  { slug: 'distribution-supervision', fa: 'نظارت بر توزیع' },
+  { slug: 'energy-audit', fa: 'ممیزی انرژی' },
+] as const
 
-export function SiteFooter() {
+export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
+  const dict = getDictionary(locale)
+  const nav = navigationFor(locale)
+  const serviceLinks = SERVICE_LINKS.map((link) => ({
+    href: localeHref(locale, `/services/${link.slug}`),
+    // English titles come from the translated service list, never from a guess.
+    label: locale === 'en' ? (english.services.find((s) => s.slug === link.slug)?.title ?? link.slug) : link.fa,
+  }))
+  const legalLinks = LEGAL.map((item) => ({ href: localeHref(locale, item.path), label: item[locale] }))
+  const phone = phoneMethod(locale)
+  const methodLabel = (id: string, fallback: string) =>
+    locale === 'en' ? ((dict.methods as Record<string, string>)[id] ?? fallback) : fallback
+
   return (
     <footer className="site-footer">
       <div className="container">
         <div className="footer-grid">
           <div className="footer-col">
-            <Logo size="sm" />
-            <p className="footer-note">
-              زر نور نیرو یکتا (برند تجاری: Xennic) — مهندسی برق قدرت، انرژی و اتوماسیون؛
-              مشاوره، طراحی، نظارت و آموزش تخصصی.
-            </p>
+            <Logo size="sm" locale={locale} />
+            <p className="footer-note">{dict.footer.note}</p>
             <div className="footer-contact">
-              <a href={PHONE_METHOD.href} dir="ltr">{PHONE_METHOD.value}</a>
+              <a href={phone.href} dir="ltr">{phone.value}</a>
               {EMAIL_METHODS.map((method) => (
                 <a key={method.id} href={method.href} dir="ltr">{method.value}</a>
               ))}
             </div>
-            <ul className="footer-socials" aria-label="پیام‌رسان‌ها و شبکه‌های اجتماعی">
+            <ul className="footer-socials" aria-label={dict.footer.socialsLabel}>
               {SOCIAL_METHODS.map((method) => (
                 <li key={method.id}>
                   <a href={method.href} target="_blank" rel="noopener noreferrer">
-                    {method.label}
+                    {methodLabel(method.id, method.label)}
                     <span aria-hidden="true"> ↗</span>
-                    <span className="sr-only"> (در پنجرهٔ تازه باز می‌شود)</span>
+                    <span className="sr-only"> ({dict.opensInNewTab})</span>
                   </a>
                 </li>
               ))}
             </ul>
           </div>
-          <nav className="footer-col" aria-label="ناوبری فوتر">
-            <h2>دسترسی سریع</h2>
-            <ul>{navigation.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
+          <nav className="footer-col" aria-label={dict.footer.footerNav}>
+            <h2>{dict.footer.quickLinks}</h2>
+            <ul>{nav.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
           </nav>
-          <nav className="footer-col" aria-label="خدمات در فوتر">
-            <h2>خدمات</h2>
-            <ul>{services.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
+          <nav className="footer-col" aria-label={dict.footer.servicesNav}>
+            <h2>{dict.footer.services}</h2>
+            <ul>{serviceLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
           </nav>
-          <nav className="footer-col" aria-label="صفحات حقوقی">
-            <h2>اطلاعات</h2>
-            <ul>{legal.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
+          <nav className="footer-col" aria-label={dict.footer.legalNav}>
+            <h2>{dict.footer.information}</h2>
+            <ul>{legalLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
             <ul style={{ marginBlockStart: '.85rem' }}>
-              <li><Link href="/contact">مسیرهای تماس</Link></li>
+              <li><Link href={localeHref(locale, '/contact')}>{dict.footer.contact}</Link></li>
             </ul>
           </nav>
         </div>
         <div className="footer-bottom">
-          <span>© {new Date().getFullYear()} زر نور نیرو یکتا | Xennic</span>
-          <span>محتوای این نسخه صرفاً از منابع تأییدشدهٔ سازمان منتشر می‌شود.</span>
+          <span>© {new Date().getFullYear()} {dict.footer.copyright}</span>
+          <span>{dict.footer.disclaimer}</span>
         </div>
       </div>
     </footer>

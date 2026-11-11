@@ -44,7 +44,7 @@ const DATA_ACCESS_MODULES = ['@/lib/content']
 /** The only modules allowed to know the generated CMS schema. */
 const SCHEMA_MODULES = ['src/lib/contracts.ts', 'src/lib/content.ts']
 /** Pure token/constant modules a presentational primitive may read. */
-const UI_SAFE_MODULES = ['@/lib/theme', '@/lib/locales', '@/lib/navigation']
+const UI_SAFE_MODULES = ['@/lib/theme', '@/lib/i18n', '@/lib/navigation']
 
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })

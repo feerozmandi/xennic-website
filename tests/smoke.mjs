@@ -131,10 +131,10 @@ test('the theme resolves before paint and the switches are real controls', async
   assert.equal(switches.length, 1, 'expected a single theme switch in the header')
   assert.match(html, /class="liquid-switch"/)
   assert.match(html, /aria-label="حالت (شب|روز)[^"]*"/)
-  // Locale control: the live locale is a link, the unpublished one is not clickable.
+  // Locale control: both editions are live, so each is a link to the twin page.
   assert.match(html, /aria-current="true"[^>]*>فا/)
-  assert.match(html, /aria-disabled="true"[^>]*>EN/)
-  assert.doesNotMatch(html, /href="\/en"/i, 'the English tree is not published yet')
+  assert.match(html, /href="\/en"[^>]*>EN/)
+  assert.match(html, /rel="alternate" hrefLang="en" href="https:\/\/xennic\.ir\/en"/)
   // Official artwork replaces the retyped wordmark.
   assert.match(html, /\/brand\/xennic-logo-on-dark\.webp/)
 })
@@ -206,4 +206,57 @@ test('SEO policy: published pages are indexable, unpublished and private ones ar
   assert.ok(!sitemap.includes('/knowledge'))
   assert.ok(!sitemap.includes('technical-training'))
   assert.ok(!sitemap.includes('/admin'))
+})
+
+test('the English edition is a separate, correctly declared language tree', async () => {
+  const pages = {
+    '/en': 'Energy engineering for sharper decisions',
+    '/en/company': 'Zar-e Noor-e Niroo-e Yekta (trade name: Xennic)',
+    '/en/company/team': 'Ahmad Firouzmandi',
+    '/en/services': 'Industrial electrical consulting',
+    '/en/services/energy-audit': 'Data-driven analysis of energy consumption',
+    '/en/track-record': 'Before Xennic was founded',
+    '/en/contact': 'Contact Xennic',
+  }
+  for (const [path, text] of Object.entries(pages)) {
+    const response = await fetch(`${base}${path}`)
+    assert.equal(response.status, 200, path)
+    const html = await response.text()
+    assert.match(html, /<html lang="en" dir="ltr"/, `${path}: language declaration`)
+    assert.ok(html.includes(text), `${path}: expected translated copy`)
+    // The English tree must not leak a Persian interface string into the chrome.
+    assert.ok(!html.includes('در حال آماده‌سازی'), `${path}: Persian badge in the English chrome`)
+    assert.ok(!html.includes('ساختار اولیهٔ صفحه'), `${path}: placeholder copy`)
+    assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${path}: exactly one H1`)
+    // Canonical points at English, and the pair is declared both ways.
+    assert.match(html, /<link rel="canonical" href="https:\/\/xennic\.ir\/en/, `${path}: english canonical`)
+    assert.match(html, /rel="alternate" hrefLang="fa" href="https:\/\/xennic\.ir(\/[^"]*)?"/, `${path}: persian twin`)
+    const description = html.match(/<meta name="description" content="([^"]+)"/)?.[1] ?? ''
+    assert.ok(description.length > 40, `${path}: own description`)
+  }
+
+  // The language switch on an English page points back at the same Persian page.
+  const contact = await (await fetch(`${base}/en/contact`)).text()
+  assert.match(contact, /class="locale-switch__option"[^>]*href="\/contact"/)
+  assert.match(contact, /aria-current="true"[^>]*>EN/)
+
+  // The Persian page offers the same page in English, not the English home page.
+  const persianContact = await (await fetch(`${base}/contact`)).text()
+  assert.match(persianContact, /href="\/en\/contact"/)
+
+  // Unpublished English pages stay out of the index, and unknown ones are 404.
+  for (const path of ['/en/knowledge', '/en/platform', '/en/privacy']) {
+    const html = await (await fetch(`${base}${path}`)).text()
+    assert.match(html, /<meta name="robots" content="noindex, nofollow"/, `${path}: noindex`)
+  }
+  for (const path of ['/en/not-a-page', '/en/services/not-a-service']) {
+    const response = await fetch(`${base}${path}`)
+    assert.equal(response.status, 404, path)
+  }
+
+  // The sitemap lists both editions with mutual alternates.
+  const sitemap = await (await fetch(`${base}/sitemap.xml`)).text()
+  assert.ok(sitemap.includes('https://xennic.ir/en/contact'))
+  assert.ok(sitemap.includes('hreflang="en" href="https://xennic.ir/en/contact"'))
+  assert.ok(!sitemap.includes('/en/knowledge'))
 })

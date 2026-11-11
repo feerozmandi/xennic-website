@@ -13,6 +13,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
 import type { ContactFormState } from './contact-form'
+import { getDictionary, isLocale, type Locale } from './i18n'
 
 const WINDOW_MS = 10 * 60 * 1000
 const MAX_SUBMISSIONS = 5
@@ -30,33 +31,32 @@ function rateLimited(key: string, now: number): boolean {
   return false
 }
 
-const payloadSchema = z
-  .object({
-    name: z.string().trim().min(2, 'نام را کامل‌تر وارد کنید.').max(120, 'نام بیش از حد بلند است.'),
-    phone: z.string().trim().max(40, 'شمارهٔ تماس بیش از حد بلند است.').default(''),
-    email: z.string().trim().max(160, 'رایانامه بیش از حد بلند است.').default(''),
-    subject: z.string().trim().max(160, 'موضوع بیش از حد بلند است.').default(''),
-    message: z
-      .string()
-      .trim()
-      .min(10, 'متن پیام را کامل‌تر بنویسید (حداقل ۱۰ نویسه).')
-      .max(4000, 'متن پیام بیش از حد بلند است.'),
-  })
-  .superRefine((value, ctx) => {
-    if (value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.email)) {
-      ctx.addIssue({ code: 'custom', path: ['email'], message: 'قالب رایانامه درست نیست.' })
-    }
-    if (value.phone && !/^[0-9\u06F0-\u06F9+\-()\s]{6,}$/.test(value.phone)) {
-      ctx.addIssue({ code: 'custom', path: ['phone'], message: 'شمارهٔ تماس فقط می‌تواند رقم و علامت‌های رایج داشته باشد.' })
-    }
-    if (!value.phone && !value.email) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['phone'],
-        message: 'برای پاسخ، شمارهٔ تماس یا رایانامه را وارد کنید.',
-      })
-    }
-  })
+/**
+ * Validation schema, built per request so the messages match the language of the
+ * form the visitor is reading.
+ */
+function payloadSchemaFor(locale: Locale) {
+  const errors = getDictionary(locale).formErrors
+  return z
+    .object({
+      name: z.string().trim().min(2, errors.nameShort).max(120, errors.nameLong),
+      phone: z.string().trim().max(40, errors.phoneLong).default(''),
+      email: z.string().trim().max(160, errors.emailLong).default(''),
+      subject: z.string().trim().max(160, errors.subjectLong).default(''),
+      message: z.string().trim().min(10, errors.messageShort).max(4000, errors.messageLong),
+    })
+    .superRefine((value, ctx) => {
+      if (value.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.email)) {
+        ctx.addIssue({ code: 'custom', path: ['email'], message: errors.emailFormat })
+      }
+      if (value.phone && !/^[0-9\u06F0-\u06F9+\-()\s]{6,}$/.test(value.phone)) {
+        ctx.addIssue({ code: 'custom', path: ['phone'], message: errors.phoneFormat })
+      }
+      if (!value.phone && !value.email) {
+        ctx.addIssue({ code: 'custom', path: ['phone'], message: errors.contactRequired })
+      }
+    })
+}
 
 function clientAddress(headerBag: Headers): string {
   const forwarded = headerBag.get('x-forwarded-for')
@@ -68,12 +68,16 @@ export async function submitContact(
   _previous: ContactFormState,
   formData: FormData,
 ): Promise<ContactFormState> {
+  const requested = String(formData.get('locale') ?? '')
+  const locale: Locale = isLocale(requested) ? requested : 'fa'
+  const messages = getDictionary(locale).formErrors
+
   const honeypot = String(formData.get('company') ?? '').trim()
   if (honeypot) {
-    return { status: 'error', message: 'درخواست نامعتبر است و ثبت نشد.' }
+    return { status: 'error', message: messages.invalid }
   }
 
-  const parsed = payloadSchema.safeParse({
+  const parsed = payloadSchemaFor(locale).safeParse({
     name: String(formData.get('name') ?? ''),
     phone: String(formData.get('phone') ?? ''),
     email: String(formData.get('email') ?? ''),
@@ -87,14 +91,14 @@ export async function submitContact(
       const field = typeof issue.path[0] === 'string' ? issue.path[0] : 'form'
       if (!errors[field]) errors[field] = issue.message
     }
-    return { status: 'error', message: 'برخی از فیلدها نیاز به اصلاح دارند.', errors }
+    return { status: 'error', message: messages.fixFields, errors }
   }
 
   const headerBag = await headers()
   if (rateLimited(clientAddress(headerBag), Date.now())) {
     return {
       status: 'error',
-      message: 'تعداد پیام‌های ارسالی از این نشانی زیاد بوده است؛ چند دقیقه بعد دوباره تلاش کنید.',
+      message: messages.rateLimited,
     }
   }
 
@@ -107,7 +111,7 @@ export async function submitContact(
         name: data.name,
         phone: data.phone || undefined,
         email: data.email || undefined,
-        subject: data.subject || 'درخواست تماس از وب‌سایت',
+        subject: data.subject || messages.defaultSubject,
         message: data.message,
         source: 'website-contact',
         status: 'new',
@@ -120,12 +124,12 @@ export async function submitContact(
     console.error('contact submission failed:', error instanceof Error ? error.name : 'unknown error')
     return {
       status: 'error',
-      message: 'ثبت پیام در سامانه انجام نشد. لطفاً از تلفن یا رایانامهٔ رسمی استفاده کنید.',
+      message: messages.storeFailed,
     }
   }
 
   return {
     status: 'success',
-    message: 'پیام شما در سامانهٔ Xennic ثبت شد. برای پاسخ سریع‌تر می‌توانید تلفنی هم تماس بگیرید.',
+    message: messages.success,
   }
 }
