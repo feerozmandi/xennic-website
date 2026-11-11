@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ContentPage, DocumentContent, NotPublished } from '@/components/content'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
-import { getPage, getService, getTeam } from '@/lib/content'
+import { getPage, getServiceDetail, getTeamMembers } from '@/lib/content'
 import { FOUNDER_NAME } from '@/lib/home-content'
 import { pageMetadata } from '@/lib/seo'
 
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 export async function generateMetadata({ params }: { params: Promise<{ section: string; item: string }> }): Promise<Metadata> {
   const { section, item } = await params
   if (section === 'services') {
-    const service = await getService(item)
+    const service = await getServiceDetail(item)
     if (!service) return {}
     return pageMetadata({
       title: service.title,
@@ -40,9 +40,9 @@ export default async function Detail({ params }: { params: Promise<{ section: st
   const { section, item } = await params
 
   if (section === 'services') {
-    const service = await getService(item)
+    const service = await getServiceDetail(item)
     if (!service) notFound()
-    const cta = service.comingSoon ? null : (service.cta ?? 'درخواست مشاوره')
+    const cta = service.comingSoon ? null : service.cta
     return (
       <ContentPage
         title={service.title}
@@ -93,7 +93,7 @@ export default async function Detail({ params }: { params: Promise<{ section: st
   }
 
   if (section === 'company' && item === 'team') {
-    const members = await getTeam()
+    const members = await getTeamMembers()
     if (members.length === 0) return (
       <ContentPage title="تیم" trail={[{ href: '/', label: 'خانه' }, { href: '/company', label: 'شرکت' }, { label: 'تیم' }]}>
         <NotPublished title="تیم" note="معرفی اعضای تیم پس از تأیید منتشر می‌شود." />
@@ -118,7 +118,7 @@ export default async function Detail({ params }: { params: Promise<{ section: st
                 sizes="(max-width: 700px) 120px, 168px"
               />
               <div className="team-card__body">
-                <h2 className="h3">{member.name ?? FOUNDER_NAME}</h2>
+                <h2 className="h3">{member.name || FOUNDER_NAME}</h2>
                 {member.biography && <p>{member.biography}</p>}
                 <Link className="text-link" href="/track-record">
                   پیشینهٔ حرفه‌ای <span aria-hidden="true">←</span>

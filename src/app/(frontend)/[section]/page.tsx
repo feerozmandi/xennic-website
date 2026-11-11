@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ContentPage, DocumentContent, NotPublished, ServiceCards, TrackRecordList } from '@/components/content'
-import { getPage, getServices, getTrackRecord } from '@/lib/content'
+import { getPage, getServiceCards, getTrackRecordItems } from '@/lib/content'
 import { pageMetadata } from '@/lib/seo'
 
 export const dynamic = 'force-dynamic'
@@ -94,13 +94,13 @@ export default async function Section({ params }: { params: Promise<{ section: s
         lead="خدمات در حوزهٔ برق قدرت، تأسیسات، انرژی و آموزش تخصصی؛ هر خدمت با دامنهٔ مشخص و خروجی قابل استناد."
         trail={[{ href: '/', label: 'خانه' }, { label: 'خدمات' }]}
       >
-        <ServiceCards services={await getServices()} />
+        <ServiceCards services={await getServiceCards()} />
       </ContentPage>
     )
   }
 
   if (section === 'track-record') {
-    const items = await getTrackRecord()
+    const items = await getTrackRecordItems()
     return (
       <ContentPage
         title="تجربه و پیشینهٔ مهندسی"

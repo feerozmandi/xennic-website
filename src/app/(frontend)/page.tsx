@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { ContactBand, Founder, Hero, Platform, Principles, Services } from '@/components/home/sections'
-import { getPage, getServices } from '@/lib/content'
+import { getPage, getServiceCards } from '@/lib/content'
 import { buildHomeContent, extractBlocks, type HomeService } from '@/lib/home-content'
 import { pageMetadata } from '@/lib/seo'
 import { notFound } from 'next/navigation'
@@ -17,7 +17,7 @@ export const metadata: Metadata = pageMetadata({
 export default async function Home() {
   const [page, services, about, trackRecord] = await Promise.all([
     getPage('home'),
-    getServices(),
+    getServiceCards(),
     getPage('about'),
     getPage('track-record-intro'),
   ])

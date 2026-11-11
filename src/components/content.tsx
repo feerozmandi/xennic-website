@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { RichText } from '@payloadcms/richtext-lexical/react'
-import type { Page, Service } from '@/payload-types'
+import type { RichTextDocument, ServiceCardModel, TrackRecordItemModel } from '@/lib/contracts'
 import { faNumber } from '@/lib/home-content'
 
 /**
@@ -68,12 +68,12 @@ export function ContentPage({
   )
 }
 
-export function DocumentContent({ content }: { content: Page['content'] | Service['content'] }) {
+export function DocumentContent({ content }: { content: RichTextDocument | null }) {
   return content ? <div className="document-content"><RichText data={content} /></div> : null
 }
 
 /** Cards that keep the approved service list readable at every width. */
-export function ServiceCards({ services }: { services: Service[] }) {
+export function ServiceCards({ services }: { services: ServiceCardModel[] }) {
   return (
     <ul className="card-grid">
       {services.map((service) => (
@@ -98,11 +98,7 @@ export function ServiceCards({ services }: { services: Service[] }) {
  * Track-record entries are all pre-company work. The badge and the closing note
  * are part of the approved framing and must stay attached to every entry.
  */
-export function TrackRecordList({
-  items,
-}: {
-  items: { id: number | string; title: string; role?: string | null; description?: string | null }[]
-}) {
+export function TrackRecordList({ items }: { items: TrackRecordItemModel[] }) {
   return (
     <>
       <ol className="timeline">
