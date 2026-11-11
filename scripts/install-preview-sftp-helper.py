@@ -50,7 +50,7 @@ NETWORK_MANIFEST = 'fc2ae67bb9c24aebf936c05b0fe698b4465b3911e01d3884311fa3435836
 ACTIVATION_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
 INCOMING_ACTIVATION = SOURCE / 'incoming-activation'
 BACKUP_ACTIVATION = PARENT / '.xennic-preview-before-activation'
-ACTIVATION_ROUTE_HASH = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
+ACTIVATION_ROUTE_HASH = 'd903ae491de2e291b713046d7485793a3249143d518de63be5f5f1fa57fd5348'
 ROUTES = ROOT / 'config/routes.caddy'
 ROUTES_BACKUP = ROOT / 'config/.routes-before-activation.caddy'
 ROUTES_NEW = ROOT / 'config/.routes-activation-update.caddy'
@@ -348,7 +348,7 @@ PRIOR_HELPERS = {
 }
 APEX_SOURCES = {'apex-Caddyfile': ('Caddyfile', '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2'),
                 'apex-gateway-compose.yml': ('gateway.yml', '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed'),
-                'routes.caddy': ('routes.caddy', 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029')}
+                'routes.caddy': ('routes.caddy', 'd903ae491de2e291b713046d7485793a3249143d518de63be5f5f1fa57fd5348')}
 APEX_ORIGIN = ('https://preview.xennic.ir', 'https://xennic.ir')
 APEX_FILES = {'Caddyfile': ('config', 'Caddyfile'), 'gateway.yml': ('config', 'gateway.yml'),
               'routes.caddy': ('config', 'routes.caddy'), 'oauth2-proxy.cfg': ('secrets', 'oauth2-proxy.cfg'),
@@ -367,7 +367,7 @@ SCOPE_HELPERS = 'helpers'
 # Manifest of the release installed by the apex switch (activated dev
 # 465278d/da6487b helpers) and of the candidate that carries read:org.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = 'de2a97a75819407576a0292900096d8e170878d83ef6c3e09175caa4e0097854'
+SCOPE_MANIFEST = '712fd6da5784f10b98187f41528607598a0eff031bba85394b7de480bfbeb68f'
 
 
 def _toml_value(value):

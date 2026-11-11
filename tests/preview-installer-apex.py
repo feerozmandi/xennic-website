@@ -110,7 +110,9 @@ class ReviewedFileHashTest(unittest.TestCase):
                 digest = hashlib.sha256((REPO / 'config' / source).read_bytes()).hexdigest()
                 self.assertEqual(digest, expected)
                 self.assertEqual(installer.APEX_FILES[destination][1], destination)
-                self.assertEqual(fixed.GATEWAY_FILES['xennic.ir']['config/' + destination], expected)
+                reviewed = fixed.GATEWAY_FILES['xennic.ir']['config/' + destination]
+                accepted = (reviewed,) if isinstance(reviewed, str) else reviewed
+                self.assertIn(expected, accepted)
                 self.assertNotEqual(installer.EDGE_PREVIEW[destination], expected)
 
     def test_installed_preview_files_match_the_reviewed_previous_version(self):
@@ -127,9 +129,14 @@ class ReviewedFileHashTest(unittest.TestCase):
                          installer.ACTIVATION_ROUTE_HASH)
 
     def test_routes_and_helper_manifests_are_the_installed_versions(self):
-        self.assertEqual(fixed.GATEWAY_FILES['xennic.ir']['config/routes.caddy'], installer.ACTIVATION_ROUTE_HASH)
+        reviewed = fixed.GATEWAY_FILES['xennic.ir']['config/routes.caddy']
+        accepted = (reviewed,) if isinstance(reviewed, str) else reviewed
+        self.assertIn(installer.ACTIVATION_ROUTE_HASH, accepted)
         self.assertEqual(hashlib.sha256((REPO / 'config/routes.caddy').read_bytes()).hexdigest(),
                          installer.ACTIVATION_ROUTE_HASH)
+        # The live edge still runs the previous routes file, so the window keeps
+        # accepting it until the replacement is installed and confirmed.
+        self.assertEqual(accepted, (fixed.ROUTES_INSTALLED, installer.ACTIVATION_ROUTE_HASH))
         self.assertEqual(installer.APEX_MANIFEST, installer.ACTIVATION_MANIFEST)
 
 

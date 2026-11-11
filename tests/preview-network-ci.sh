@@ -170,23 +170,36 @@ if ! "${app[@]}" exec -T app node - <<'JS'
   if (authorized.status !== 200) throw Error('authorized request did not reach app');
   const html = await authorized.text();
   if (!html.includes('<html')) throw Error('app HTML missing');
+  // Both editions are public, and so are the files the rendered pages load.
+  // A page that reaches the visitor while its picture does not is a defect, so
+  // the optimizer, the public brand and image folders and the crawl files are
+  // asserted beside the pages themselves.
   const publicPages = ['/', '/company', '/company/about', '/company/team', '/services',
     '/services/industrial-electrical-consulting', '/services/building-electrical-design',
     '/services/distribution-supervision', '/services/energy-audit',
     '/services/grounding-lightning-protection', '/services/technical-training',
-    '/track-record', '/knowledge', '/tools', '/platform', '/contact', '/privacy', '/terms', '/cookies'];
+    '/track-record', '/knowledge', '/tools', '/platform', '/contact', '/privacy', '/terms', '/cookies',
+    '/en', '/en/company', '/en/company/team', '/en/services',
+    '/en/services/industrial-electrical-consulting', '/en/services/energy-audit',
+    '/en/track-record', '/en/knowledge', '/en/tools', '/en/platform', '/en/contact',
+    '/en/privacy', '/en/terms', '/en/cookies',
+    '/robots.txt', '/sitemap.xml', '/images/hero-grid-solar.webp', '/brand/og-cover.png',
+    '/icon.png', '/apple-icon.png', '/_next/image?url=%2Fimages%2Fhero-grid-solar.webp&w=640&q=75'];
   let publicHtml = '';
   for (const path of publicPages) {
     const result = await call(path, null, 'xennic.ir');
     if (result.status !== 200) throw Error('public page not reachable: ' + path + ' ' + result.status + ' location=' + result.headers.get('location'));
     if (path === '/') publicHtml = await result.text();
-    if ((await call(path, null, 'xennic.ir', 'HEAD')).status !== 200) throw Error('public HEAD blocked: ' + path);
+    // The image optimizer answers GET only; every other public path must
+    // serve HEAD as well, because that is what crawlers and proxies send.
+    if (!path.startsWith('/_next/image') &&
+        (await call(path, null, 'xennic.ir', 'HEAD')).status !== 200) throw Error('public HEAD blocked: ' + path);
   }
   const assetPath = publicHtml.match(/\/_next\/static\/[^"'?\s<>]+/)?.[0];
   if (!assetPath || (await call(assetPath, null, 'xennic.ir')).status !== 200) throw Error('rendered static asset not reachable');
   const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
   if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
-  for (const path of ['/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
+  for (const path of ['/admin', '/en/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
     const result = await call(path, null, 'xennic.ir');
     if (result.status !== 302) throw Error('private path was not gated: ' + path);
   }
