@@ -54,6 +54,12 @@ const fa = {
   },
   footer: {
     note: 'زر نور نیرو یکتا (برند تجاری: Xennic) — مهندسی برق قدرت، انرژی و اتوماسیون؛ مشاوره، طراحی، نظارت و آموزش تخصصی.',
+    // Two further lines, both derived from approved copy: the six service areas
+    // and the standards already named on the service pages. No new claim.
+    about: [
+      'شش حوزهٔ تخصصی: مشاورهٔ برق صنعتی، طراحی تأسیسات برق ساختمان، نظارت بر پروژه‌های توزیع، ممیزی انرژی، ارت و صاعقه‌گیر، و آموزش فنی.',
+      'تحلیل و طراحی هم‌سو با مبحث ۱۳ مقررات ملی ساختمان و استانداردهای IEC، با تکیه بر دانش مهندسی و ابزارهای دیجیتال.',
+    ],
     quickLinks: 'دسترسی سریع',
     services: 'خدمات',
     information: 'اطلاعات',
@@ -216,6 +222,10 @@ const en: Dictionary = {
   },
   footer: {
     note: 'Zar-e Noor-e Niroo-e Yekta (trade name: Xennic) — power, energy and automation engineering; consultancy, design, supervision and specialist training.',
+    about: [
+      'Six specialist areas: industrial electrical consulting, building electrical design, distribution project supervision, energy auditing, earthing and lightning protection, and technical training.',
+      'Analysis and design aligned with Chapter 13 of the national building code and IEC standards, drawing on engineering knowledge and digital tools.',
+    ],
     quickLinks: 'Quick links',
     services: 'Services',
     information: 'Information',

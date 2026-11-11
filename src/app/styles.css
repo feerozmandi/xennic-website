@@ -921,45 +921,171 @@ html[dir='rtl'] .hero__media { --media-flip: -1; --media-shadow-sign: -1; }
 .form-success p { color: var(--text); font-size: 0.92rem; max-width: 52ch; }
 .hp-field { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* footer contact line */
-.footer-contact { display: grid; gap: 0.35rem; margin-block-start: 0.9rem; font-size: 0.88rem; }
-.footer-contact a { color: var(--accent); font-weight: 700; display: inline-flex; align-items: center; min-block-size: 2.25rem; }
-.footer-contact a:hover { text-decoration: underline; }
-.footer-socials { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; font-size: 0.84rem; }
-.footer-socials a { color: var(--text-muted); }
-.footer-socials a:hover { color: var(--accent); }
-
-/* ---------- footer ---------- */
+/* ---------- footer ----------
+ * The footer closes the page: official artwork, the about text, the confirmed
+ * contact channels with their glyphs, three navigation columns and a legal bar.
+ * Everything is driven by the active theme, so the light edition gets a paper
+ * panel and the dark edition keeps the recessed one.
+ */
 .site-footer {
-  /* Follows the active theme like every other surface. In the light theme the
-     footer is a slightly recessed paper panel, not a dark block. */
+  position: relative;
   color: var(--text);
   margin-block-start: 2rem;
-  padding-block: 3rem 1.5rem;
+  padding-block: clamp(2.5rem, 5vw, 3.75rem) 1.5rem;
   border-block-start: 1px solid var(--glass-border-soft);
-  background: linear-gradient(180deg, var(--footer-top) 0%, var(--surface-b) 60%, var(--surface-b-solid) 100%);
+  background:
+    radial-gradient(62% 120% at 12% 0%, var(--footer-glow), transparent 62%),
+    linear-gradient(180deg, var(--footer-top) 0%, var(--surface-b) 60%, var(--surface-b-solid) 100%);
 }
-.footer-grid { display: grid; gap: 2rem; grid-template-columns: 1fr; }
-.footer-col h2 { font-size: 0.92rem; color: var(--text); margin-block-end: 0.9rem; }
-.footer-col ul { display: grid; gap: 0.4rem; }
-.footer-col a { display: inline-flex; align-items: center; min-block-size: 2.25rem; color: var(--text-muted); font-size: 0.9rem; }
-/* Contact values stay emphasised even though they live inside .footer-col. */
-.footer-col .footer-contact a, .footer-col .footer-socials a { color: var(--accent); }
+/* A hairline of accent light along the top edge, mirrored with the direction. */
+.site-footer::before {
+  content: "";
+  position: absolute;
+  inset-block-start: -1px;
+  inset-inline: 0;
+  block-size: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-soft) 30%, var(--accent-soft) 70%, transparent);
+  opacity: 0.7;
+}
+.footer-grid { display: grid; gap: 2.25rem; grid-template-columns: 1fr; }
+@media (min-width: 720px) {
+  /* Brand on its own row, then the three link columns side by side so no cell
+   * is left empty on tablets. */
+  .footer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem 2.5rem; }
+  .footer-brand { grid-column: 1 / -1; }
+}
+@media (min-width: 1000px) {
+  .footer-grid { grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.85fr); }
+  .footer-brand { grid-column: auto; }
+}
+
+/* Brand lockup a touch larger than in the header (about 8% on the artwork and
+ * the sub-line), so the footer reads as the closing signature. */
+.site-footer .brand--sm { --brand-art: 1.95rem; gap: 0.8rem; }
+.site-footer .brand__sub { font-size: 0.72rem; }
+
+.footer-about { display: grid; gap: 0.55rem; margin-block-start: 1rem; max-width: 46ch; }
+.footer-about p { color: var(--text-muted); font-size: 0.86rem; line-height: 1.85; margin: 0; }
+.footer-about p:first-child { color: var(--text); opacity: 0.86; }
+
+/* Contact rows: glyph, label, value. A chip, not a bare string, so the row is a
+ * comfortable target on a phone and the value stays the emphasised element. The
+ * column is capped so the chip never stretches into a half-empty bar. */
+.footer-contact { display: grid; gap: 0.5rem; margin: 1.15rem 0 0; padding: 0; list-style: none; max-inline-size: 25rem; }
+.footer-contact a {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.85rem 0.5rem 0.6rem;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 14px;
+  background: var(--footer-chip);
+  box-shadow: var(--footer-chip-shadow);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+html[dir='ltr'] .footer-contact a { padding: 0.5rem 0.6rem 0.5rem 0.85rem; }
+.footer-contact a:hover {
+  border-color: var(--accent-soft);
+  box-shadow: var(--footer-chip-shadow-lift);
+  transform: translateY(-1px);
+}
+.footer-contact__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: 2.1rem;
+  block-size: 2.1rem;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.footer-contact__icon svg { inline-size: 1.15rem; block-size: 1.15rem; }
+.footer-contact__body { display: grid; gap: 0.1rem; min-inline-size: 0; }
+.footer-contact__label { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 0.01em; }
+.footer-contact__value {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+  /* Long addresses may shrink rather than push the chip out of its column. */
+  overflow-wrap: anywhere;
+}
+
+/* Social row is icon-only: the accessible name carries the label. */
+.footer-socials { display: flex; flex-wrap: wrap; gap: 0.55rem; margin: 1.1rem 0 0; padding: 0; list-style: none; }
+.footer-socials a {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 999px;
+  background: var(--footer-chip);
+  box-shadow: var(--footer-chip-shadow);
+  color: var(--text-muted);
+  transition: color 200ms var(--ease-out), border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.footer-socials a:hover { color: var(--accent); border-color: var(--accent-soft); transform: translateY(-2px); }
+.footer-socials a:focus-visible { color: var(--accent); }
+.footer-socials svg { inline-size: 1.2rem; block-size: 1.2rem; }
+
+/* Navigation columns: a short accent rule under each heading gives the block a
+ * spine without adding another border box. */
+.footer-col h2 {
+  position: relative;
+  font-size: 0.92rem;
+  color: var(--text);
+  margin-block-end: 1rem;
+  padding-block-end: 0.55rem;
+}
+.footer-col h2::after {
+  content: "";
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  inline-size: 1.7rem;
+  block-size: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+.footer-col ul { display: grid; gap: 0.15rem; }
+.footer-col a { display: inline-flex; align-items: center; min-block-size: 2.75rem; color: var(--text-muted); font-size: 0.9rem; }
 .footer-col a:hover { color: var(--accent); }
-.footer-note { color: var(--text-muted); font-size: 0.85rem; max-width: 42ch; margin-block-start: 0.75rem; }
+.footer-col__extra { margin-block-start: 0.6rem; }
+
 .footer-bottom {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
+  gap: 0.6rem 1.5rem;
   align-items: center;
   justify-content: space-between;
-  margin-block-start: 2.25rem;
+  margin-block-start: clamp(2rem, 4vw, 2.75rem);
   padding-block-start: 1.25rem;
   border-block-start: 1px solid var(--glass-border-soft);
   color: var(--text-muted);
   font-size: 0.78rem;
+  line-height: 1.7;
 }
-@media (min-width: 768px) { .footer-grid { grid-template-columns: 1.5fr 1fr 1fr 1fr; } }
+
+/* Footer tokens: a faint accent wash over the surface, and the raised chips that
+ * carry the contact channels and the social row. Light theme gets a paper card
+ * on the pale footer; dark theme lifts the chip with a hairline of light instead
+ * of a shadow that would read as a smudge. */
+:root, [data-theme='dark'] {
+  --footer-glow: rgba(255, 209, 102, 0.07);
+  --footer-chip: rgba(255, 255, 255, 0.035);
+  --footer-chip-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --footer-chip-shadow-lift: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 18px -12px rgba(0, 0, 0, 0.75);
+}
+[data-theme='light'] {
+  --footer-glow: rgba(138, 90, 8, 0.06);
+  --footer-chip: #ffffff;
+  --footer-chip-shadow: 0 1px 2px rgba(11, 26, 43, 0.05), 0 10px 22px -18px rgba(11, 26, 43, 0.45);
+  --footer-chip-shadow-lift: 0 1px 2px rgba(11, 26, 43, 0.06), 0 14px 26px -16px rgba(11, 26, 43, 0.35);
+}
 
 /* ---------- accessibility helpers ---------- */
 .skip-link { position: absolute; inset-block-start: -6rem; inset-inline-start: 1rem; z-index: 80; padding: 0.65rem 1rem; border-radius: var(--radius-sm); background: #fff; color: var(--text-ink); font-weight: 700; }
