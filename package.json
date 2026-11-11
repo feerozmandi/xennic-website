@@ -20,7 +20,10 @@
     "seed": "node --env-file=.env --import=tsx scripts/seed.ts",
     "preview:migrate": "node scripts/preview-task.mjs migrate",
     "preview:seed": "node scripts/preview-task.mjs seed",
-    "test:preview-config": "node --import=tsx --test tests/preview-config.mjs"
+    "test:preview-config": "node --import=tsx --test tests/preview-config.mjs",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run check:boundaries && npm run check:bundle"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.91.0",
