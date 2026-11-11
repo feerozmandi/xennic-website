@@ -30,10 +30,20 @@ handle /oauth2/* {
 
 # Explicit public GET/HEAD routes only; no API, media or administrative paths.
 # The site's HTTPS listener for this host is not enabled by this file alone.
+#
+# Two rules keep this list honest:
+#   1. A page is listed here only when the application serves it in both
+#      editions. The English tree lives under /en and is public exactly like the
+#      Persian tree beside it.
+#   2. The files the pages load must be listed too, or the gate would answer a
+#      picture request with a sign-in redirect: the rendered markup asks for
+#      /_next/image, /_next/static, /brand/* and /images/*, and crawlers ask for
+#      /robots.txt and /sitemap.xml. Admin, API, media and unknown paths stay
+#      unlisted and therefore keep requiring the gate.
 @public_website {
 	host xennic.ir
 	method GET HEAD
-	path / /company /company/about /company/team /services /services/industrial-electrical-consulting /services/building-electrical-design /services/distribution-supervision /services/energy-audit /services/grounding-lightning-protection /services/technical-training /track-record /knowledge /tools /platform /contact /privacy /terms /cookies /favicon.ico /_next/static/*
+	path / /company /company/about /company/team /services /services/industrial-electrical-consulting /services/building-electrical-design /services/distribution-supervision /services/energy-audit /services/grounding-lightning-protection /services/technical-training /track-record /knowledge /tools /platform /contact /privacy /terms /cookies /en /en/company /en/company/team /en/services /en/services/industrial-electrical-consulting /en/services/building-electrical-design /en/services/distribution-supervision /en/services/energy-audit /en/services/grounding-lightning-protection /en/services/technical-training /en/track-record /en/knowledge /en/tools /en/platform /en/contact /en/privacy /en/terms /en/cookies /_next/static/* /_next/image /brand/* /images/* /favicon.ico /icon.png /apple-icon.png /robots.txt /sitemap.xml
 }
 handle @public_website {
 	import upstream.caddy

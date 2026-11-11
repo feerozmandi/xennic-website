@@ -27,7 +27,7 @@ PREVIEW = {
 APEX = {
     'apex-Caddyfile': '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2',
     'apex-gateway-compose.yml': '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed',
-    'routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'}
+    'routes.caddy': 'd903ae491de2e291b713046d7485793a3249143d518de63be5f5f1fa57fd5348'}
 FILES = ('preview-backup-sftp.py', 'preview-backup-operation.py', 'preview-pull-image.py',
          'preview-age-backup.py', 'preview-deploy-readiness.py', 'preview-deploy-state.py',
          'preview-deploy-manifest.py', 'preview-deploy-backend.py', 'preview-deploy-transaction.py',

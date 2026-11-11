@@ -35,20 +35,31 @@ GATEWAY_IMAGES = {
     'caddy': 'caddy:2.11.7@sha256:36c24ad91a7ff7bc4c87fe22bfa8df3c4b18da0773d73fc12ee2c52b98c0bb7e',
     'gate': 'quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916',
 }
+# The reviewed public route list gained the English edition and the files the
+# pages load (`/_next/image`, `/brand/*`, `/images/*`, `robots.txt`,
+# `sitemap.xml`). Replacing an installed edge file is an operational step, so a
+# bounded two-version window is pinned here: the file that is on the live edge
+# today and the reviewed replacement. Any third version aborts, exactly as
+# before, and the old hash must be deleted from ROUTES_HASHES once the live edge
+# is confirmed on the replacement.
+ROUTES_INSTALLED = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
+ROUTES_REVIEWED = 'd903ae491de2e291b713046d7485793a3249143d518de63be5f5f1fa57fd5348'
+ROUTES_HASHES = (ROUTES_INSTALLED, ROUTES_REVIEWED)
+
 # Two reviewed edge identities only. The installed Caddyfile hash selects one;
 # a caller can never choose the authority, and any other file aborts.
 GATEWAY_FILES = {
     'preview.xennic.ir': {
         'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
         'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
-        'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
+        'config/routes.caddy': ROUTES_HASHES,
         'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
         'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
     },
     'xennic.ir': {
         'config/gateway.yml': '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed',
         'config/Caddyfile': '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2',
-        'config/routes.caddy': 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029',
+        'config/routes.caddy': ROUTES_HASHES,
         'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
         'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
     },
@@ -504,7 +515,9 @@ def gateway_configuration():
     authority = edge_authority()
     try:
         for path, expected in GATEWAY_FILES[authority].items():
-            if hashlib.sha256(ready._read(ROOT, path, 0)).hexdigest() != expected:
+            # A single reviewed value, or a bounded transition window.
+            accepted = (expected,) if isinstance(expected, str) else expected
+            if hashlib.sha256(ready._read(ROOT, path, 0)).hexdigest() not in accepted:
                 raise Rejected('gateway configuration differs from reviewed files')
         env = ready._env(ready._read(ROOT, 'secrets/preview.env', 0))
         edge = env.get('PREVIEW_EDGE_IP')

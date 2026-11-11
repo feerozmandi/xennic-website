@@ -222,12 +222,15 @@ for f in "${files[@]}" preview-deploy-receiver.py install-preview-sftp-helper.py
   git show "da6487b626c163092e33fd576f04594fb6fe7f97:scripts/$f" > "$scratch/activation-$f"
   sudo install -o root -g root -m 0600 "$scratch/activation-$f" "/root/xennic-preview-install/incoming-activation/$f"
 done
-sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
+# The routes file this release shipped, not today's: the staged installer pins
+# that hash, and a later route change must not rewrite history here.
+git show "da6487b626c163092e33fd576f04594fb6fe7f97:config/routes.caddy" > "$scratch/activation-routes.caddy"
+sudo install -o root -g root -m 0600 "$scratch/activation-routes.caddy" /root/xennic-preview-install/incoming-activation/routes.caddy
 activation=/root/xennic-preview-install/incoming-activation/install-preview-sftp-helper.py
 before_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 printf 'unknown routes\n' | sudo tee /root/xennic-preview-install/incoming-activation/routes.caddy >/dev/null
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation routes accepted' >&2; exit 1; fi
-sudo install -o root -g root -m 0600 config/routes.caddy /root/xennic-preview-install/incoming-activation/routes.caddy
+sudo install -o root -g root -m 0600 "$scratch/activation-routes.caddy" /root/xennic-preview-install/incoming-activation/routes.caddy
 printf 'unknown helper\n' | sudo tee /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py >/dev/null
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Unknown activation source accepted' >&2; exit 1; fi
 sudo install -o root -g root -m 0600 "$scratch/activation-preview-deploy-backend.py" /root/xennic-preview-install/incoming-activation/preview-deploy-backend.py
@@ -235,7 +238,9 @@ printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Activation upgrade accepted journal' >&2; exit 1; fi
 sudo test -f /srv/xennic-preview/state/release-state.json
 sudo rm /srv/xennic-preview/state/release-state.json # disposable fixture only
-sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+# Same release's installer as the staged files: it is the code that pinned the
+# routes hash this scenario installs, so today's installer must not stand in.
+sudo /usr/bin/python3 - "$scratch/activation-install-preview-sftp-helper.py" <<'PY'
 import importlib.util, sys
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('activation_upgrade_ci', sys.argv[1])
