@@ -1,7 +1,9 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
+import { clientScript } from '@/lib/client-script'
 import { themeScript } from '@/lib/theme-script'
+import { RevealController } from './ui/reveal'
 import { SiteFooter } from './site/footer'
 import { SiteHeader } from './site/header'
 import { Container } from './ui/primitives'
@@ -17,6 +19,7 @@ export function SiteDocument({ locale = 'fa', children }: { locale?: Locale; chi
     <html lang={dict.htmlLang} dir={dict.dir} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: clientScript }} />
       </head>
       <body>
         <SiteShell locale={locale}>{children}</SiteShell>
@@ -36,6 +39,7 @@ export function SiteShell({ locale = 'fa', children }: { locale?: Locale; childr
   const dict = getDictionary(locale)
   return (
     <>
+      <RevealController />
       <a href="#main-content" className="skip-link">{dict.skipToContent}</a>
       <SiteHeader locale={locale} />
       <main id="main-content">{children}</main>

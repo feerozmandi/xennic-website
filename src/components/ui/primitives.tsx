@@ -32,7 +32,10 @@ export function SectionHeading({ eyebrow, title, lead, id }: {
   id?: string
 }) {
   return (
-    <header style={{ display: 'grid', gap: '.7rem', maxWidth: '62ch', marginBlockEnd: 'clamp(1.5rem, 3vw, 2.25rem)' }}>
+    <header
+      data-reveal
+      style={{ display: 'grid', gap: '.7rem', maxWidth: '62ch', marginBlockEnd: 'clamp(1.5rem, 3vw, 2.25rem)' }}
+    >
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <h2 className="h2" id={id}>{title}</h2>
       {lead && <p className="lede">{lead}</p>}

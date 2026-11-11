@@ -68,6 +68,7 @@ const fa = {
   legal: { privacy: 'حریم خصوصی', terms: 'شرایط استفاده', cookies: 'کوکی‌ها' },
   hero: {
     note: 'اطلاعات تماس رسمی فقط پس از تأیید سازمان منتشر می‌شود؛ تا آن زمان درخواست‌ها از صفحهٔ تماس پیگیری می‌شوند.',
+    factsLabel: 'نگاه کلی در یک نگاه',
   },
   principles: {
     eyebrow: 'اصول کاری',
@@ -80,6 +81,7 @@ const fa = {
     lead: 'خدمات در حوزهٔ برق قدرت، تأسیسات، انرژی و آموزش تخصصی؛ هر خدمت با دامنهٔ مشخص و خروجی قابل استناد.',
     all: 'همهٔ خدمات و دوره‌ها',
     more: 'جزئیات خدمت',
+    imageNote: 'تصاویر، شاخص حوزهٔ کار هستند و به پروژه یا کارفرمای مشخصی اشاره ندارند.',
   },
   founder: {
     eyebrow: 'پیشینهٔ مؤسس',
@@ -228,6 +230,7 @@ const en: Dictionary = {
   legal: { privacy: 'Privacy', terms: 'Terms of use', cookies: 'Cookies' },
   hero: {
     note: 'The approved contact channels are published on the contact page, where you can also send a request.',
+    factsLabel: 'Overview at a glance',
   },
   principles: {
     eyebrow: 'How we work',
@@ -240,6 +243,7 @@ const en: Dictionary = {
     lead: 'Work across power engineering, building services, energy and specialist training — each service with a defined scope and a traceable output.',
     all: 'All services and courses',
     more: 'Service details',
+    imageNote: 'The images illustrate the field of work; they do not show a specific project or client.',
   },
   founder: {
     eyebrow: 'Founder’s record',

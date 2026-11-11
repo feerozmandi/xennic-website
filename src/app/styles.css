@@ -101,12 +101,19 @@
   --veil-2: rgba(7, 17, 32, 0.82);
   --veil-3: rgba(7, 17, 32, 0.2);
   /* Hero photograph treatment: a dark scrim at night, a paper scrim by day. */
-  --hero-photo-opacity: 0.55;
-  --hero-photo-filter: saturate(110%);
   --hero-veil-1: rgba(7, 17, 32, 0.55);
   --hero-veil-2: rgba(7, 17, 32, 0.82);
   --hero-veil-3: rgba(7, 17, 32, 0.2);
   --hero-veil-end: #071120;
+  /* Hero artwork: the shadow and glow follow the reading direction. */
+  --media-flip: 1;
+  --media-shadow-sign: 1;
+  --media-shadow-color: rgba(2, 8, 18, 0.85);
+  --media-glow: rgba(245, 180, 0, 0.34);
+  --media-veil: rgba(7, 17, 32, 0.62);
+  --hero-art-warm: rgba(245, 180, 0, 0.16);
+  --hero-art-cool: rgba(45, 212, 191, 0.16);
+  --card-media-veil: rgba(7, 17, 32, 0.55);
   --sheet-1: rgba(5, 12, 23, 0.92);
   --sheet-2: rgba(5, 12, 23, 0.96);
   --sheet-3: rgba(5, 12, 23, 0.9);
@@ -210,12 +217,18 @@
    * instead of being switched off, so the page keeps its identity while the text
    * above it stays dark-on-light and the whole page reads as one light sheet.
    */
-  --hero-photo-opacity: 0.3;
-  --hero-photo-filter: saturate(120%) contrast(105%);
   --hero-veil-1: rgba(242, 246, 251, 0.55);
   --hero-veil-2: rgba(242, 246, 251, 0.9);
   --hero-veil-3: rgba(242, 246, 251, 0.7);
   --hero-veil-end: #f2f6fb;
+  --media-flip: 1;
+  --media-shadow-sign: 1;
+  --media-shadow-color: rgba(27, 54, 88, 0.34);
+  --media-glow: rgba(245, 180, 0, 0.26);
+  --media-veil: rgba(11, 26, 43, 0.3);
+  --hero-art-warm: rgba(245, 180, 0, 0.14);
+  --hero-art-cool: rgba(45, 212, 191, 0.12);
+  --card-media-veil: rgba(242, 246, 251, 0.35);
   --sheet-1: rgba(242, 246, 251, 0.94);
   --sheet-2: rgba(242, 246, 251, 0.97);
   --sheet-3: rgba(242, 246, 251, 0.92);
@@ -553,37 +566,104 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
 /* ---------- hero ---------- */
 .hero { position: relative; padding-block: clamp(1.5rem, 3vw, 3rem) clamp(2.5rem, 6vw, 5rem); isolation: isolate; }
 .hero__backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
-.hero__backdrop img {
-  object-position: center 30%;
-  opacity: var(--hero-photo-opacity);
-  filter: var(--hero-photo-filter);
-}
 .hero__veil {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 60% at 82% 12%, var(--hero-veil-3), transparent 70%),
-    linear-gradient(180deg, var(--hero-veil-1) 0%, var(--hero-veil-2) 55%, var(--hero-veil-end) 100%);
+    radial-gradient(52% 58% at var(--hero-glow-x) 8%, var(--hero-art-warm), transparent 68%),
+    radial-gradient(46% 52% at var(--hero-art-x) 84%, var(--hero-art-cool), transparent 72%),
+    linear-gradient(180deg, var(--hero-veil-1) 0%, var(--hero-veil-2) 58%, var(--hero-veil-end) 100%);
 }
-.hero__inner { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: center; }
+/* Direction-aware glow: the warm light sits behind the copy in both languages,
+ * and the cool accent sits on the side of the artwork. */
+html[dir='rtl'] .hero { --hero-glow-x: 78%; --hero-art-x: 6%; }
+html[dir='ltr'] .hero { --hero-glow-x: 22%; --hero-art-x: 94%; }
+.hero__inner { display: grid; gap: clamp(2rem, 4vw, 3.25rem); align-items: center; }
 .hero__copy { display: grid; gap: 1.1rem; justify-items: start; }
 .hero h1 { font-size: clamp(2rem, 5.2vw, 3.6rem); font-weight: 900; line-height: 1.26; max-width: 22ch; }
 .hero__summary { font-size: clamp(1rem, 1.4vw, 1.15rem); color: var(--text-muted); max-width: 58ch; }
 .hero__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block-start: 0.35rem; }
-.hero__note { font-size: 0.8rem; color: var(--text-muted); max-width: 54ch; border-inline-start: 2px solid rgba(255, 209, 102, 0.5); padding-inline-start: 0.75rem; }
+.hero__note { font-size: 0.8rem; color: var(--text-muted); max-width: 54ch; border-inline-start: 2px solid var(--accent-soft); padding-inline-start: 0.75rem; }
+
+/* Facts: a slim strip of figures instead of a boxed two-by-two card. */
 .hero__facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 0;
-  padding: clamp(0.85rem, 2vw, 1.35rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.35rem;
+  margin: 0.35rem 0 0;
+  padding: 0;
 }
-.hero__facts > div { padding: 0.55rem 0.7rem; border-radius: var(--radius-sm); background: var(--tint-ink); }
-.hero__facts dt { font-size: 0.74rem; color: var(--text-ink-muted); }
-.hero__facts dd { margin: 0; font-size: clamp(1rem, 1.6vw, 1.2rem); font-weight: 800; color: var(--text-ink); }
+.hero__facts > div { display: grid; gap: 0.1rem; position: relative; }
+.hero__facts > div + div { padding-inline-start: 1.35rem; }
+.hero__facts > div + div::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.15rem;
+  inset-inline-start: 0;
+  inline-size: 1px;
+  background: var(--glass-border);
+}
+.hero__facts dd { order: -1; margin: 0; font-size: clamp(1.02rem, 1.4vw, 1.22rem); font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
+.hero__facts dt { font-size: 0.72rem; color: var(--text-muted); }
+
+/* ---------- hero artwork ---------- */
+.hero__media {
+  position: relative;
+  margin: 0;
+  isolation: isolate;
+  border-radius: calc(var(--radius-lg) + 6px);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    calc(var(--media-shadow-sign) * 34px) 34px 70px -46px var(--media-shadow-color),
+    0 0 0 1px var(--inset-1) inset;
+  aspect-ratio: 4 / 3;
+  max-block-size: 30rem;
+  background: var(--wash-7);
+}
+.hero__media-art {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transform: scaleX(var(--media-flip, 1));
+  animation: hero-breathe 22s var(--ease-out) infinite alternate;
+}
+.hero__media-glow {
+  position: absolute;
+  inset-block: -30%;
+  inset-inline-end: -22%;
+  inline-size: 62%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--media-glow), transparent 74%);
+  filter: blur(6px);
+}
+.hero__media-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(to top, var(--media-veil) 0%, transparent 46%),
+    linear-gradient(115deg, var(--inset-2), transparent 38%);
+  box-shadow: inset 0 1px 0 var(--inset-2);
+}
+/* Mirroring: the artwork and its shadow are composed for one direction and
+ * flipped for the other, so the light, the dense structure and the drop shadow
+ * always sit on the same (outer) side of the layout. */
+html[dir='rtl'] .hero__media { --media-flip: -1; --media-shadow-sign: -1; }
+
+@keyframes hero-breathe {
+  from { scale: 1; }
+  to { scale: 1.045; }
+}
 @media (min-width: 900px) {
-  .hero__inner { grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); }
-  .hero__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero__inner { grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr); }
+  .hero__media { aspect-ratio: 5 / 4; }
+}
+@media (max-width: 899px) {
+  .hero__media { aspect-ratio: 16 / 10; max-block-size: 22rem; inline-size: 100%; }
 }
 
 /* ---------- principles ---------- */
@@ -636,6 +716,41 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
 .card h3 { font-size: 1.08rem; }
 .card p { color: var(--text-muted); font-size: 0.92rem; }
 .card__more { display: inline-flex; align-items: center; gap: 0.4rem; margin-block-start: 0.5rem; font-size: 0.86rem; font-weight: 700; color: var(--accent); }
+
+/* ---------- cards with a picture ---------- */
+.card--media { padding: 0; overflow: hidden; gap: 0; }
+.card__media { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; background: var(--wash-7); }
+.card__media-art { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; transition: transform 560ms var(--ease-out), filter 320ms ease; }
+.card--media:hover .card__media-art,
+.card--media:focus-visible .card__media-art { transform: scale(1.05); }
+.card__media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--card-media-veil) 0%, transparent 55%);
+  pointer-events: none;
+}
+.card__body { display: grid; gap: 0.5rem; align-content: start; padding: 1.15rem 1.25rem 1.3rem; }
+.card__body .card__more { margin-block-start: 0.25rem; }
+.grid-note { margin-block-start: 1rem; font-size: 0.76rem; color: var(--text-muted); max-inline-size: 62ch; }
+
+/* ---------- a picture with a caption ---------- */
+/* Lead artwork is a companion to the copy, not a billboard: capped in both
+ * axes so the first screen still shows real content on wide pages. */
+.page-figure {
+  margin: 0 0 clamp(1.5rem, 3vw, 2.25rem);
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  max-inline-size: min(100%, 46rem);
+}
+.page-figure__art { display: block; inline-size: 100%; block-size: auto; max-block-size: 20rem; object-fit: cover; }
+.page-figure figcaption {
+  padding: 0.7rem 1.1rem 0.85rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-block-start: 1px solid var(--glass-border-soft);
+}
 
 /* ---------- founder ---------- */
 .founder { display: grid; gap: 1.75rem; padding: clamp(1.25rem, 3.2vw, 2.5rem); border-radius: var(--radius-xl); }
@@ -881,8 +996,56 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
 .button[disabled] { cursor: not-allowed; opacity: 0.65; }
 .button:not([disabled]) { color: var(--on-gold); background: linear-gradient(135deg, var(--gold-2), var(--gold)); border-color: transparent; }
 
+/* ---------- motion ----------
+ * Scroll reveal. The hidden state only exists when JavaScript is running
+ * (`html.has-js` is set before the first frame) and when the visitor has not
+ * asked for reduced motion, so no content can ever be stranded invisible.
+ */
+.has-js [data-reveal] { opacity: 0; transform: translate3d(0, 18px, 0); }
+.has-js [data-reveal].is-revealed {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .has-js [data-reveal] {
+    transition:
+      opacity 620ms var(--ease-out) var(--reveal-delay, 0ms),
+      transform 720ms var(--ease-out) var(--reveal-delay, 0ms),
+      filter 620ms var(--ease-out) var(--reveal-delay, 0ms);
+    filter: blur(6px);
+    will-change: opacity, transform;
+  }
+  .has-js [data-reveal].is-revealed { filter: blur(0); }
+}
+/* A one-time settle for the hero, so the page opens with movement rather than
+ * a static frame. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero__copy > * { animation: hero-settle 760ms var(--ease-out) both; }
+  .hero__copy > *:nth-child(2) { animation-delay: 80ms; }
+  .hero__copy > *:nth-child(3) { animation-delay: 150ms; }
+  .hero__copy > *:nth-child(4) { animation-delay: 220ms; }
+  .hero__copy > *:nth-child(5) { animation-delay: 290ms; }
+  .hero__copy > *:nth-child(6) { animation-delay: 350ms; }
+  .hero__media { animation: hero-fade 900ms var(--ease-out) 120ms both; }
+}
+@keyframes hero-settle {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes hero-fade {
+  from { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Printing never runs the reveal controller, so nothing may be left faded. */
+@media print {
+  .has-js [data-reveal] { opacity: 1; transform: none; filter: none; }
+  .hero__copy > * { animation: none; }
+}
+
 /* ---------- motion ---------- */
 @media (prefers-reduced-motion: reduce) {
+  .has-js [data-reveal] { opacity: 1; transform: none; filter: none; }
   html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -1105,8 +1268,6 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
  * the gold action, which carries dark text in both themes.
  */
 .btn--primary, .button:not([disabled]) { --text: var(--on-gold); }
-.hero__facts dt { color: var(--text-ink-muted); }
-.hero__facts dd { color: var(--text-ink); }
 [data-theme='light'] .site-header { background: linear-gradient(180deg, var(--header-scrim) 34%, transparent); }
 [data-theme='light'] .hero__note { border-inline-start-color: var(--accent-soft); }
 [data-theme='light'] .mobile-sheet { background: linear-gradient(180deg, var(--sheet-3) 0%, var(--sheet-2) 55%, var(--sheet-4) 100%); }
