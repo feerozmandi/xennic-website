@@ -238,7 +238,9 @@ printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Activation upgrade accepted journal' >&2; exit 1; fi
 sudo test -f /srv/xennic-preview/state/release-state.json
 sudo rm /srv/xennic-preview/state/release-state.json # disposable fixture only
-sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+# Same release's installer as the staged files: it is the code that pinned the
+# routes hash this scenario installs, so today's installer must not stand in.
+sudo /usr/bin/python3 - "$scratch/activation-install-preview-sftp-helper.py" <<'PY'
 import importlib.util, sys
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location('activation_upgrade_ci', sys.argv[1])
