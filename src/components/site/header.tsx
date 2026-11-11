@@ -3,17 +3,21 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { navigation } from '../../lib/navigation'
+import { getDictionary, localeHref, type Locale } from '../../lib/i18n'
+import { navigationFor } from '../../lib/navigation'
 import { LocaleSwitch } from './locale-switch'
 import { Logo } from './logo'
 import { ThemeToggle } from './theme-toggle'
 
-export function SiteHeader() {
+export function SiteHeader({ locale }: { locale: Locale }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const sheetRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const dict = getDictionary(locale)
+  const nav = navigationFor(locale)
+  const contactHref = localeHref(locale, '/contact')
 
   useEffect(() => {
     if (!open) return
@@ -57,10 +61,10 @@ export function SiteHeader() {
       <header className="site-header">
         <div className="container">
           <div className="glass glass--quiet header-bar">
-            <Logo size="sm" />
-            <nav className="nav-desktop" aria-label="ناوبری اصلی">
+            <Logo size="sm" locale={locale} />
+            <nav className="nav-desktop" aria-label={dict.nav.label}>
               <ul>
-                {navigation.map((item) => (
+                {nav.map((item) => (
                   <li key={item.href}>
                     <Link href={item.href} aria-current={pathname === item.href ? 'page' : undefined}>
                       {item.label}
@@ -71,11 +75,11 @@ export function SiteHeader() {
             </nav>
             <div className="header-actions">
               <div className="header-locale">
-                <LocaleSwitch compact />
+                <LocaleSwitch locale={locale} compact />
               </div>
-              <ThemeToggle />
-              <Link href="/contact" className="btn btn--primary header-cta">
-                درخواست مشاوره
+              <ThemeToggle locale={locale} />
+              <Link href={contactHref} className="btn btn--primary header-cta">
+                {dict.nav.ctaShort}
               </Link>
               <button
                 ref={toggleRef}
@@ -83,7 +87,7 @@ export function SiteHeader() {
                 className="menu-toggle"
                 aria-expanded={open}
                 aria-controls="mobile-navigation"
-                aria-label={open ? 'بستن منو' : 'باز کردن منو'}
+                aria-label={open ? dict.nav.close : dict.nav.open}
                 onClick={() => setOpen((value) => !value)}
               >
                 <span className="menu-toggle__bars" aria-hidden="true"><span /><span /><span /></span>
@@ -94,20 +98,20 @@ export function SiteHeader() {
       </header>
 
       {open && (
-        <div className="mobile-sheet" role="dialog" aria-modal="true" aria-label="منوی اصلی" ref={sheetRef}>
+        <div className="mobile-sheet" role="dialog" aria-modal="true" aria-label={dict.nav.menuLabel} ref={sheetRef}>
           <div className="mobile-sheet__top">
-            <Logo size="sm" />
-            <button ref={closeRef} type="button" className="menu-toggle" onClick={() => setOpen(false)} aria-label="بستن منو">
+            <Logo size="sm" locale={locale} />
+            <button ref={closeRef} type="button" className="menu-toggle" onClick={() => setOpen(false)} aria-label={dict.nav.close}>
               <span aria-hidden="true">✕</span>
             </button>
           </div>
           <div className="mobile-sheet__panel">
             <div className="mobile-sheet__controls">
-              <LocaleSwitch />
-              <ThemeToggle />
+              <LocaleSwitch locale={locale} />
+              <ThemeToggle locale={locale} />
             </div>
-            <nav className="mobile-nav" id="mobile-navigation" aria-label="ناوبری موبایل">
-              {navigation.map((item) => (
+            <nav className="mobile-nav" id="mobile-navigation" aria-label={dict.nav.mobileLabel}>
+              {nav.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -118,8 +122,10 @@ export function SiteHeader() {
                 </Link>
               ))}
             </nav>
-            <Link href="/contact" className="btn btn--primary" onClick={() => setOpen(false)}>درخواست مشاوره</Link>
-            <p className="mobile-sheet__meta">زر نور نیرو یکتا | Xennic — مهندسی برق، انرژی و اتوماسیون</p>
+            <Link href={contactHref} className="btn btn--primary" onClick={() => setOpen(false)}>
+              {dict.nav.cta}
+            </Link>
+            <p className="mobile-sheet__meta">{dict.nav.brandTagline}</p>
           </div>
         </div>
       )}

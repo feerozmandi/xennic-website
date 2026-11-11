@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { RichText } from '@payloadcms/richtext-lexical/react'
 import type { RichTextDocument, ServiceCardModel, TrackRecordItemModel } from '@/lib/contracts'
 import { faNumber } from '@/lib/home-content'
+import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 
 /**
  * Shared presentation for the content pages.
@@ -10,11 +11,16 @@ import { faNumber } from '@/lib/home-content'
  * (eyebrow, one H1, one lede) and then content blocks built from the design
  * system. No page invents copy; the strings come from the approved content in
  * Payload or from the approved copy module.
+ *
+ * `locale` only decides interface strings and link prefixes. The body text is
+ * whatever the page passed in, so the Persian and English trees can use the same
+ * components without sharing a content source.
  */
 
-export function Breadcrumb({ trail }: { trail: { href?: string; label: string }[] }) {
+export function Breadcrumb({ trail, locale = 'fa' }: { trail: { href?: string; label: string }[]; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
-    <nav aria-label="مسیر صفحه" className="breadcrumb">
+    <nav aria-label={dict.breadcrumb} className="breadcrumb">
       {trail.map((crumb, index) => (
         <span key={`${crumb.label}-${index}`} className="breadcrumb__item">
           {crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : <span aria-current="page">{crumb.label}</span>}
@@ -51,17 +57,23 @@ export function ContentPage({
   eyebrow,
   lead,
   trail,
+  locale = 'fa',
   children,
 }: {
   title: string
   eyebrow?: string
   lead?: string
   trail?: { href?: string; label: string }[]
+  locale?: Locale
   children: React.ReactNode
 }) {
+  const dict = getDictionary(locale)
   return (
     <div className="container page">
-      <Breadcrumb trail={trail ?? [{ href: '/', label: 'خانه' }, { label: title }]} />
+      <Breadcrumb
+        locale={locale}
+        trail={trail ?? [{ href: localeHref(locale, '/'), label: dict.home }, { label: title }]}
+      />
       <PageHeader eyebrow={eyebrow} title={title} lead={lead} />
       {children}
     </div>
@@ -72,20 +84,38 @@ export function DocumentContent({ content }: { content: RichTextDocument | null 
   return content ? <div className="document-content"><RichText data={content} /></div> : null
 }
 
+/**
+ * Plain heading/paragraph body. The English edition is authored as data rather
+ * than as CMS rich text, so it needs the same rhythm without a Lexical document.
+ */
+export function BlockContent({ blocks }: { blocks: readonly { heading: string; text: string }[] }) {
+  return (
+    <div className="document-content">
+      {blocks.map((block) => (
+        <section key={block.heading}>
+          <h2>{block.heading}</h2>
+          <p>{block.text}</p>
+        </section>
+      ))}
+    </div>
+  )
+}
+
 /** Cards that keep the approved service list readable at every width. */
-export function ServiceCards({ services }: { services: ServiceCardModel[] }) {
+export function ServiceCards({ services, locale = 'fa' }: { services: ServiceCardModel[]; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
     <ul className="card-grid">
       {services.map((service) => (
         <li key={service.id}>
-          <Link className="card card--link" href={`/services/${service.slug}`}>
+          <Link className="card card--link" href={localeHref(locale, `/services/${service.slug}`)}>
             <div className="card__head">
               <h2 className="card__title">{service.title}</h2>
-              {service.comingSoon && <span className="badge">به‌زودی</span>}
+              {service.comingSoon && <span className="badge">{dict.comingSoon}</span>}
             </div>
             {service.summary && <p>{service.summary}</p>}
             <span className="card__more">
-              جزئیات خدمت <span aria-hidden="true">←</span>
+              {dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span>
             </span>
           </Link>
         </li>
@@ -98,15 +128,18 @@ export function ServiceCards({ services }: { services: ServiceCardModel[] }) {
  * Track-record entries are all pre-company work. The badge and the closing note
  * are part of the approved framing and must stay attached to every entry.
  */
-export function TrackRecordList({ items }: { items: TrackRecordItemModel[] }) {
+export function TrackRecordList({ items, locale = 'fa' }: { items: TrackRecordItemModel[]; locale?: Locale }) {
+  const dict = getDictionary(locale)
+  const marker = (index: number) =>
+    locale === 'en' ? String(index + 1).padStart(2, '0') : faNumber(index + 1).padStart(2, '۰')
   return (
     <>
       <ol className="timeline">
         {items.map((item, index) => (
           <li className="timeline__item" key={item.id}>
-            <span className="timeline__marker" aria-hidden="true">{faNumber(index + 1).padStart(2, '۰')}</span>
+            <span className="timeline__marker" aria-hidden="true">{marker(index)}</span>
             <div className="timeline__body">
-              <p className="timeline__badge">پیش از تأسیس Xennic</p>
+              <p className="timeline__badge">{dict.content.recordBadge}</p>
               <h2 className="timeline__title">{item.title}</h2>
               {item.role && <p className="timeline__role">{item.role}</p>}
               {item.description && <p className="timeline__text">{item.description}</p>}
@@ -114,24 +147,29 @@ export function TrackRecordList({ items }: { items: TrackRecordItemModel[] }) {
           </li>
         ))}
       </ol>
-      <p className="page-note">
-        این پیشینه، سابقهٔ حرفه‌ای مؤسس پیش از تأسیس Xennic است و به‌معنای سابقهٔ پروژه‌های شرکت نیست.
-      </p>
+      <p className="page-note">{dict.content.recordNote}</p>
     </>
   )
 }
 
 /** A page that exists in navigation but has no approved content yet. */
-export function NotPublished({ title, note }: { title: string; note?: string }) {
+export function NotPublished({
+  title,
+  note,
+  locale = 'fa',
+}: {
+  title: string
+  note?: string
+  locale?: Locale
+}) {
+  const dict = getDictionary(locale)
   return (
     <div className="notice-card">
-      <span className="badge">در حال آماده‌سازی</span>
-      <h2 className="h3">این صفحه هنوز منتشر نشده است</h2>
-      <p>
-        {note ?? `محتوای «${title}» پس از تأیید منتشر می‌شود؛ تا آن زمان برای هر پرسش از مسیرهای تماس استفاده کنید.`}
-      </p>
-      <Link className="btn btn--glass" href="/contact">
-        <span>مسیرهای تماس</span>
+      <span className="badge">{dict.notPublishedBadge}</span>
+      <h2 className="h3">{dict.notPublishedTitle}</h2>
+      <p>{note ?? dict.notPublishedBody(title)}</p>
+      <Link className="btn btn--glass" href={localeHref(locale, '/contact')}>
+        <span>{dict.contactRoutes}</span>
         <span className="btn__arrow" aria-hidden="true">←</span>
       </Link>
     </div>

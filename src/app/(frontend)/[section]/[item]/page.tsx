@@ -71,7 +71,7 @@ export default async function Detail({ params }: { params: Promise<{ section: st
               </>
             )}
             <Link className="text-link" href="/services">
-              همهٔ خدمات <span aria-hidden="true">←</span>
+              همهٔ خدمات <span className="arrow" aria-hidden="true">←</span>
             </Link>
           </aside>
         </div>
@@ -121,7 +121,7 @@ export default async function Detail({ params }: { params: Promise<{ section: st
                 <h2 className="h3">{member.name || FOUNDER_NAME}</h2>
                 {member.biography && <p>{member.biography}</p>}
                 <Link className="text-link" href="/track-record">
-                  پیشینهٔ حرفه‌ای <span aria-hidden="true">←</span>
+                  پیشینهٔ حرفه‌ای <span className="arrow" aria-hidden="true">←</span>
                 </Link>
               </div>
             </li>

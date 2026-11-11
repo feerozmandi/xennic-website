@@ -36,6 +36,20 @@ export const PHONE_METHOD: ContactMethod = {
   hint: 'تماس مستقیم با مؤسس',
 }
 
+/**
+ * The same confirmed number, written with Latin digits for the English edition.
+ * Only the numeral system changes — the digits are read from the canonical
+ * `PHONE_HREF`, so the two editions cannot drift apart.
+ */
+export const PHONE_DISPLAY_LATIN = PHONE_HREF.replace('tel:+98', '0')
+
+export const PHONE_METHOD_LATIN: ContactMethod = { ...PHONE_METHOD, value: PHONE_DISPLAY_LATIN }
+
+/** The phone entry as it should appear in the given language edition. */
+export function phoneMethod(locale: 'fa' | 'en'): ContactMethod {
+  return locale === 'en' ? PHONE_METHOD_LATIN : PHONE_METHOD
+}
+
 export const EMAIL_METHODS: ContactMethod[] = [
   {
     id: 'email-info',

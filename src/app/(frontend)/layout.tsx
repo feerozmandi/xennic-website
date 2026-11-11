@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { SiteShell } from '@/components/site'
+import { SiteDocument } from '@/components/site'
 import { SITE_URL } from '@/lib/seo'
-import { themeScript } from '@/lib/theme-script'
-import './styles.css'
+import '../styles.css'
 
 export const metadata: Metadata = {
   title: { default: 'Xennic | مهندسی برق، انرژی و اتوماسیون', template: '%s | Xennic' },
@@ -19,7 +18,10 @@ export const metadata: Metadata = {
     url: SITE_URL,
     images: [{ url: `${SITE_URL}/brand/og-cover.png`, width: 1200, height: 630, alt: 'Xennic' }],
   },
-  alternates: { canonical: SITE_URL },
+  alternates: {
+    canonical: SITE_URL,
+    languages: { fa: SITE_URL, en: `${SITE_URL}/en`, 'x-default': SITE_URL },
+  },
   icons: {
     icon: [
       { url: '/icon.png', sizes: '192x192', type: 'image/png' },
@@ -38,15 +40,5 @@ export const viewport: Viewport = {
 }
 
 export default function Layout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <html lang="fa" dir="rtl" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
-      <body>
-        <a href="#main-content" className="skip-link">رفتن به محتوای اصلی</a>
-        <SiteShell>{children}</SiteShell>
-      </body>
-    </html>
-  )
+  return <SiteDocument locale="fa">{children}</SiteDocument>
 }

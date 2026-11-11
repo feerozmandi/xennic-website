@@ -1,6 +1,7 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
+import { getDictionary, type Locale } from '@/lib/i18n'
 import { THEME_COOKIE_NAME, THEME_STORAGE_KEY, type Theme } from '@/lib/theme'
 
 /**
@@ -35,15 +36,16 @@ function setTheme(next: Theme) {
   document.cookie = `${THEME_COOKIE_NAME}=${next}; path=/; max-age=31536000; samesite=lax`
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ locale = 'fa' }: { locale?: Locale }) {
   const isLight = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  const dict = getDictionary(locale)
 
   return (
     <button
       type="button"
       role="switch"
       aria-checked={isLight}
-      aria-label={isLight ? 'حالت روز فعال است؛ تغییر به حالت شب' : 'حالت شب فعال است؛ تغییر به حالت روز'}
+      aria-label={isLight ? dict.theme.toDark : dict.theme.toLight}
       className="liquid-switch"
       onClick={() => setTheme(isLight ? 'dark' : 'light')}
     >
@@ -58,7 +60,7 @@ export function ThemeToggle() {
         <span className="liquid-switch__mark liquid-switch__mark--moon">☾</span>
       </span>
       <span className="sr-only" aria-live="polite">
-        {isLight ? 'حالت روز روشن شد' : 'حالت شب روشن شد'}
+        {isLight ? dict.theme.lightOn : dict.theme.darkOn}
       </span>
     </button>
   )

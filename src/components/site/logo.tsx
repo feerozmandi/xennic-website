@@ -1,5 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 
 /**
  * Official brand lockup.
@@ -14,9 +15,10 @@ import Link from 'next/link'
  */
 const LOGO = { width: 292, height: 139 }
 
-export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+export function Logo({ size = 'md', locale = 'fa' }: { size?: 'sm' | 'md' | 'lg'; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
-    <Link href="/" className={`brand brand--${size}`} aria-label="Xennic — زر نور نیرو یکتا، صفحهٔ اصلی">
+    <Link href={localeHref(locale, '/')} className={`brand brand--${size}`} aria-label={dict.logoHome}>
       <span className="brand__mark">
         <Image
           src="/brand/xennic-logo-on-dark.webp"
@@ -36,7 +38,7 @@ export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
         />
       </span>
       <span className="brand__text" aria-hidden="true">
-        <span className="brand__sub">زر نور نیرو یکتا</span>
+        <span className="brand__sub">{dict.brandSub}</span>
       </span>
     </Link>
   )

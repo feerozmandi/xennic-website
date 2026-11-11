@@ -9,11 +9,10 @@
 /*
  * Theme model
  * -----------
- * `--ink*` and the brand colours are palette values and stay constant: they are
- * used for deliberately dark "islands" (the hero photograph, the gold buttons,
- * the light-glass fact card) in both themes.
- * Every surface, text and hairline below is a *semantic* token that the light
- * theme overrides. Components must only use the semantic tokens.
+ * `--ink*` and the brand colours are palette values and stay constant; every
+ * surface, text and hairline below is a *semantic* token that the light theme
+ * overrides. Components must only use the semantic tokens, and the light theme
+ * covers the whole page: nothing is permanently dark.
  */
 :root,
 [data-theme='dark'] {
@@ -101,6 +100,13 @@
   --veil-1: rgba(7, 17, 32, 0.55);
   --veil-2: rgba(7, 17, 32, 0.82);
   --veil-3: rgba(7, 17, 32, 0.2);
+  /* Hero photograph treatment: a dark scrim at night, a paper scrim by day. */
+  --hero-photo-opacity: 0.55;
+  --hero-photo-filter: saturate(110%);
+  --hero-veil-1: rgba(7, 17, 32, 0.55);
+  --hero-veil-2: rgba(7, 17, 32, 0.82);
+  --hero-veil-3: rgba(7, 17, 32, 0.2);
+  --hero-veil-end: #071120;
   --sheet-1: rgba(5, 12, 23, 0.92);
   --sheet-2: rgba(5, 12, 23, 0.96);
   --sheet-3: rgba(5, 12, 23, 0.9);
@@ -125,8 +131,8 @@
  * Day theme.
  *
  * The page becomes a soft paper surface; cards stay translucent white glass with
- * dark text. Dark islands (hero photograph, gold buttons) opt back into the dark
- * palette locally, so contrast never depends on the theme.
+ * dark text, the hero photograph fades into the paper instead of sitting on a
+ * dark scrim, and the footer becomes a recessed light panel.
  */
 [data-theme='light'] {
   color-scheme: light;
@@ -199,6 +205,17 @@
   --veil-1: rgba(7, 17, 32, 0.62);
   --veil-2: rgba(7, 17, 32, 0.86);
   --veil-3: rgba(7, 17, 32, 0.24);
+  /*
+   * The hero is the brand photograph. By day it is faded into the paper surface
+   * instead of being switched off, so the page keeps its identity while the text
+   * above it stays dark-on-light and the whole page reads as one light sheet.
+   */
+  --hero-photo-opacity: 0.3;
+  --hero-photo-filter: saturate(120%) contrast(105%);
+  --hero-veil-1: rgba(242, 246, 251, 0.55);
+  --hero-veil-2: rgba(242, 246, 251, 0.9);
+  --hero-veil-3: rgba(242, 246, 251, 0.7);
+  --hero-veil-end: #f2f6fb;
   --sheet-1: rgba(242, 246, 251, 0.94);
   --sheet-2: rgba(242, 246, 251, 0.97);
   --sheet-3: rgba(242, 246, 251, 0.92);
@@ -262,6 +279,9 @@ img { max-width: 100%; }
   background: linear-gradient(180deg, var(--band-c), var(--band-a));
   border-block: 1px solid var(--glass-border-soft);
 }
+/* The band starts at the inline midpoint and is pulled back to the inline start;
+ * in a left-to-right document that is the opposite direction. */
+html[dir='ltr'] .section--muted::before { transform: translateX(-50%); }
 
 /* ---------- glass surfaces ---------- */
 .glass {
@@ -355,6 +375,15 @@ img { max-width: 100%; }
 .btn--glass:hover { background: var(--wash-hover); transform: translateY(-2px); }
 .btn__arrow { font-size: 1.1rem; line-height: 1; }
 
+/* ---------- direction-aware arrows ---------- *
+ * The glyph is "onwards". Persian reads right-to-left, so the arrow points
+ * left; in the English edition the same glyph is mirrored instead of being
+ * retyped, which keeps one source for the icon.
+ */
+.arrow { display: inline-block; }
+html[dir='ltr'] .arrow,
+html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
+
 .badge {
   display: inline-flex;
   padding: 0.25rem 0.7rem;
@@ -383,9 +412,11 @@ img { max-width: 100%; }
   padding: 0.45rem 0.7rem 0.45rem 1.1rem;
   border-radius: 999px;
 }
-/* Official lockup: artwork only, never retyped. */
+/* Official lockup: artwork only, never retyped. It keeps its own width: the
+ * wordmark must never be squeezed by a long navigation row. */
 .brand {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 0.7rem;
   min-block-size: 2.75rem;
@@ -415,8 +446,13 @@ img { max-width: 100%; }
   white-space: nowrap;
 }
 @media (max-width: 400px) { .header-bar .brand__text { display: none; } }
+/* English labels are longer than the Persian ones, so the English bar drops the
+ * (decorative) brand sub-line earlier and keeps six links plus the controls on
+ * one row. The accessible name of the link is unchanged. */
+@media (max-width: 1500px) { html[dir='ltr'] .brand__sub { display: none; } }
 .nav-desktop { display: none; }
 .nav-desktop ul { display: flex; align-items: center; gap: 0.2rem; }
+.nav-desktop { min-inline-size: 0; }
 .nav-desktop a {
   display: inline-flex;
   align-items: center;
@@ -426,11 +462,14 @@ img { max-width: 100%; }
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-muted);
+  /* One line per label: an English label such as "Track record" must not wrap
+   * the whole bar taller than the theme switch next to it. */
+  white-space: nowrap;
   transition: color 160ms ease, background-color 160ms ease;
 }
 .nav-desktop a:hover { color: var(--text); background: var(--wash-4); }
 .nav-desktop a[aria-current="page"] { color: var(--text); background: var(--wash-2); }
-.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.5rem; }
 .header-cta { display: none; }
 .menu-toggle {
   display: inline-flex;
@@ -494,22 +533,37 @@ img { max-width: 100%; }
 .mobile-sheet .btn { inline-size: 100%; }
 .mobile-sheet__meta { margin-block-start: 1rem; font-size: 0.8rem; color: var(--text-muted); }
 
-@media (min-width: 1024px) {
+/* The full navigation needs room for six labels plus the controls. English
+ * labels are longer than the Persian ones, so the bar switches to the sheet at
+ * 1100px and tightens its spacing until 1280px. */
+@media (min-width: 1100px) {
   .nav-desktop { display: block; }
   .menu-toggle { display: none; }
   .header-cta { display: inline-flex; }
+}
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .header-bar { gap: 0.5rem; }
+  .nav-desktop ul { gap: 0.1rem; }
+  .nav-desktop a { padding-inline: 0.55rem; font-size: 0.82rem; }
+  .header-cta { padding-inline: 0.85rem; font-size: 0.82rem; }
+  .brand--sm { --brand-art: 1.6rem; }
+  .brand__sub { display: none; }
 }
 
 /* ---------- hero ---------- */
 .hero { position: relative; padding-block: clamp(1.5rem, 3vw, 3rem) clamp(2.5rem, 6vw, 5rem); isolation: isolate; }
 .hero__backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
-.hero__backdrop img { object-position: center 30%; opacity: 0.55; }
+.hero__backdrop img {
+  object-position: center 30%;
+  opacity: var(--hero-photo-opacity);
+  filter: var(--hero-photo-filter);
+}
 .hero__veil {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 60% at 82% 12%, var(--veil-3), transparent 70%),
-    linear-gradient(180deg, var(--veil-1) 0%, var(--veil-2) 55%, var(--ink) 100%);
+    radial-gradient(60% 60% at 82% 12%, var(--hero-veil-3), transparent 70%),
+    linear-gradient(180deg, var(--hero-veil-1) 0%, var(--hero-veil-2) 55%, var(--hero-veil-end) 100%);
 }
 .hero__inner { display: grid; gap: clamp(1.75rem, 4vw, 3rem); align-items: center; }
 .hero__copy { display: grid; gap: 1.1rem; justify-items: start; }
@@ -762,24 +816,20 @@ img { max-width: 100%; }
 
 /* ---------- footer ---------- */
 .site-footer {
-  /* The footer is a dark island in both themes: the brand gold and the contact
-     links need the dark ground to stay legible, and it visually anchors the page. */
-  --accent: #ffd166;
-  --text: #eef3fa;
-  --text-muted: #b3c0d1;
-  --glass-border-soft: rgba(255, 255, 255, 0.09);
+  /* Follows the active theme like every other surface. In the light theme the
+     footer is a slightly recessed paper panel, not a dark block. */
   color: var(--text);
   margin-block-start: 2rem;
   padding-block: 3rem 1.5rem;
   border-block-start: 1px solid var(--glass-border-soft);
-  /* Solid dark ground, not a translucent wash: over the light page a translucent
-     footer turns grey and the muted text loses contrast. */
-  background: linear-gradient(180deg, #0b1a2b 0%, #071120 55%, #050c17 100%);
+  background: linear-gradient(180deg, var(--footer-top) 0%, var(--surface-b) 60%, var(--surface-b-solid) 100%);
 }
 .footer-grid { display: grid; gap: 2rem; grid-template-columns: 1fr; }
 .footer-col h2 { font-size: 0.92rem; color: var(--text); margin-block-end: 0.9rem; }
 .footer-col ul { display: grid; gap: 0.4rem; }
 .footer-col a { display: inline-flex; align-items: center; min-block-size: 2.25rem; color: var(--text-muted); font-size: 0.9rem; }
+/* Contact values stay emphasised even though they live inside .footer-col. */
+.footer-col .footer-contact a, .footer-col .footer-socials a { color: var(--accent); }
 .footer-col a:hover { color: var(--accent); }
 .footer-note { color: var(--text-muted); font-size: 0.85rem; max-width: 42ch; margin-block-start: 0.75rem; }
 .footer-bottom {
@@ -1032,26 +1082,11 @@ img { max-width: 100%; }
   background: linear-gradient(135deg, var(--gold-2), var(--gold));
   box-shadow: 0 8px 20px -14px rgba(245, 180, 0, 0.9), inset 0 1px 0 var(--inset-4);
 }
-.locale-switch__option.is-disabled {
-  cursor: not-allowed;
-  color: var(--text-muted);
-  gap: 0.35rem;
-}
-.locale-switch__badge {
-  font-size: 0.56rem;
-  font-weight: 700;
-  padding: 0.1rem 0.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border-soft);
-  background: var(--wash-5);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-.locale-switch--compact .locale-switch__badge { display: none; }
+.locale-switch__option[aria-current='true'] { cursor: default; }
 @media (max-width: 900px) { .header-locale { display: none; } }
 
 /* ---------- header controls ---------- */
-.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.5rem; }
 .header-cta { min-block-size: 2.75rem; padding-inline: 1.1rem; font-size: 0.9rem; }
 .mobile-sheet__controls {
   display: flex;
@@ -1063,28 +1098,19 @@ img { max-width: 100%; }
   border-block-end: 1px solid var(--glass-border-soft);
 }
 
-/* ---------- dark islands ----------
- * The hero photograph and the gold buttons keep the dark palette in both
- * themes, so this content never sits on the light paper surface.
+/* ---------- theme-wide elements ----------
+ * Both themes cover the whole page: there are no permanently dark islands. The
+ * hero fades its photograph into the active surface, and the footer uses the
+ * same paper/ink tokens as the rest of the light theme. The only fixed colour is
+ * the gold action, which carries dark text in both themes.
  */
-.hero {
-  /* The hero sits on the dark photograph in both themes. `color` must be set
-     here as well: inherited colour resolves at <body>, not at this subtree. */
-  --text: #eef3fa;
-  --text-muted: #b3c0d1;
-  --accent: #ffd166;
-  color: var(--text);
-}
-.hero .hero__note, .hero .hero__summary { color: var(--text-muted); }
 .btn--primary, .button:not([disabled]) { --text: var(--on-gold); }
-.mobile-sheet { --text: #eef3fa; --text-muted: #b3c0d1; color: var(--text); }
-[data-theme='light'] .mobile-sheet { --text: #0b1a2b; --text-muted: #4a5a6d; color: var(--text); }
-[data-theme='light'] .mobile-sheet .mobile-sheet__panel { background: linear-gradient(160deg, var(--surface-a-solid), var(--surface-b-solid)); }
+.hero__facts dt { color: var(--text-ink-muted); }
+.hero__facts dd { color: var(--text-ink); }
 [data-theme='light'] .site-header { background: linear-gradient(180deg, var(--header-scrim) 34%, transparent); }
-[data-theme='light'] .glass--light { color: var(--text-ink); }
-[data-theme='light'] .hero__facts dt { color: var(--text-ink-muted); }
-[data-theme='light'] .hero__facts dd { color: var(--text-ink); }
-[data-theme='light'] .hero__facts { background: linear-gradient(160deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.8)); }
+[data-theme='light'] .hero__note { border-inline-start-color: var(--accent-soft); }
+[data-theme='light'] .mobile-sheet { background: linear-gradient(180deg, var(--sheet-3) 0%, var(--sheet-2) 55%, var(--sheet-4) 100%); }
+[data-theme='light'] .mobile-sheet__panel { background: linear-gradient(160deg, var(--surface-a-solid), var(--surface-b-solid)); }
 
 /* =====================================================================
  * Content pages (company, services, track record, team, service detail)

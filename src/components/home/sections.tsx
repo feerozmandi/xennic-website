@@ -1,12 +1,23 @@
 import Image from 'next/image'
-import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import Link from 'next/link'
+import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
+import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
 
-const principleIndex = (index: number) => faNumber(index + 1).padStart(2, '۰')
+const principleIndex = (index: number, locale: Locale) =>
+  locale === 'en' ? String(index + 1).padStart(2, '0') : faNumber(index + 1).padStart(2, '۰')
 
-export function Hero({ content }: { content: HomeContent['hero'] }) {
+/**
+ * Home page sections.
+ *
+ * Each section receives its copy from the page (Persian from the CMS, English
+ * from the reviewed translation) and takes the interface strings from the
+ * dictionary, so the same markup renders both editions.
+ */
+
+export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero']; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
     <section className="hero" aria-labelledby="hero-title">
       <div className="hero__backdrop" aria-hidden="true">
@@ -30,9 +41,7 @@ export function Hero({ content }: { content: HomeContent['hero'] }) {
               <Action href={content.primary.href}>{content.primary.label}</Action>
               <Action href={content.secondary.href} tone="glass">{content.secondary.label}</Action>
             </div>
-            <p className="hero__note">
-              اطلاعات تماس رسمی فقط پس از تأیید سازمان منتشر می‌شود؛ تا آن زمان درخواست‌ها از صفحهٔ تماس پیگیری می‌شوند.
-            </p>
+            <p className="hero__note">{dict.hero.note}</p>
           </div>
           <dl className="hero__facts glass glass--light">
             {content.facts.map((fact) => (
@@ -48,20 +57,21 @@ export function Hero({ content }: { content: HomeContent['hero'] }) {
   )
 }
 
-export function Principles({ pillars }: { pillars: HomeContent['pillars'] }) {
+export function Principles({ pillars, locale = 'fa' }: { pillars: HomeContent['pillars']; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
     <section className="section" aria-labelledby="principles-title">
       <Container>
         <SectionHeading
           id="principles-title"
-          eyebrow="اصول کاری"
-          title="چرا Xennic"
-          lead="پنج اصلی که چارچوب تصمیم‌گیری مهندسی ما را شکل می‌دهند."
+          eyebrow={dict.principles.eyebrow}
+          title={dict.principles.title}
+          lead={dict.principles.lead}
         />
         <ol className="principle-grid">
           {pillars.map((pillar, index) => (
             <li key={pillar.heading} className="principle">
-              <span className="principle__index" aria-hidden="true">{principleIndex(index)}</span>
+              <span className="principle__index" aria-hidden="true">{principleIndex(index, locale)}</span>
               <h3 lang="en" dir="ltr">{pillar.heading}</h3>
               <p>{pillar.text}</p>
             </li>
@@ -72,54 +82,60 @@ export function Principles({ pillars }: { pillars: HomeContent['pillars'] }) {
   )
 }
 
-export function Services({ services }: { services: HomeContent['services'] }) {
+export function Services({ services, locale = 'fa' }: { services: HomeContent['services']; locale?: Locale }) {
+  const dict = getDictionary(locale)
   const available = services.filter((service) => !service.comingSoon)
   return (
     <section className="section section--muted" id="services" aria-labelledby="services-title">
       <Container>
         <SectionHeading
           id="services-title"
-          eyebrow="خدمات"
-          title="از مشاورهٔ فنی تا نظارت و آموزش"
-          lead="خدمات در حوزهٔ برق قدرت، تأسیسات، انرژی و آموزش تخصصی؛ هر خدمت با دامنهٔ مشخص و خروجی قابل استناد."
+          eyebrow={dict.servicesSection.eyebrow}
+          title={dict.servicesSection.title}
+          lead={dict.servicesSection.lead}
         />
         <ul className="card-grid">
           {available.map((service) => (
             <li key={service.slug}>
-              <Link className="card" href={`/services/${service.slug}`}>
+              <Link className="card" href={localeHref(locale, `/services/${service.slug}`)}>
                 <h3>{service.title}</h3>
                 <p>{service.summary}</p>
-                <span className="card__more">جزئیات خدمت <span aria-hidden="true">←</span></span>
+                <span className="card__more">{dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span></span>
               </Link>
             </li>
           ))}
         </ul>
         <div style={{ marginBlockStart: '1.75rem' }}>
-          <Action href="/services" tone="glass">همهٔ خدمات و دوره‌ها</Action>
+          <Action href={localeHref(locale, '/services')} tone="glass">{dict.servicesSection.all}</Action>
         </div>
       </Container>
     </section>
   )
 }
 
-export function Founder({ founder }: { founder: HomeContent['founder'] }) {
+export function Founder({ founder, locale = 'fa' }: { founder: HomeContent['founder']; locale?: Locale }) {
+  const dict = getDictionary(locale)
+  const portraitAlt =
+    locale === 'en'
+      ? `Portrait of ${founder.name}, founder of Xennic`
+      : FOUNDER_PORTRAIT.alt
   return (
     <section className="section" aria-labelledby="founder-title" data-testid="track-record-intro">
       <Container>
         <div className="glass glass--quiet founder">
           <div>
-            <Eyebrow>پیشینهٔ مؤسس</Eyebrow>
+            <Eyebrow>{dict.founder.eyebrow}</Eyebrow>
             <h2 id="founder-title" className="h2">{founder.heading}</h2>
             {founder.summary && <p className="lede">{founder.summary}</p>}
             <p className="founder__text">{founder.text}</p>
             <p className="founder__note">{founder.note}</p>
-            <Action href="/track-record" tone="glass">مطالعهٔ پیشینهٔ حرفه‌ای</Action>
+            <Action href={localeHref(locale, '/track-record')} tone="glass">{dict.founder.readRecord}</Action>
           </div>
-          <aside className="founder__aside" aria-label="مشخصات مؤسس">
+          <aside className="founder__aside" aria-label={dict.founder.asideLabel}>
             <div className="founder__portrait">
               <Image
                 src={FOUNDER_PORTRAIT.src}
-                alt={FOUNDER_PORTRAIT.alt}
+                alt={portraitAlt}
                 width={FOUNDER_PORTRAIT.width}
                 height={FOUNDER_PORTRAIT.height}
                 sizes="(max-width: 900px) 60vw, 256px"
@@ -136,7 +152,8 @@ export function Founder({ founder }: { founder: HomeContent['founder'] }) {
   )
 }
 
-export function Platform({ platform }: { platform: HomeContent['platform'] }) {
+export function Platform({ platform, locale = 'fa' }: { platform: HomeContent['platform']; locale?: Locale }) {
+  const dict = getDictionary(locale)
   return (
     <section className="section section--muted" aria-labelledby="platform-title" data-testid="platform-intro">
       <Container>
@@ -145,9 +162,7 @@ export function Platform({ platform }: { platform: HomeContent['platform'] }) {
             <span className="badge">{platform.badge}</span>
             <h2 id="platform-title" className="h2" lang="en" dir="ltr">{platform.title}</h2>
             <p className="lede">{platform.description}</p>
-            <p className="platform__status">
-              این بخش پیش‌نمایش طراحی است؛ هیچ قابلیت یا دسترسی جدیدی در سایت فعال نشده است.
-            </p>
+            <p className="platform__status">{dict.platform.status}</p>
           </div>
           <div className="platform__art" aria-hidden="true">
             <Image src="/images/platform-glass.jpg" alt="" fill sizes="(max-width: 860px) 100vw, 46vw" style={{ objectFit: 'cover' }} />
