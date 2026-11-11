@@ -10,6 +10,7 @@ import {
   englishServiceCards,
   englishTrackRecord,
 } from '@/lib/i18n-content'
+import { FIELD_IMAGES } from '@/lib/imagery'
 import { pageMetadata } from '@/lib/seo'
 
 export const dynamic = 'force-static'
@@ -77,6 +78,7 @@ export default async function EnglishSection({ params }: { params: Promise<{ sec
         eyebrow={dict.content.servicesEyebrow}
         lead={dict.content.servicesLead}
         trail={[home, { label: englishSectionMeta.services.title }]}
+        media={FIELD_IMAGES.panels ?? undefined}
       >
         <ServiceCards services={englishServiceCards()} locale="en" />
       </ContentPage>
@@ -91,6 +93,7 @@ export default async function EnglishSection({ params }: { params: Promise<{ sec
         eyebrow={dict.content.recordEyebrow}
         lead={dict.content.recordLead}
         trail={[home, { label: englishSectionMeta['track-record'].title }]}
+        media={FIELD_IMAGES.distribution ?? undefined}
       >
         <TrackRecordList items={englishTrackRecord()} locale="en" />
       </ContentPage>

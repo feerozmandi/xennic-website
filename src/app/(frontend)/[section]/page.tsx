@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ContentPage, DocumentContent, NotPublished, ServiceCards, TrackRecordList } from '@/components/content'
 import { getPage, getServiceCards, getTrackRecordItems } from '@/lib/content'
+import { FIELD_IMAGES } from '@/lib/imagery'
 import { pageMetadata } from '@/lib/seo'
 
 export const dynamic = 'force-dynamic'
@@ -93,6 +94,7 @@ export default async function Section({ params }: { params: Promise<{ section: s
         eyebrow="دامنهٔ خدمات"
         lead="خدمات در حوزهٔ برق قدرت، تأسیسات، انرژی و آموزش تخصصی؛ هر خدمت با دامنهٔ مشخص و خروجی قابل استناد."
         trail={[{ href: '/', label: 'خانه' }, { label: 'خدمات' }]}
+        media={FIELD_IMAGES.panels ?? undefined}
       >
         <ServiceCards services={await getServiceCards()} />
       </ContentPage>
@@ -107,6 +109,7 @@ export default async function Section({ params }: { params: Promise<{ section: s
         eyebrow="پیشینهٔ مؤسس"
         lead="تجربهٔ عملی مؤسس Xennic در شبکهٔ توزیع و پروژه‌های برق، پیش از تأسیس این مجموعه."
         trail={[{ href: '/', label: 'خانه' }, { label: 'پیشینهٔ مهندسی' }]}
+        media={FIELD_IMAGES.distribution ?? undefined}
       >
         <TrackRecordList items={items} />
       </ContentPage>

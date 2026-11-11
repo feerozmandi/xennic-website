@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
+import { HERO_ART, serviceImage } from '@/lib/imagery'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
 
@@ -20,15 +21,9 @@ export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero'];
   const dict = getDictionary(locale)
   return (
     <section className="hero" aria-labelledby="hero-title">
+      {/* The hero carries one picture only: the artwork panel below. A second
+          copy behind the text would repeat the same scene and fight the type. */}
       <div className="hero__backdrop" aria-hidden="true">
-        <Image
-          src="/images/hero-energy.jpg"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          style={{ objectFit: 'cover' }}
-        />
         <div className="hero__veil" />
       </div>
       <Container>
@@ -41,16 +36,35 @@ export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero'];
               <Action href={content.primary.href}>{content.primary.label}</Action>
               <Action href={content.secondary.href} tone="glass">{content.secondary.label}</Action>
             </div>
+            <dl className="hero__facts" aria-label={dict.hero.factsLabel}>
+              {content.facts.map((fact) => (
+                <div key={fact.label}>
+                  {/* Term before definition in the DOM: readers get the label
+                      first, and CSS lifts the value above it visually. */}
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
             <p className="hero__note">{dict.hero.note}</p>
           </div>
-          <dl className="hero__facts glass glass--light">
-            {content.facts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
+
+          {/* The artwork is mirrored in RTL and its glow moves with it, so the
+              composition and the shadow stay on the same side in both
+              directions. It is decorative: the description lives in the copy. */}
+          <figure className="hero__media" aria-hidden="true">
+            <Image
+              src={HERO_ART.src}
+              alt=""
+              width={HERO_ART.width}
+              height={HERO_ART.height}
+              priority
+              sizes="(max-width: 899px) 92vw, 44vw"
+              className="hero__media-art"
+            />
+            <span className="hero__media-glow" />
+            <span className="hero__media-edge" />
+          </figure>
         </div>
       </Container>
     </section>
@@ -68,9 +82,9 @@ export function Principles({ pillars, locale = 'fa' }: { pillars: HomeContent['p
           title={dict.principles.title}
           lead={dict.principles.lead}
         />
-        <ol className="principle-grid">
+        <ol className="principle-grid" data-reveal-group>
           {pillars.map((pillar, index) => (
-            <li key={pillar.heading} className="principle">
+            <li key={pillar.heading} className="principle" data-reveal>
               <span className="principle__index" aria-hidden="true">{principleIndex(index, locale)}</span>
               <h3 lang="en" dir="ltr">{pillar.heading}</h3>
               <p>{pillar.text}</p>
@@ -94,17 +108,35 @@ export function Services({ services, locale = 'fa' }: { services: HomeContent['s
           title={dict.servicesSection.title}
           lead={dict.servicesSection.lead}
         />
-        <ul className="card-grid">
-          {available.map((service) => (
-            <li key={service.slug}>
-              <Link className="card" href={localeHref(locale, `/services/${service.slug}`)}>
-                <h3>{service.title}</h3>
-                <p>{service.summary}</p>
-                <span className="card__more">{dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span></span>
-              </Link>
-            </li>
-          ))}
+        <ul className="card-grid" data-reveal-group>
+          {available.map((service) => {
+            const image = serviceImage(service.slug)
+            return (
+              <li key={service.slug} data-reveal>
+                <Link className="card card--media" href={localeHref(locale, `/services/${service.slug}`)}>
+                  {image && (
+                    <span className="card__media">
+                      <Image
+                        src={image.src}
+                        alt=""
+                        width={image.width}
+                        height={image.height}
+                        sizes="(max-width: 639px) 92vw, (max-width: 1023px) 46vw, 380px"
+                        className="card__media-art"
+                      />
+                    </span>
+                  )}
+                  <span className="card__body">
+                    <h3>{service.title}</h3>
+                    <p>{service.summary}</p>
+                    <span className="card__more">{dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span></span>
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
+        <p className="grid-note">{dict.servicesSection.imageNote}</p>
         <div style={{ marginBlockStart: '1.75rem' }}>
           <Action href={localeHref(locale, '/services')} tone="glass">{dict.servicesSection.all}</Action>
         </div>
@@ -122,7 +154,7 @@ export function Founder({ founder, locale = 'fa' }: { founder: HomeContent['foun
   return (
     <section className="section" aria-labelledby="founder-title" data-testid="track-record-intro">
       <Container>
-        <div className="glass glass--quiet founder">
+        <div className="glass glass--quiet founder" data-reveal>
           <div>
             <Eyebrow>{dict.founder.eyebrow}</Eyebrow>
             <h2 id="founder-title" className="h2">{founder.heading}</h2>
@@ -157,7 +189,7 @@ export function Platform({ platform, locale = 'fa' }: { platform: HomeContent['p
   return (
     <section className="section section--muted" aria-labelledby="platform-title" data-testid="platform-intro">
       <Container>
-        <div className="platform">
+        <div className="platform" data-reveal>
           <div className="platform__copy">
             <span className="badge">{platform.badge}</span>
             <h2 id="platform-title" className="h2" lang="en" dir="ltr">{platform.title}</h2>
@@ -177,7 +209,7 @@ export function ContactBand({ contact }: { contact: HomeContent['contact'] }) {
   return (
     <section className="section" aria-labelledby="contact-title">
       <Container>
-        <div className="contact-band">
+        <div className="contact-band" data-reveal>
           <div>
             <h2 id="contact-title" className="h2">{contact.title}</h2>
             <p>{contact.text}</p>

@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ContentPage, DocumentContent, NotPublished } from '@/components/content'
+import { ContentPage, DocumentContent, Figure, NotPublished } from '@/components/content'
+import { serviceImage } from '@/lib/imagery'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import { getPage, getServiceDetail, getTeamMembers } from '@/lib/content'
 import { FOUNDER_NAME } from '@/lib/home-content'
@@ -52,6 +53,10 @@ export default async function Detail({ params }: { params: Promise<{ section: st
       >
         <div className="prose-layout">
           <div className="prose-main">
+            {(() => {
+              const image = serviceImage(service.slug)
+              return image ? <Figure image={image} priority /> : null
+            })()}
             <DocumentContent content={service.content} />
           </div>
           <aside className="page-aside page-aside--sticky" aria-label="اقدام">

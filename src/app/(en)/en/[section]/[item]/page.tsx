@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { BlockContent, ContentPage, NotPublished } from '@/components/content'
+import { BlockContent, ContentPage, Figure, NotPublished } from '@/components/content'
+import { serviceImage } from '@/lib/imagery'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import { getDictionary, localeHref } from '@/lib/i18n'
 import { en, englishServiceDetail, englishSectionMeta, englishTeam } from '@/lib/i18n-content'
@@ -61,6 +62,10 @@ export default async function EnglishDetail({ params }: { params: Promise<{ sect
       >
         <div className="prose-layout">
           <div className="prose-main">
+            {(() => {
+              const image = serviceImage(service.slug)
+              return image ? <Figure image={image} locale="en" priority /> : null
+            })()}
             <BlockContent blocks={service.blocks} />
           </div>
           <aside className="page-aside page-aside--sticky" aria-label={dict.actions}>

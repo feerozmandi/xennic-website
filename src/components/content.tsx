@@ -1,5 +1,8 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { RichText } from '@payloadcms/richtext-lexical/react'
+import type { Illustration } from '@/lib/imagery'
+import { serviceImage } from '@/lib/imagery'
 import type { RichTextDocument, ServiceCardModel, TrackRecordItemModel } from '@/lib/contracts'
 import { faNumber } from '@/lib/home-content'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
@@ -58,6 +61,7 @@ export function ContentPage({
   lead,
   trail,
   locale = 'fa',
+  media,
   children,
 }: {
   title: string
@@ -65,6 +69,8 @@ export function ContentPage({
   lead?: string
   trail?: { href?: string; label: string }[]
   locale?: Locale
+  /** Optional illustration band under the page header. */
+  media?: Illustration
   children: React.ReactNode
 }) {
   const dict = getDictionary(locale)
@@ -75,6 +81,7 @@ export function ContentPage({
         trail={trail ?? [{ href: localeHref(locale, '/'), label: dict.home }, { label: title }]}
       />
       <PageHeader eyebrow={eyebrow} title={title} lead={lead} />
+      {media && <Figure image={media} locale={locale} priority />}
       {children}
     </div>
   )
@@ -101,26 +108,73 @@ export function BlockContent({ blocks }: { blocks: readonly { heading: string; t
   )
 }
 
-/** Cards that keep the approved service list readable at every width. */
+/**
+ * Service cards.
+ *
+ * Each card carries an illustration of the field the service works in. The
+ * pictures are generated illustrations, never photographs of a specific project,
+ * so the grid always ends with the note that says exactly that.
+ */
 export function ServiceCards({ services, locale = 'fa' }: { services: ServiceCardModel[]; locale?: Locale }) {
   const dict = getDictionary(locale)
   return (
-    <ul className="card-grid">
-      {services.map((service) => (
-        <li key={service.id}>
-          <Link className="card card--link" href={localeHref(locale, `/services/${service.slug}`)}>
-            <div className="card__head">
-              <h2 className="card__title">{service.title}</h2>
-              {service.comingSoon && <span className="badge">{dict.comingSoon}</span>}
-            </div>
-            {service.summary && <p>{service.summary}</p>}
-            <span className="card__more">
-              {dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span>
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="card-grid" data-reveal-group>
+        {services.map((service) => {
+          const image = serviceImage(service.slug)
+          return (
+            <li key={service.id} data-reveal>
+              <Link className="card card--link card--media" href={localeHref(locale, `/services/${service.slug}`)}>
+                {image && (
+                  <span className="card__media">
+                    <Image
+                      src={image.src}
+                      alt=""
+                      width={image.width}
+                      height={image.height}
+                      sizes="(max-width: 639px) 92vw, (max-width: 1023px) 46vw, 380px"
+                      className="card__media-art"
+                    />
+                  </span>
+                )}
+                <span className="card__body">
+                  <span className="card__head">
+                    <h2 className="card__title">{service.title}</h2>
+                    {service.comingSoon && <span className="badge">{dict.comingSoon}</span>}
+                  </span>
+                  {service.summary && <p>{service.summary}</p>}
+                  <span className="card__more">
+                    {dict.servicesSection.more} <span className="arrow" aria-hidden="true">←</span>
+                  </span>
+                </span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="grid-note">{dict.servicesSection.imageNote}</p>
+    </>
+  )
+}
+
+/**
+ * A picture with its caption. `aria-hidden` is not used: the caption describes
+ * what the picture is, and that description is the point.
+ */
+export function Figure({ image, locale = 'fa', priority = false }: { image: Illustration; locale?: Locale; priority?: boolean }) {
+  return (
+    <figure className="page-figure glass glass--quiet" data-reveal>
+      <Image
+        src={image.src}
+        alt={image.alt[locale]}
+        width={image.width}
+        height={image.height}
+        priority={priority}
+        sizes="(max-width: 899px) 92vw, 900px"
+        className="page-figure__art"
+      />
+      <figcaption>{image.caption[locale]}</figcaption>
+    </figure>
   )
 }
 
@@ -134,9 +188,9 @@ export function TrackRecordList({ items, locale = 'fa' }: { items: TrackRecordIt
     locale === 'en' ? String(index + 1).padStart(2, '0') : faNumber(index + 1).padStart(2, '۰')
   return (
     <>
-      <ol className="timeline">
+      <ol className="timeline" data-reveal-group>
         {items.map((item, index) => (
-          <li className="timeline__item" key={item.id}>
+          <li className="timeline__item" key={item.id} data-reveal>
             <span className="timeline__marker" aria-hidden="true">{marker(index)}</span>
             <div className="timeline__body">
               <p className="timeline__badge">{dict.content.recordBadge}</p>
@@ -164,7 +218,7 @@ export function NotPublished({
 }) {
   const dict = getDictionary(locale)
   return (
-    <div className="notice-card">
+    <div className="notice-card" data-reveal>
       <span className="badge">{dict.notPublishedBadge}</span>
       <h2 className="h3">{dict.notPublishedTitle}</h2>
       <p>{note ?? dict.notPublishedBody(title)}</p>
