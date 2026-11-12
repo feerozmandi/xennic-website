@@ -204,6 +204,25 @@ jobs:
           printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Check the host is reachable from the runner
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?repository variable VPS_HOST is not set}"
+          port="${VPS_PORT:-22}"
+          if timeout 20 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null; then
+            echo "TCP $VPS_HOST:$port is reachable from this runner."
+            exit 0
+          fi
+          echo "::error::No TCP connection to $VPS_HOST:$port within 20 seconds."
+          echo "The runner cannot open the deploy port. Nothing was changed on the server."
+          echo "- Confirm VPS_HOST / VPS_PORT in Settings -> Secrets and variables -> Actions -> Variables."
+          echo "- On the host, check that sshd listens on that port and that the firewall admits GitHub runners:"
+          echo "  ss -lntp | grep -E ':${port}|:22' ; ufw status verbose ; iptables -S | head -40"
+          echo "- GitHub publishes its egress ranges at https://api.github.com/meta (field \`actions\`)."
+          exit 1
       - name: Read the live state (read-only)
         id: preflight
         env:
@@ -212,6 +231,7 @@ jobs:
         run: |
           set -euo pipefail
           report=$(ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ConnectionAttempts=1 \
             -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" preflight < manifest.json)
           echo "report=$report" >> "$GITHUB_OUTPUT"
           echo "$report"
@@ -279,6 +299,18 @@ jobs:
           printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Check the host is reachable from the runner
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          : "${VPS_HOST:?repository variable VPS_HOST is not set}"
+          port="${VPS_PORT:-22}"
+          timeout 20 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null || {
+            echo "::error::No TCP connection to $VPS_HOST:$port within 20 seconds; nothing was changed."
+            exit 1
+          }
       - name: Release check (read-only)
         id: release_check
         env:
@@ -287,6 +319,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ConnectionAttempts=1 \
             -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" release-check < manifest.json
       - name: Deploy
         env:
@@ -295,6 +328,7 @@ jobs:
         run: |
           set -euo pipefail
           ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o IdentitiesOnly=yes -o ConnectTimeout=20 -o ConnectionAttempts=1 \
             -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" deploy < manifest.json
       - name: Verify the public pages
         id: verify
