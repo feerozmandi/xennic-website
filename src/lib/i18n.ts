@@ -66,7 +66,12 @@ const fa = {
     footerNav: 'ناوبری فوتر',
     servicesNav: 'خدمات در فوتر',
     legalNav: 'صفحات حقوقی',
-    contact: 'مسیرهای تماس',
+    // Heading of the fourth footer column: the confirmed contact channels and
+    // the three confirmed social channels, nothing else.
+    contact: 'اطلاعات تماس',
+    // Heading of the contact column and the link that opens the contact page
+    // are two different things, so they get two different labels.
+    contactPage: 'تماس با ما',
     socialsLabel: 'پیام‌رسان‌ها و شبکه‌های اجتماعی',
     copyright: 'زر نور نیرو یکتا | Xennic',
     disclaimer: 'محتوای این نسخه صرفاً از منابع تأییدشدهٔ سازمان منتشر می‌شود.',
@@ -240,7 +245,8 @@ const en: Dictionary = {
     footerNav: 'Footer navigation',
     servicesNav: 'Services in the footer',
     legalNav: 'Legal pages',
-    contact: 'Contact channels',
+    contact: 'Contact information',
+    contactPage: 'Contact us',
     socialsLabel: 'Messengers and social networks',
     copyright: 'Zar-e Noor-e Niroo-e Yekta | Xennic',
     disclaimer: 'Every statement on this site comes from approved organisational sources.',

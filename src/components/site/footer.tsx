@@ -21,8 +21,12 @@ const SERVICE_LINKS = [
 /**
  * Site footer.
  *
- * Four surfaces: the brand block (official artwork, the about text and the
- * confirmed contact channels), three navigation columns and a final legal bar.
+ * Four columns in document order — about us, services, information and the
+ * contact block — plus the closing legal bar. The about column is first, so it
+ * sits on the far right in Persian and the far left in English, where it was
+ * before the redesign. The contact block is last: far left in Persian, far
+ * right in English. The owner asked for exactly that separation, so nothing is
+ * guessed from the reading direction in CSS.
  *
  * Contact rows show a glyph, a small label and the value itself, because a
  * visitor should not have to decode an icon to know what they are calling. The
@@ -56,6 +60,13 @@ export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
     <footer className="site-footer">
       <div className="container">
         <div className="footer-grid">
+          <div className="footer-brand">
+            <Logo size="sm" locale={locale} />
+            <div className="footer-about">
+              <p>{dict.footer.note}</p>
+              {dict.footer.about.map((line) => <p key={line}>{line}</p>)}
+            </div>
+          </div>
           <nav className="footer-col" aria-label={dict.footer.servicesNav}>
             <h2>{dict.footer.services}</h2>
             <ul>{serviceLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
@@ -64,16 +75,15 @@ export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
             <h2>{dict.footer.information}</h2>
             <ul>{legalLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
             <ul className="footer-col__extra">
-              <li><Link href={localeHref(locale, '/contact')}>{dict.footer.contact}</Link></li>
+              <li><Link href={localeHref(locale, '/contact')}>{dict.footer.contactPage}</Link></li>
             </ul>
           </nav>
-          <div className="footer-brand">
-            <Logo size="sm" locale={locale} />
-            <div className="footer-about">
-              <p>{dict.footer.note}</p>
-              {dict.footer.about.map((line) => <p key={line}>{line}</p>)}
-            </div>
-            <ul className="footer-contact" aria-label={dict.footer.contact}>
+          {/* Contact lives in its own column, apart from the about text: the
+           * heading is the same confirmed wording the site already uses, and
+           * the chips carry the three confirmed channels only. */}
+          <section className="footer-contact-col" aria-labelledby="footer-contact-heading">
+            <h2 id="footer-contact-heading">{dict.footer.contact}</h2>
+            <ul className="footer-contact">
               {contactRows.map((row) => {
                 const Icon = CONTACT_ICONS[row.id as keyof typeof CONTACT_ICONS]
                 return (
@@ -110,7 +120,7 @@ export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
                 )
               })}
             </ul>
-          </div>
+          </section>
         </div>
         <div className="footer-bottom">
           <span>© {new Date().getFullYear()} {dict.footer.copyright}</span>
