@@ -42,18 +42,6 @@ function illustration(
   }
 }
 
-/** The hero artwork: the grid, the sun and the renewables on one horizon. */
-export const HERO_ART: Illustration = {
-  src: '/images/hero-grid-solar.webp',
-  width: 1600,
-  height: 900,
-  alt: {
-    fa: 'دکل‌های شبکهٔ انتقال برق در کنار مزرعهٔ خورشیدی و توربین‌های بادی در غروب',
-    en: 'Transmission towers beside a solar farm and wind turbines at sunset',
-  },
-  caption: CAPTION,
-}
-
 /** One image per service. Unknown services simply render without a picture. */
 export const SERVICE_IMAGES: Record<string, Illustration> = {
   'industrial-electrical-consulting': illustration(

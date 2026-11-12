@@ -2,7 +2,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
-import { HERO_ART, serviceImage } from '@/lib/imagery'
+import { serviceImage } from '@/lib/imagery'
+import { heroSlides } from '@/lib/hero-slides'
+import { HeroCarousel } from './hero-carousel'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
 
@@ -18,57 +20,7 @@ const principleIndex = (index: number, locale: Locale) =>
  */
 
 export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero']; locale?: Locale }) {
-  const dict = getDictionary(locale)
-  return (
-    <section className="hero" aria-labelledby="hero-title">
-      {/* The hero carries one picture only: the artwork panel below. A second
-          copy behind the text would repeat the same scene and fight the type. */}
-      <div className="hero__backdrop" aria-hidden="true">
-        <div className="hero__veil" />
-      </div>
-      <Container>
-        <div className="hero__inner">
-          <div className="hero__copy">
-            <Eyebrow>{content.eyebrow}</Eyebrow>
-            <h1 id="hero-title">{content.title}</h1>
-            <p className="hero__summary">{content.summary}</p>
-            <div className="hero__actions">
-              <Action href={content.primary.href}>{content.primary.label}</Action>
-              <Action href={content.secondary.href} tone="glass">{content.secondary.label}</Action>
-            </div>
-            <dl className="hero__facts" aria-label={dict.hero.factsLabel}>
-              {content.facts.map((fact) => (
-                <div key={fact.label}>
-                  {/* Term before definition in the DOM: readers get the label
-                      first, and CSS lifts the value above it visually. */}
-                  <dt>{fact.label}</dt>
-                  <dd>{fact.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="hero__note">{dict.hero.note}</p>
-          </div>
-
-          {/* The artwork is mirrored in RTL and its glow moves with it, so the
-              composition and the shadow stay on the same side in both
-              directions. It is decorative: the description lives in the copy. */}
-          <figure className="hero__media" aria-hidden="true">
-            <Image
-              src={HERO_ART.src}
-              alt=""
-              width={HERO_ART.width}
-              height={HERO_ART.height}
-              priority
-              sizes="(max-width: 899px) 92vw, 44vw"
-              className="hero__media-art"
-            />
-            <span className="hero__media-glow" />
-            <span className="hero__media-edge" />
-          </figure>
-        </div>
-      </Container>
-    </section>
-  )
+  return <HeroCarousel slides={heroSlides(locale)} facts={content.facts} locale={locale} />
 }
 
 export function Principles({ pillars, locale = 'fa' }: { pillars: HomeContent['pillars']; locale?: Locale }) {

@@ -113,6 +113,20 @@
   --media-veil: rgba(7, 17, 32, 0.62);
   --hero-art-warm: rgba(245, 180, 0, 0.16);
   --hero-art-cool: rgba(45, 212, 191, 0.16);
+  /* Cover scrim: deepest on the text side, so the copy keeps AA contrast over
+     any part of the photograph. */
+  --hero-scrim-a: rgba(4, 11, 22, 0.94);
+  --hero-scrim-b: rgba(4, 11, 22, 0.72);
+  --hero-scrim-c: rgba(4, 11, 22, 0.18);
+  --hero-chip: rgba(8, 20, 36, 0.55);
+  --hero-ink: #ffffff;
+  --hero-ink-muted: rgba(233, 240, 249, 0.86);
+  /* Single-line diagram: faint steel, cyan pulses. */
+  --diagram-line: rgba(126, 168, 214, 0.16);
+  --diagram-node: rgba(126, 168, 214, 0.24);
+  --diagram-pulse: rgba(56, 226, 210, 0.55);
+  --diagram-glow: rgba(56, 226, 210, 0.5);
+  --diagram-opacity: 0.75;
   --card-media-veil: rgba(7, 17, 32, 0.55);
   --sheet-1: rgba(5, 12, 23, 0.92);
   --sheet-2: rgba(5, 12, 23, 0.96);
@@ -228,6 +242,17 @@
   --media-veil: rgba(11, 26, 43, 0.3);
   --hero-art-warm: rgba(245, 180, 0, 0.14);
   --hero-art-cool: rgba(45, 212, 191, 0.12);
+  --hero-scrim-a: rgba(247, 250, 255, 0.96);
+  --hero-scrim-b: rgba(247, 250, 255, 0.8);
+  --hero-scrim-c: rgba(247, 250, 255, 0.12);
+  --hero-chip: rgba(255, 255, 255, 0.72);
+  --hero-ink: #0b1a2b;
+  --hero-ink-muted: #35455a;
+  --diagram-line: rgba(138, 90, 8, 0.16);
+  --diagram-node: rgba(138, 90, 8, 0.22);
+  --diagram-pulse: rgba(180, 120, 20, 0.34);
+  --diagram-glow: rgba(180, 120, 20, 0.12);
+  --diagram-opacity: 0.5;
   --card-media-veil: rgba(242, 246, 251, 0.35);
   --sheet-1: rgba(242, 246, 251, 0.94);
   --sheet-2: rgba(242, 246, 251, 0.97);
@@ -563,38 +588,141 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
   .brand__sub { display: none; }
 }
 
-/* ---------- hero ---------- */
-.hero { position: relative; padding-block: clamp(1.5rem, 3vw, 3rem) clamp(2.5rem, 6vw, 5rem); isolation: isolate; }
-.hero__backdrop { position: absolute; inset: 0; z-index: -1; overflow: hidden; }
-.hero__veil {
+/* ---------- hero: three-slide cover ---------- */
+/* The hero is a photographic cover, not a card: the picture runs edge to edge
+ * and the copy sits on a scrim so the type keeps its contrast in both themes.
+ * The scrim is direction-aware — it is deepest on the side the text starts
+ * from — so RTL and LTR read the same way without a mirrored layout hack. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  padding-block-end: clamp(1.5rem, 3vw, 2.5rem);
+  border-block-end: 1px solid var(--glass-border-soft);
+  --hero-flip: 1;
+  --hero-side: left;
+}
+/* The photograph is composed with its dense structure (poles, cabinet) on one
+ * side. It is flipped so that side faces *away* from the copy in either
+ * direction, and the scrim is deepest under the copy itself. */
+html[dir='rtl'] .hero { --hero-flip: 1; --hero-side: left; }
+html[dir='ltr'] .hero { --hero-flip: -1; --hero-side: right; }
+
+.hero__slides {
+  position: relative;
+  min-block-size: clamp(29rem, 68vh, 42rem);
+  overflow: hidden;
+}
+.hero__slide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: end;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 800ms var(--ease-out), visibility 800ms;
+}
+.hero__slide[data-active='true'] { opacity: 1; visibility: visible; }
+
+.hero__art { position: absolute; inset: 0; overflow: hidden; }
+.hero__art-image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transform: scaleX(var(--hero-flip)) scale(1.02);
+  transform-origin: center;
+}
+.hero__slide[data-active='true'] .hero__art-image {
+  animation: hero-drift 12s var(--ease-out) both;
+}
+/* Two layers: the side scrim that carries the type, and a soft foot that hands
+ * the photograph over to the page surface instead of cutting it with a line. */
+.hero__scrim {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(52% 58% at var(--hero-glow-x) 8%, var(--hero-art-warm), transparent 68%),
-    radial-gradient(46% 52% at var(--hero-art-x) 84%, var(--hero-art-cool), transparent 72%),
-    linear-gradient(180deg, var(--hero-veil-1) 0%, var(--hero-veil-2) 58%, var(--hero-veil-end) 100%);
+    linear-gradient(to var(--hero-side), var(--hero-scrim-a) 0%, var(--hero-scrim-b) 42%, var(--hero-scrim-c) 78%, transparent 100%),
+    linear-gradient(to top, var(--hero-veil-end) 0%, transparent 42%);
 }
-/* Direction-aware glow: the warm light sits behind the copy in both languages,
- * and the cool accent sits on the side of the artwork. */
-html[dir='rtl'] .hero { --hero-glow-x: 78%; --hero-art-x: 6%; }
-html[dir='ltr'] .hero { --hero-glow-x: 22%; --hero-art-x: 94%; }
-.hero__inner { display: grid; gap: clamp(2rem, 4vw, 3.25rem); align-items: center; }
-.hero__copy { display: grid; gap: 1.1rem; justify-items: start; }
-.hero h1 { font-size: clamp(2rem, 5.2vw, 3.6rem); font-weight: 900; line-height: 1.26; max-width: 22ch; }
-.hero__summary { font-size: clamp(1rem, 1.4vw, 1.15rem); color: var(--text-muted); max-width: 58ch; }
-.hero__actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-block-start: 0.35rem; }
-.hero__note { font-size: 0.8rem; color: var(--text-muted); max-width: 54ch; border-inline-start: 2px solid var(--accent-soft); padding-inline-start: 0.75rem; }
 
-/* Facts: a slim strip of figures instead of a boxed two-by-two card. */
-.hero__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.35rem;
-  margin: 0.35rem 0 0;
-  padding: 0;
+/* On a phone the copy covers the full width across the foot of the picture, so
+ * the side scrim cannot protect it: the gradient runs upwards instead. */
+@media (max-width: 899px) {
+  .hero__scrim {
+    /* The copy occupies the lower half on a phone, so the scrim is driven by
+     * height, not by side: near-solid under the type, clearing towards the top
+     * of the picture where it is only decoration. */
+    background:
+      linear-gradient(to top, var(--hero-veil-end) 0%, var(--hero-scrim-a) 44%, var(--hero-scrim-b) 78%, var(--hero-scrim-c) 100%);
+  }
 }
+.hero__layout { position: relative; padding-block: clamp(3.5rem, 8vw, 6.5rem) clamp(2.5rem, 5vw, 3.5rem); display: grid; }
+.hero__copy { display: grid; gap: 1rem; justify-items: start; max-inline-size: 44rem; }
+.hero__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  background: var(--hero-chip);
+}
+.hero h1,
+.hero__title {
+  font-size: clamp(1.85rem, 4.6vw, 3.35rem);
+  font-weight: 900;
+  line-height: 1.24;
+  max-width: 24ch;
+  color: var(--hero-ink);
+  text-wrap: balance;
+  margin: 0;
+}
+.hero__summary {
+  font-size: clamp(0.98rem, 1.3vw, 1.12rem);
+  line-height: 1.85;
+  color: var(--hero-ink-muted);
+  max-width: 52ch;
+}
+.hero__actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-block-start: 0.3rem; }
+.hero__caption {
+  font-size: 0.74rem;
+  color: var(--hero-ink-muted);
+  opacity: 0.85;
+  max-inline-size: 46ch;
+  margin-block-start: 0.25rem;
+}
+
+/* The copy of the incoming slide rises; the outgoing one just fades, so a
+ * change never looks like a jump. */
+.hero__slide[data-active='true'] .hero__copy > * { animation: hero-rise 720ms var(--ease-out) both; }
+.hero__slide[data-active='true'] .hero__copy > *:nth-child(2) { animation-delay: 60ms; }
+.hero__slide[data-active='true'] .hero__copy > *:nth-child(3) { animation-delay: 120ms; }
+.hero__slide[data-active='true'] .hero__copy > *:nth-child(4) { animation-delay: 180ms; }
+.hero__slide[data-active='true'] .hero__copy > *:nth-child(5) { animation-delay: 230ms; }
+
+@keyframes hero-drift {
+  from { transform: scaleX(var(--hero-flip)) scale(1.02); }
+  to { transform: scaleX(var(--hero-flip)) scale(1.075); }
+}
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Facts, note and controls: one quiet band under the picture. */
+.hero__strip {
+  display: grid;
+  gap: 0.9rem 1.5rem;
+  align-items: center;
+  margin-block-start: clamp(1rem, 2.5vw, 1.6rem);
+  padding-block-start: clamp(1rem, 2vw, 1.35rem);
+  border-block-start: 1px solid var(--glass-border-soft);
+}
+.hero__facts { display: flex; flex-wrap: wrap; gap: 0.35rem 1.2rem; margin: 0; padding: 0; }
 .hero__facts > div { display: grid; gap: 0.1rem; position: relative; }
-.hero__facts > div + div { padding-inline-start: 1.35rem; }
+.hero__facts > div + div { padding-inline-start: 1.2rem; }
 .hero__facts > div + div::before {
   content: "";
   position: absolute;
@@ -603,68 +731,131 @@ html[dir='ltr'] .hero { --hero-glow-x: 22%; --hero-art-x: 94%; }
   inline-size: 1px;
   background: var(--glass-border);
 }
-.hero__facts dd { order: -1; margin: 0; font-size: clamp(1.02rem, 1.4vw, 1.22rem); font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
-.hero__facts dt { font-size: 0.72rem; color: var(--text-muted); }
-
-/* ---------- hero artwork ---------- */
-.hero__media {
-  position: relative;
+.hero__facts dd { order: -1; margin: 0; font-size: clamp(1rem, 1.3vw, 1.18rem); font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
+.hero__facts dt { font-size: 0.7rem; color: var(--text-muted); }
+.hero__note {
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-inline-size: 46ch;
+  border-inline-start: 2px solid var(--accent-soft);
+  padding-inline-start: 0.7rem;
   margin: 0;
-  isolation: isolate;
-  border-radius: calc(var(--radius-lg) + 6px);
-  overflow: hidden;
-  border: 1px solid var(--glass-border);
-  box-shadow:
-    calc(var(--media-shadow-sign) * 34px) 34px 70px -46px var(--media-shadow-color),
-    0 0 0 1px var(--inset-1) inset;
-  aspect-ratio: 4 / 3;
-  max-block-size: 30rem;
-  background: var(--wash-7);
-}
-.hero__media-art {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-  transform: scaleX(var(--media-flip, 1));
-  animation: hero-breathe 22s var(--ease-out) infinite alternate;
-}
-.hero__media-glow {
-  position: absolute;
-  inset-block: -30%;
-  inset-inline-end: -22%;
-  inline-size: 62%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, var(--media-glow), transparent 74%);
-  filter: blur(6px);
-}
-.hero__media-edge {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    linear-gradient(to top, var(--media-veil) 0%, transparent 46%),
-    linear-gradient(115deg, var(--inset-2), transparent 38%);
-  box-shadow: inset 0 1px 0 var(--inset-2);
-}
-/* Mirroring: the artwork and its shadow are composed for one direction and
- * flipped for the other, so the light, the dense structure and the drop shadow
- * always sit on the same (outer) side of the layout. */
-html[dir='rtl'] .hero__media { --media-flip: -1; --media-shadow-sign: -1; }
-
-@keyframes hero-breathe {
-  from { scale: 1; }
-  to { scale: 1.045; }
 }
 @media (min-width: 900px) {
-  .hero__inner { grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr); }
-  .hero__media { aspect-ratio: 5 / 4; }
+  .hero__strip { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto; }
+  .hero__note { border-inline-start: 0; padding-inline-start: 0; }
 }
-@media (max-width: 899px) {
-  .hero__media { aspect-ratio: 16 / 10; max-block-size: 22rem; inline-size: 100%; }
+
+/* Controls: every glyph is a real button with a name and a 44 px target. */
+.hero__controls { display: flex; align-items: center; gap: 0.4rem; }
+.hero__arrow,
+.hero__play {
+  display: grid;
+  place-items: center;
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-soft);
+  background: var(--footer-chip);
+  color: var(--text);
+  transition: border-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 180ms var(--ease-out);
 }
+.hero__arrow:hover,
+.hero__play:hover { border-color: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
+.hero__arrow svg,
+.hero__play svg { inline-size: 1.15rem; block-size: 1.15rem; }
+/* In RTL the arrows point the other way, because "previous" is to the right. */
+html[dir='rtl'] .hero__controls { flex-direction: row-reverse; }
+.hero__dots { display: flex; align-items: center; gap: 0.3rem; padding-inline: 0.25rem; }
+.hero__dot {
+  inline-size: 0.55rem;
+  block-size: 0.55rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 0;
+  background: var(--glass-border);
+  /* The visible dot stays small; the tappable area is 44 px via the pseudo. */
+  position: relative;
+  transition: inline-size 220ms var(--ease-out), background-color 220ms var(--ease-out);
+}
+.hero__dot::after { content: ""; position: absolute; inset: -1.15rem -0.5rem; }
+.hero__dot[data-active='true'] { inline-size: 1.5rem; background: var(--accent); }
+
+@media (max-width: 620px) {
+  .hero__slides { min-block-size: clamp(26rem, 74vh, 34rem); }
+  .hero__controls { justify-content: center; inline-size: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__slide { transition: none; }
+  .hero__slide[data-active='true'] .hero__art-image,
+  .hero__slide[data-active='true'] .hero__copy > * { animation: none; }
+  .hero__arrow:hover, .hero__play:hover { transform: none; }
+}
+
+/* ---------- single-line diagram backdrop ---------- */
+/* Fixed behind every page. It is drawing, not content: `aria-hidden` in the
+ * markup, no pointer events, and the page stays completely readable if it is
+ * switched off. In the dark theme short dashes travel along the feeder paths,
+ * so the diagram reads as energy moving through a distribution network; the
+ * light theme draws the same geometry in faint copper and leaves it still. */
+.grid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: var(--diagram-opacity);
+  /* The drawing is strongest near the edges and clears out of the reading
+   * column, so a paragraph never sits on top of a feeder line. */
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 38%, transparent 18%, #000 78%);
+  mask-image: radial-gradient(120% 90% at 50% 38%, transparent 18%, #000 78%);
+}
+.grid-backdrop__svg {
+  inline-size: 100%;
+  block-size: 100%;
+  display: block;
+}
+.grid-backdrop__line,
+.grid-backdrop__bus,
+.grid-backdrop__switch,
+.grid-backdrop__coil {
+  fill: none;
+  stroke: var(--diagram-line);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.grid-backdrop__bus { stroke: var(--diagram-node); stroke-width: 3.2; }
+.grid-backdrop__line--thin { stroke-dasharray: 4 6; }
+.grid-backdrop__switch { fill: var(--diagram-node); stroke: var(--diagram-node); stroke-width: 1; }
+.grid-backdrop__coil { stroke: var(--diagram-node); stroke-width: 1.6; }
+.grid-backdrop__pulse {
+  fill: none;
+  stroke: var(--diagram-pulse);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 16 130;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 6px var(--diagram-glow));
+  animation: diagram-flow 7s linear infinite;
+}
+.grid-backdrop__pulse:nth-child(2n) { animation-duration: 9s; animation-delay: -2.5s; }
+.grid-backdrop__pulse:nth-child(3n) { animation-duration: 11s; animation-delay: -6s; }
+@keyframes diagram-flow {
+  from { stroke-dashoffset: 146; }
+  to { stroke-dashoffset: 0; }
+}
+/* The drawing must stay behind the content it decorates. */
+main, .site-footer { position: relative; z-index: 1; }
+/* Vanilla: no motion, and in daylight no travelling light at all. */
+@media (prefers-reduced-motion: reduce) {
+  .grid-backdrop__pulse { animation: none; opacity: 0.35; }
+}
+[data-theme='light'] .grid-backdrop__pulse { animation: none; opacity: 0.25; filter: none; }
 
 /* ---------- principles ---------- */
 .principle-grid { display: grid; gap: 0.9rem; grid-template-columns: 1fr; counter-reset: none; }
@@ -949,13 +1140,16 @@ html[dir='rtl'] .hero__media { --media-flip: -1; --media-shadow-sign: -1; }
 }
 .footer-grid { display: grid; gap: 2.25rem; grid-template-columns: 1fr; }
 @media (min-width: 720px) {
-  /* Brand on its own row, then the three link columns side by side so no cell
-   * is left empty on tablets. */
-  .footer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem 2.5rem; }
+  /* Brand on its own row, then the two link columns side by side so no cell is
+   * left empty on tablets. */
+  .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem 2.5rem; }
   .footer-brand { grid-column: 1 / -1; }
 }
 @media (min-width: 1000px) {
-  .footer-grid { grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 0.85fr); }
+  /* Services, information, then the brand and contact block. Because the block
+   * is last in the document, it sits on the far left in Persian and on the far
+   * right in English — the position the owner asked for in each language. */
+  .footer-grid { grid-template-columns: minmax(0, 0.85fr) minmax(0, 0.9fr) minmax(0, 1.65fr); }
   .footer-brand { grid-column: auto; }
 }
 
@@ -1143,29 +1337,14 @@ html[dir='ltr'] .footer-contact a { padding: 0.5rem 0.6rem 0.5rem 0.85rem; }
   }
   .has-js [data-reveal].is-revealed { filter: blur(0); }
 }
-/* A one-time settle for the hero, so the page opens with movement rather than
- * a static frame. */
-@media (prefers-reduced-motion: no-preference) {
-  .hero__copy > * { animation: hero-settle 760ms var(--ease-out) both; }
-  .hero__copy > *:nth-child(2) { animation-delay: 80ms; }
-  .hero__copy > *:nth-child(3) { animation-delay: 150ms; }
-  .hero__copy > *:nth-child(4) { animation-delay: 220ms; }
-  .hero__copy > *:nth-child(5) { animation-delay: 290ms; }
-  .hero__copy > *:nth-child(6) { animation-delay: 350ms; }
-  .hero__media { animation: hero-fade 900ms var(--ease-out) 120ms both; }
-}
-@keyframes hero-settle {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes hero-fade {
-  from { opacity: 0; transform: translate3d(0, 22px, 0) scale(0.985); }
-  to { opacity: 1; transform: none; }
-}
+/* The hero animates per slide (see the hero block above), so there is no
+ * separate page-load settle any more: one timeline, not two competing ones. */
 
 /* Printing never runs the reveal controller, so nothing may be left faded. */
 @media print {
   .has-js [data-reveal] { opacity: 1; transform: none; filter: none; }
+  .hero__slide { position: relative; opacity: 1; visibility: visible; }
+  .hero__slide:not([data-active='true']) { display: none; }
   .hero__copy > * { animation: none; }
 }
 

@@ -7,6 +7,7 @@ import { RevealController } from './ui/reveal'
 import { SiteFooter } from './site/footer'
 import { SiteHeader } from './site/header'
 import { Container } from './ui/primitives'
+import { GridBackdrop } from './ui/grid-backdrop'
 
 /**
  * The document of one language edition: `<html lang>` and `dir` are decided here,
@@ -40,6 +41,7 @@ export function SiteShell({ locale = 'fa', children }: { locale?: Locale; childr
   return (
     <>
       <RevealController />
+      <GridBackdrop />
       <a href="#main-content" className="skip-link">{dict.skipToContent}</a>
       <SiteHeader locale={locale} />
       <main id="main-content">{children}</main>

@@ -75,6 +75,14 @@ const fa = {
   hero: {
     note: 'اطلاعات تماس رسمی فقط پس از تأیید سازمان منتشر می‌شود؛ تا آن زمان درخواست‌ها از صفحهٔ تماس پیگیری می‌شوند.',
     factsLabel: 'نگاه کلی در یک نگاه',
+    carouselLabel: 'معرفی شرکت در سه پرده',
+    previous: 'پردهٔ پیشین',
+    next: 'پردهٔ بعدی',
+    pause: 'توقف پخش خودکار',
+    play: 'شروع پخش خودکار',
+    slideOf: (index: number, total: number) => `پردهٔ ${index} از ${total}`,
+    slideChange: (index: number, total: number, title: string) => `پردهٔ ${index} از ${total}: ${title}`,
+    goTo: (index: number) => `رفتن به پردهٔ ${index}`,
   },
   principles: {
     eyebrow: 'اصول کاری',
@@ -241,6 +249,14 @@ const en: Dictionary = {
   hero: {
     note: 'The approved contact channels are published on the contact page, where you can also send a request.',
     factsLabel: 'Overview at a glance',
+    carouselLabel: 'The company in three slides',
+    previous: 'Previous slide',
+    next: 'Next slide',
+    pause: 'Pause the automatic slideshow',
+    play: 'Start the automatic slideshow',
+    slideOf: (index: number, total: number) => `Slide ${index} of ${total}`,
+    slideChange: (index: number, total: number, title: string) => `Slide ${index} of ${total}: ${title}`,
+    goTo: (index: number) => `Go to slide ${index}`,
   },
   principles: {
     eyebrow: 'How we work',
