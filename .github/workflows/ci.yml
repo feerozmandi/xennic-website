@@ -59,6 +59,7 @@ jobs:
           python3 tests/preview-installer-scope.py
           python3 tests/preview-ci-gateway.py
           python3 tests/preview-ci-evidence.py
+          python3 tests/preview-pull-deploy.py
       - name: Build
         run: npm run build
       - name: Client bundle secret check
@@ -171,11 +172,15 @@ jobs:
   #                     It runs the existing guarded transaction only — no new
   #                     path, no skipped phase.
   #
-  # The whole thing is off until the repository variable DEPLOY_AUTOMATION is
-  # set to `enabled`, so merging this file alone changes nothing on the server.
+  # This push path is off unless the repository variable DEPLOY_PUSH_SSH is
+  # `enabled`. It is not the supported path any more: GitHub's runners cannot
+  # open either the deploy port or port 22 on this host, so the host pulls
+  # instead (`ci-pull-deploy` + a systemd timer, see
+  # docs/reports/2026-11-12-pull-deploy.md). Keep it off; it stays in the tree
+  # because the workflow and the gateway are still the manual/emergency route.
   # ---------------------------------------------------------------------------
   deploy-preflight:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_AUTOMATION == 'enabled'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_PUSH_SSH == 'enabled'
     needs: [publish-preview-image]
     runs-on: ubuntu-latest
     permissions:
@@ -279,7 +284,7 @@ jobs:
           PY
 
   deploy-dev:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_AUTOMATION == 'enabled'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_PUSH_SSH == 'enabled'
     needs: [deploy-preflight]
     runs-on: ubuntu-latest
     environment:
