@@ -1,0 +1,49 @@
+#!/bin/bash
+# Forced command for the CI deploy key; root only.
+#
+# sshd runs this instead of a shell, so the key can only ever produce the
+# commands listed below. It reads what the workflow asked for from
+# SSH_ORIGINAL_COMMAND, refuses anything else, and execs the gateway with an
+# argument vector it built itself — the workflow's string is never evaluated by
+# a shell.
+#
+#   preflight | release-check | deploy
+#   approve <64-hex migration hash> <base64 of the previous-migrations JSON>
+#
+# Install root-owned, mode 0755. The sudoers entry for the `deploy` user allows
+# exactly this file, with SSH_ORIGINAL_COMMAND kept in the environment.
+set -u
+
+GATEWAY=/usr/local/libexec/xennic-preview/ci-gateway
+readonly GATEWAY
+
+die() {
+  printf 'ci-gateway: %s\n' "$1" >&2
+  exit 78
+}
+
+[ "$(id -u)" -eq 0 ] || die 'must run as root'
+[ -x "$GATEWAY" ] || die 'gateway is not installed'
+
+command=${SSH_ORIGINAL_COMMAND-}
+[ -n "$command" ] || die 'no command supplied'
+
+read -r verb first second extra <<<"$command"
+[ -z "${extra-}" ] || die 'too many arguments'
+
+case "$verb" in
+  preflight|release-check|deploy)
+    [ -z "${first-}" ] || die 'command takes no arguments'
+    exec "$GATEWAY" "$verb"
+    ;;
+  approve)
+    [ -n "${first-}" ] && [ -n "${second-}" ] || die 'approve needs a hash and the migration list'
+    [[ "$first" =~ ^[0-9a-f]{64}$ ]] || die 'invalid migration hash'
+    previous=$(printf '%s' "$second" | base64 --decode 2>/dev/null) || die 'invalid migration payload'
+    [ -n "$previous" ] || die 'invalid migration payload'
+    exec "$GATEWAY" approve "$first" "$previous"
+    ;;
+  *)
+    die 'unknown command'
+    ;;
+esac

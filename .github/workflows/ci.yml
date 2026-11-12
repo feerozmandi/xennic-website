@@ -57,6 +57,8 @@ jobs:
           python3 tests/preview-network-topology.py
           python3 tests/preview-installer-apex.py
           python3 tests/preview-installer-scope.py
+          python3 tests/preview-ci-gateway.py
+          python3 tests/preview-ci-evidence.py
       - name: Build
         run: npm run build
       - name: Client bundle secret check
@@ -155,6 +157,176 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y age
       - name: Build and test isolated production preview
         run: bash scripts/ci-preview.sh
+
+  # ---------------------------------------------------------------------------
+  # Automated deployment of `dev` to the preview host.
+  #
+  # Two jobs on purpose:
+  #   deploy-preflight  read-only. It proves which release is live, whether the
+  #                     reviewed migration transition for this candidate exists,
+  #                     and writes that to the run summary BEFORE anyone is
+  #                     asked to approve anything.
+  #   deploy-dev        gated by the `production-deploy` environment, so a
+  #                     human (the owner) has to approve this specific run.
+  #                     It runs the existing guarded transaction only — no new
+  #                     path, no skipped phase.
+  #
+  # The whole thing is off until the repository variable DEPLOY_AUTOMATION is
+  # set to `enabled`, so merging this file alone changes nothing on the server.
+  # ---------------------------------------------------------------------------
+  deploy-preflight:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_AUTOMATION == 'enabled'
+    needs: [publish-preview-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Fetch the published release evidence
+        uses: actions/download-artifact@v6
+        with:
+          name: xennic-preview-release-${{ github.run_attempt }}
+          path: release-evidence
+      - name: Bind the evidence to this run
+        run: |
+          python3 - <<'PY' > manifest.json
+          import json, pathlib
+          data = json.loads(pathlib.Path('release-evidence/xennic-preview-release.json').read_text())
+          print(json.dumps(data['release'], separators=(',', ':'), sort_keys=True))
+          PY
+          cat manifest.json
+      - name: Prepare the deploy key
+        env:
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Read the live state (read-only)
+        id: preflight
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          report=$(ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" preflight < manifest.json)
+          echo "report=$report" >> "$GITHUB_OUTPUT"
+          echo "$report"
+      - name: Explain the next step
+        env:
+          REPORT: ${{ steps.preflight.outputs.report }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          report = json.loads(os.environ['REPORT'])
+          print('### Deployment preflight')
+          print(f"- Live now: run {report['current_run_number']} (`{report['current_commit']}`)")
+          print(f"- Candidate: run {report['candidate_run_number']} (`{report['candidate_commit']}`)")
+          if report['transition_approved']:
+              print('- Reviewed migration transition: **present** — approving this run deploys.')
+          else:
+              print('- Reviewed migration transition: **missing** — approve it first:')
+              print('  ```')
+              print('  gh workflow run approve-release.yml --repo feerozmandi/xennic-website \\')
+              print('    -f run_id=<this run id> \\')
+              print("    -f previous_migrations='[\"<names from the live database>\"]' \\")
+              print('    -f migration_sha256=0000...0000')
+              print('  ```')
+              print('- The approve run prints the migration hash it computed from the image;')
+              print('  its second dispatch carries that hash back, so no hash is ever typed by hand.')
+          PY
+
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && vars.DEPLOY_AUTOMATION == 'enabled'
+    needs: [deploy-preflight]
+    runs-on: ubuntu-latest
+    environment:
+      name: production-deploy
+      url: https://xennic.ir
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Fetch the published release evidence
+        uses: actions/download-artifact@v6
+        with:
+          name: xennic-preview-release-${{ github.run_attempt }}
+          path: release-evidence
+      - name: Bind the evidence to this run
+        run: |
+          set -euo pipefail
+          python3 scripts/preview-ci-evidence.py --run-id "$GITHUB_RUN_ID" --commit "$GITHUB_SHA" \
+            --run-number "$GITHUB_RUN_NUMBER" \
+            < release-evidence/xennic-preview-release.json > manifest.json
+          cat manifest.json
+      - name: Prepare the deploy key
+        env:
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Release check (read-only)
+        id: release_check
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" release-check < manifest.json
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" deploy < manifest.json
+      - name: Verify the public pages
+        id: verify
+        run: |
+          set -u
+          failures=0
+          for path in / /en /services /contact /health; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://xennic.ir$path" || echo 000)
+            echo "- \`$path\` → \`$code\`" >> "$GITHUB_STEP_SUMMARY"
+            [ "$code" = "200" ] || failures=$((failures + 1))
+          done
+          [ "$failures" -eq 0 ]
+      - name: Report a failed deployment
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$GITHUB_REPOSITORY" --label deploy-failed \
+            --title "Deployment of ${{ github.sha }} failed" \
+            --body "The automated deployment of \`${{ github.sha }}\` (run ${{ github.run_number }}) failed. Every step logs the phase that stopped; the server is left in whatever state the guarded transaction recorded, and \`release-state.json\` on the host is the source of truth. Run: $RUN_URL"
+      - name: Close the matching issue after a successful deployment
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for number in $(gh issue list --repo "$GITHUB_REPOSITORY" --label deploy-failed --state open \
+            --search "${{ github.sha }} in:title" --json number --jq '.[].number'); do
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "Deployed successfully in run ${{ github.run_number }}."
+          done
 
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
