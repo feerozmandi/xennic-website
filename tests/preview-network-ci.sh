@@ -183,8 +183,8 @@ if ! "${app[@]}" exec -T app node - <<'JS'
     '/en/services/industrial-electrical-consulting', '/en/services/energy-audit',
     '/en/track-record', '/en/knowledge', '/en/tools', '/en/platform', '/en/contact',
     '/en/privacy', '/en/terms', '/en/cookies',
-    '/robots.txt', '/sitemap.xml', '/images/hero-grid-solar.webp', '/brand/og-cover.png',
-    '/icon.png', '/apple-icon.png', '/_next/image?url=%2Fimages%2Fhero-grid-solar.webp&w=640&q=75'];
+    '/robots.txt', '/sitemap.xml', '/images/hero-distribution.webp', '/brand/og-cover.png',
+    '/icon.png', '/apple-icon.png', '/_next/image?url=%2Fimages%2Fhero-distribution.webp&w=640&q=75'];
   let publicHtml = '';
   for (const path of publicPages) {
     const result = await call(path, null, 'xennic.ir');

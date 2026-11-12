@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { Logo } from './logo'
 import { getDictionary, localeHref, type Locale } from '../../lib/i18n'
 import { en as english } from '../../lib/i18n-content'
-import { navigationFor } from '../../lib/navigation'
 import { EMAIL_METHODS, phoneMethod, SOCIAL_METHODS } from '../../lib/contact'
 import { CONTACT_ICONS } from '../ui/icons'
 
@@ -34,7 +33,6 @@ const SERVICE_LINKS = [
  */
 export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
   const dict = getDictionary(locale)
-  const nav = navigationFor(locale)
   const serviceLinks = SERVICE_LINKS.map((link) => ({
     href: localeHref(locale, `/services/${link.slug}`),
     // English titles come from the translated service list, never from a guess.
@@ -58,6 +56,17 @@ export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
     <footer className="site-footer">
       <div className="container">
         <div className="footer-grid">
+          <nav className="footer-col" aria-label={dict.footer.servicesNav}>
+            <h2>{dict.footer.services}</h2>
+            <ul>{serviceLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
+          </nav>
+          <nav className="footer-col" aria-label={dict.footer.legalNav}>
+            <h2>{dict.footer.information}</h2>
+            <ul>{legalLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
+            <ul className="footer-col__extra">
+              <li><Link href={localeHref(locale, '/contact')}>{dict.footer.contact}</Link></li>
+            </ul>
+          </nav>
           <div className="footer-brand">
             <Logo size="sm" locale={locale} />
             <div className="footer-about">
@@ -102,21 +111,6 @@ export function SiteFooter({ locale = 'fa' }: { locale?: Locale }) {
               })}
             </ul>
           </div>
-          <nav className="footer-col" aria-label={dict.footer.footerNav}>
-            <h2>{dict.footer.quickLinks}</h2>
-            <ul>{nav.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
-          </nav>
-          <nav className="footer-col" aria-label={dict.footer.servicesNav}>
-            <h2>{dict.footer.services}</h2>
-            <ul>{serviceLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
-          </nav>
-          <nav className="footer-col" aria-label={dict.footer.legalNav}>
-            <h2>{dict.footer.information}</h2>
-            <ul>{legalLinks.map((item) => <li key={item.href}><Link href={item.href}>{item.label}</Link></li>)}</ul>
-            <ul className="footer-col__extra">
-              <li><Link href={localeHref(locale, '/contact')}>{dict.footer.contact}</Link></li>
-            </ul>
-          </nav>
         </div>
         <div className="footer-bottom">
           <span>© {new Date().getFullYear()} {dict.footer.copyright}</span>
