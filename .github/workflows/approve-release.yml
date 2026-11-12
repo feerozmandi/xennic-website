@@ -1,0 +1,145 @@
+name: Approve one reviewed release transition
+
+# Writes exactly one row into the reviewed migration-transition file, after
+# proving that row against the live host, and then stops. The deployment itself
+# stays in the "Website checks and preview image" workflow, gated by the same
+# environment.
+#
+# This is not a bypass of the deployment guard:
+#   * the run needs approval in the `production-deploy` environment, so a human
+#     opens this door on purpose;
+#   * the release it acts on is read from that run's own artifact, re-checked
+#     against the GitHub API (same run id, `dev`, successful, same commit);
+#   * `ci-gateway approve` recomputes the migration tree hash from the pulled
+#     candidate image and refuses when the supplied hash differs;
+#   * it reads `website.payload_migrations` from the running database and
+#     refuses when `previous_migrations` differs from what is really applied;
+#   * it refuses duplicates, refuses a second transition to the same commit, and
+#     backs the current file up to /root before replacing it.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run id of the successful dev run to approve (Actions run page URL ends with it)'
+        required: true
+        type: string
+      migration_sha256:
+        description: 'Migration tree hash this run printed (leave the zeros to have it computed and refused first)'
+        required: true
+        default: '0000000000000000000000000000000000000000000000000000000000000000'
+        type: string
+      previous_migrations:
+        description: 'Applied migration names, as a JSON array'
+        required: true
+        default: '["20261030_163225_baseline"]'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    environment:
+      name: production-deploy
+      url: https://xennic.ir
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Prove the run is a successful dev run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo 'run_id must be numeric'; exit 2; }
+          info=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
+            --jq '{branch: .head_branch, conclusion: .conclusion, sha: .head_sha, number: .run_number, repository: .head_repository.full_name}')
+          echo "$info"
+          [ "$(echo "$info" | jq -r .branch)" = "dev" ] || { echo 'that run is not a dev run'; exit 2; }
+          [ "$(echo "$info" | jq -r .conclusion)" = "success" ] || { echo 'that run did not succeed'; exit 2; }
+          [ "$(echo "$info" | jq -r .repository)" = "$GITHUB_REPOSITORY" ] || { echo 'that run belongs to another repository'; exit 2; }
+          {
+            echo "sha=$(echo "$info" | jq -r .sha)"
+            echo "number=$(echo "$info" | jq -r .number)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Fetch that run's release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          name=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" \
+            --jq '.artifacts[].name | select(startswith("xennic-preview-release-"))' | sort | tail -1)
+          [ -n "$name" ] || { echo 'that run published no release evidence'; exit 2; }
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n "$name" -D release-evidence
+      - name: Bind the evidence to that run
+        run: |
+          set -euo pipefail
+          python3 scripts/preview-ci-evidence.py --run-id "${{ inputs.run_id }}" \
+            --commit "${{ steps.run.outputs.sha }}" --run-number "${{ steps.run.outputs.number }}" \
+            < release-evidence/xennic-preview-release.json > manifest.json
+          cat manifest.json
+      - name: What will be approved
+        run: |
+          echo "### Transition approval" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release: \`$(cat manifest.json)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Migration hash supplied: \`${{ inputs.migration_sha256 }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Applied migrations supplied: \`${{ inputs.previous_migrations }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- The gateway recomputes the hash from the image and refuses a mismatch." >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare the deploy key
+        env:
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
+      - name: Approve the transition
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST }}
+          VPS_PORT: ${{ vars.VPS_PORT }}
+          EXPECTED: ${{ inputs.migration_sha256 }}
+          MIGRATIONS: ${{ inputs.previous_migrations }}
+        run: |
+          set -euo pipefail
+          # The argument list travels as base64, so no shell quoting from this
+          # file is ever interpreted on the host.
+          encoded=$(printf '%s' "$MIGRATIONS" | base64 -w0)
+          set +e
+          out=$(ssh -i "$HOME/.ssh/id_ed25519" -p "${VPS_PORT:-22}" -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" "approve $EXPECTED $encoded" \
+            < manifest.json 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -ne 0 ]; then
+            computed=$(printf '%s' "$out" | sed -n 's/.*migration hash mismatch: image gives \([0-9a-f]\{64\}\).*/\1/p')
+            if [ -n "$computed" ]; then
+              echo "- The image computes \`$computed\` — re-run with that value." >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "- Nothing was written to the reviewed transition file." >> "$GITHUB_STEP_SUMMARY"
+            exit "$code"
+          fi
+          printf '%s\n' "$out" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Next: re-run the deploy workflow for run ${{ inputs.run_id }} (Re-run all jobs)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Report a refused approval
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh issue create --repo "$GITHUB_REPOSITORY" --label deploy-blocked \
+            --title "Release transition approval refused (run ${{ inputs.run_id }})" \
+            --body "The approval run was refused and the reviewed transition file was left untouched. The runner log names the exact reason: hash mismatch, ledger mismatch, duplicate row, unsafe file or a missing image. Run: $RUN_URL"
