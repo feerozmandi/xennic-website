@@ -205,23 +205,42 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
       - name: Check the host is reachable from the runner
+        id: reach
         env:
           VPS_HOST: ${{ vars.VPS_HOST }}
           VPS_PORT: ${{ vars.VPS_PORT }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           : "${VPS_HOST:?repository variable VPS_HOST is not set}"
           port="${VPS_PORT:-22}"
-          if timeout 20 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null; then
+          probe() { timeout 15 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }
+          # The runner's own address is the one value the host-side firewall
+          # needs, so record it before anything else can fail.
+          egress=$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || echo unknown)
+          echo "target       : $VPS_HOST:$port"
+          echo "runner egress: $egress"
+          echo "- runner egress \`$egress\` tried \`$VPS_HOST:$port\`" >> "$GITHUB_STEP_SUMMARY"
+          if probe "$VPS_HOST" "$port"; then
             echo "TCP $VPS_HOST:$port is reachable from this runner."
+            echo "- \`$VPS_HOST:$port\` reachable from \`$egress\`" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          echo "::error::No TCP connection to $VPS_HOST:$port within 20 seconds."
-          echo "The runner cannot open the deploy port. Nothing was changed on the server."
-          echo "- Confirm VPS_HOST / VPS_PORT in Settings -> Secrets and variables -> Actions -> Variables."
-          echo "- On the host, check that sshd listens on that port and that the firewall admits GitHub runners:"
-          echo "  ss -lntp | grep -E ':${port}|:22' ; ufw status verbose ; iptables -S | head -40"
-          echo "- GitHub publishes its egress ranges at https://api.github.com/meta (field \`actions\`)."
+          echo "::error::No TCP connection to $VPS_HOST:$port within 15 seconds from $egress."
+          # Port 22 tells us whether one port is filtered or the whole address is.
+          for alt in 22 33878; do
+            [ "$alt" = "$port" ] && continue
+            if probe "$VPS_HOST" "$alt"; then
+              echo "- port $alt IS reachable while $port is not: the block is per-port."
+            else
+              echo "- port $alt is not reachable either: this runner cannot reach the host at all."
+            fi
+          done
+          echo "Nothing was changed on the server."
+          echo "- If only $port is filtered, the host firewall (ufw, Plesk firewall, provider panel) is dropping it for this address."
+          echo "- If every port is filtered, the provider or a fail2ban/ipset ban is dropping this address; allow the ranges from"
+          echo "  https://api.github.com/meta (field \`actions\`) or unban $egress."
+          echo "- On the host, one command answers everything:"
+          echo "  { ss -lntp | grep -E ':${port}|:22'; ufw status verbose; iptables -S | head -30; fail2ban-client status sshd; } 2>&1 | tee /tmp/net-diag.txt"
           exit 1
       - name: Read the live state (read-only)
         id: preflight
@@ -304,13 +323,19 @@ jobs:
           VPS_HOST: ${{ vars.VPS_HOST }}
           VPS_PORT: ${{ vars.VPS_PORT }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           : "${VPS_HOST:?repository variable VPS_HOST is not set}"
           port="${VPS_PORT:-22}"
-          timeout 20 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null || {
-            echo "::error::No TCP connection to $VPS_HOST:$port within 20 seconds; nothing was changed."
-            exit 1
-          }
+          probe() { timeout 15 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; }
+          egress=$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || echo unknown)
+          echo "target       : $VPS_HOST:$port"
+          echo "runner egress: $egress"
+          if probe "$VPS_HOST" "$port"; then
+            echo "TCP $VPS_HOST:$port is reachable from this runner."
+            exit 0
+          fi
+          echo "::error::No TCP connection to $VPS_HOST:$port within 15 seconds from $egress; nothing was changed."
+          exit 1
       - name: Release check (read-only)
         id: release_check
         env:
