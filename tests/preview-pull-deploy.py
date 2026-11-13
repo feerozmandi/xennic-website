@@ -110,19 +110,77 @@ class RecordTest(unittest.TestCase):
             pull.write_record({'blob': 'x' * (pull.MAX_RECORD + 10)})
 
 
+TOKEN = '123456789:AAHfakeTokenForTestsOnly_abc'
+
+
 class NotifyTest(unittest.TestCase):
     def test_no_configuration_is_silent(self):
         with mock.patch.object(pull.os.path, 'lexists', lambda path: False):
             self.assertFalse(pull.notify('hello'))
 
+    def test_bale_is_the_default_and_telegram_is_still_readable(self):
+        self.assertEqual(pull.notification_target({'bot_token': TOKEN, 'chat_id': '42'}),
+                         ('https://tapi.bale.ai/bot%s/sendMessage' % TOKEN, '42'))
+        self.assertEqual(pull.notification_target({'provider': 'telegram', 'bot_token': TOKEN,
+                                                   'chat_id': '-1001234'}),
+                         ('https://api.telegram.org/bot%s/sendMessage' % TOKEN, '-1001234'))
+        # The pre-Bale file shape keeps working.
+        self.assertEqual(pull.notification_target({'telegram_bot_token': TOKEN,
+                                                   'telegram_chat_id': '42'}),
+                         ('https://tapi.bale.ai/bot%s/sendMessage' % TOKEN, '42'))
+
+    def test_channel_username_is_accepted(self):
+        self.assertEqual(pull.notification_target({'bot_token': TOKEN, 'chat_id': '@xennic_ir'})[1],
+                         '@xennic_ir')
+
+    def test_unknown_provider_and_bad_values_are_refused(self):
+        for config in ({'provider': 'sms', 'bot_token': TOKEN, 'chat_id': '42'},
+                       {'provider': 'telegram', 'bot_token': 'short', 'chat_id': '42'},
+                       {'bot_token': TOKEN, 'chat_id': 'not a chat'},
+                       {'bot_token': TOKEN},
+                       'not an object'):
+            with self.assertRaises(pull.PullFailed, msg=str(config)):
+                pull.notification_target(config)
+
     def test_bad_configuration_is_silent(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'notify.json'
-            path.write_text(json.dumps({'telegram_bot_token': 'short', 'telegram_chat_id': 'x'}))
+            path.write_text(json.dumps({'bot_token': 'short', 'chat_id': 'x'}))
             path.chmod(0o600)
             with mock.patch.object(pull, 'NOTIFY', path), \
                     mock.patch.object(pull, 'private_file', lambda p, m: path.read_bytes()):
                 self.assertFalse(pull.notify('hello'))
+
+    def test_a_working_send_posts_json_to_the_allowlisted_host(self):
+        seen = {}
+
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        class Opener:
+            def open(self, request, timeout=0):
+                seen['url'] = request.full_url
+                seen['body'] = json.loads(request.data)
+                return Response()
+
+        with mock.patch.object(pull.os.path, 'lexists', lambda path: True), \
+                mock.patch.object(pull, 'private_file',
+                                  lambda p, m: json.dumps({'bot_token': TOKEN, 'chat_id': '42'}).encode()), \
+                mock.patch.object(pull, 'NOTIFY_OPENER', Opener()):
+            self.assertTrue(pull.notify('deployed'))
+        self.assertEqual(seen['url'], 'https://tapi.bale.ai/bot%s/sendMessage' % TOKEN)
+        self.assertEqual(seen['body']['chat_id'], '42')
+        self.assertEqual(seen['body']['text'], 'deployed')
+
+    def test_redirects_are_not_followed(self):
+        handler = pull.NoRedirect()
+        self.assertIsNone(handler.redirect_request(None, None, 302, 'Found', {}, 'https://elsewhere'))
 
 
 class RunIdentityTest(unittest.TestCase):

@@ -168,23 +168,59 @@ def read_record():
         return {}
 
 
+# Bale is the default: it is the messenger the owner and the company actually
+# use, and its Bot API is deliberately shaped like Telegram's. Both endpoints are
+# allowlisted by exact host, because the bot token travels inside the URL path —
+# a redirect would hand it to whatever host answered.
+NOTIFY_ENDPOINTS = {
+    'bale': 'https://tapi.bale.ai/bot{token}/sendMessage',
+    'telegram': 'https://api.telegram.org/bot{token}/sendMessage',
+}
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: the token is in the path and must reach one host only."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+NOTIFY_OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def notification_target(config):
+    """Resolve the endpoint from a root-only config file; None means stay silent."""
+    if not isinstance(config, dict):
+        raise PullFailed('notification config is not an object')
+    provider = config.get('provider', 'bale')
+    if provider not in NOTIFY_ENDPOINTS:
+        raise PullFailed('unknown notification provider')
+    # `bot_token`/`chat_id` is the current shape; the older telegram_* names are
+    # still read so an existing file keeps working after an upgrade.
+    token = config.get('bot_token', config.get('telegram_bot_token'))
+    chat = config.get('chat_id', config.get('telegram_chat_id'))
+    if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9:_-]{20,200}', token):
+        raise PullFailed('notification token is malformed')
+    chat = str(chat) if chat is not None else ''
+    if not re.fullmatch(r'-?\d{1,20}|@[A-Za-z][A-Za-z0-9_]{3,31}', chat):
+        raise PullFailed('notification chat id is malformed')
+    return NOTIFY_ENDPOINTS[provider].format(token=token), chat
+
+
 def notify(text):
-    """Best-effort Telegram message; silence when it is not configured."""
+    """Best-effort message; silence when it is not configured, never fatal."""
     if not os.path.lexists(NOTIFY):
         return False
     try:
-        config = json.loads(private_file(NOTIFY, MAX_NOTIFY))
-        token = config['telegram_bot_token']
-        chat = str(config['telegram_chat_id'])
-        if not re.fullmatch(r'[A-Za-z0-9:_-]{20,200}', token) or not re.fullmatch(r'-?\d{1,20}', chat):
-            return False
-        body = json.dumps({'chat_id': chat, 'text': text[:3500], 'disable_web_page_preview': True}).encode()
-        request = urllib.request.Request(
-            f'https://api.telegram.org/bot{token}/sendMessage', data=body, method='POST',
-            headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=15) as response:
+        url, chat = notification_target(json.loads(private_file(NOTIFY, MAX_NOTIFY)))
+        body = json.dumps({'chat_id': chat, 'text': text[:3500],
+                           'disable_web_page_preview': True}).encode()
+        request = urllib.request.Request(url, data=body, method='POST',
+                                         headers={'Content-Type': 'application/json',
+                                                  'User-Agent': 'xennic-pull-deploy'})
+        with NOTIFY_OPENER.open(request, timeout=15) as response:
             return response.status == 200
-    except (OSError, KeyError, TypeError, ValueError, urllib.error.HTTPError):
+    except (OSError, KeyError, TypeError, ValueError, PullFailed, urllib.error.HTTPError):
         return False
 
 
