@@ -51,17 +51,47 @@ xennic-pull-deploy.timer  (هر ۵ دقیقه، systemd، root)
 | `tests/preview-pull-deploy.py` | ۱۵ آزمون: تصمیم‌گیری، اعتبارسنجی ردیف گذار، رکورد `0600`، اعلان بی‌خطر، انتخاب درست run |
 | `.github/workflows/ci.yml` | اجرای تست تازه در job `checks`؛ مسیر push حالا با متغیر جدا `DEPLOY_PUSH_SSH` کنترل می‌شود تا هر merge با خطای شبکه آلوده نشود |
 
-## ۴) اعلان خطا
+## ۴) اعلان خطا — ربات بله
 
-فایل اختیاری `/srv/xennic-preview/secrets/notify.json` (مالک root، `0600`):
+اعلان از **بله** (پیام‌رسان رسمی سازمان) ارسال می‌شود؛ API بازوی بله با تلگرام سازگار است و آدرس پایهٔ آن `https://tapi.bale.ai/bot<token>/sendMessage` است. تلگرام هم همچنان به‌عنوان گزینهٔ دوم پشتیبانی می‌شود (`"provider": "telegram"`)، ولی پیش‌فرض بله است.
+
+### فایل تنظیمات (روی میزبان، مالک root، `0600`)
+
+`/srv/xennic-preview/secrets/notify.json`:
 
 ```json
-{"telegram_bot_token": "123456:ABC…", "telegram_chat_id": "-1001234567890"}
+{"provider": "bale", "bot_token": "123456789:AAH…", "chat_id": "-1001234567890"}
 ```
 
-- اگر نباشد: برنامه بی‌صدا کار می‌کند و فقط در `/srv/xennic-preview/state/pull-deploy.json` نتیجه را می‌نویسد.
-- اگر باشد: یک پیام کوتاه برای «منتظر تأیید»، «منتشر شد» و «خطا»؛ پیام «منتظر تأیید» برای هر run فقط **یک بار** فرستاده می‌شود.
-- توکن ربات فقط روی میزبان می‌ماند؛ هیچ توکن نوشتنی گیت‌هاب روی سرور لازم نیست.
+- `provider` اختیاری است؛ نبودش یعنی `bale`.
+- `chat_id` می‌تواند شناسهٔ عددی (کاربر، گروه یا کانال) یا نام کاربری کانال با فرمت `@channel` باشد.
+- کلیدهای قدیمی `telegram_bot_token` و `telegram_chat_id` هم خوانده می‌شوند تا فایل موجود پس از ارتقا نشکند.
+
+### گرفتن توکن و شناسهٔ چت
+
+1. در بله به **@BotFather** پیام دهید → `/newbot` → نام و نام‌کاربری (مثلاً `xennic_deploy_bot`) → توکن `HTTP API` را بگیرید.
+2. ربات را در گروه/کانال موردنظر اضافه کنید (یا خودتان به آن پیام دهید).
+3. شناسهٔ چت را از `getUpdates` بخوانید:
+
+```
+curl -s "https://tapi.bale.ai/bot<TOKEN>/getUpdates" | python3 -c 'import json,sys; d=json.load(sys.stdin); print([r.get("message",{}).get("chat",{}) for r in d.get("result",[])])'
+```
+
+4. آزمون ارسال:
+
+```
+curl -s -X POST "https://tapi.bale.ai/bot<TOKEN>/sendMessage" -H 'Content-Type: application/json' -d '{"chat_id":"<CHAT>","text":"Xennic deploy notifications are connected."}'; echo "exit=$?"
+```
+
+### قواعد ایمنی که در کد رعایت شده
+
+| موضوع | رفتار |
+| --- | --- |
+| توکن در مسیر URL است | فقط دو میزبان دقیق مجازند (`tapi.bale.ai` و `api.telegram.org`)، بقیه در `notification_target` رد می‌شوند |
+| ریدایرکت | دنبال نمی‌شود (`NoRedirect`)، تا توکن به میزبان دیگری نرسد |
+| فایل تنظیمات | فقط root-owned با حالت `0600` خوانده می‌شود؛ در غیر این صورت اعلان خاموش می‌ماند |
+| خطای ارسال | هرگز استقرار را متوقف نمی‌کند؛ نتیجه در `state/pull-deploy.json` می‌ماند |
+| تکرار | پیام «منتظر تأیید» برای هر run فقط یک بار فرستاده می‌شود |
 
 ## ۵) نصب (یک‌بار، با `sudo -i`)
 
