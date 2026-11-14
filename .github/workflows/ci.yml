@@ -60,6 +60,7 @@ jobs:
           python3 tests/preview-ci-gateway.py
           python3 tests/preview-ci-evidence.py
           python3 tests/preview-pull-deploy.py
+          python3 tests/preview-configure-notify.py
       - name: Build
         run: npm run build
       - name: Client bundle secret check

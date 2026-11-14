@@ -212,30 +212,35 @@ class RunIdentityTest(unittest.TestCase):
 
 
 class InstallCoverageTest(unittest.TestCase):
-    """Every module the deployer loads must exist after the installer runs."""
+    """The installer must ask only for files the host really has."""
 
-    def test_installer_covers_every_module_the_deployer_loads(self):
-        import re
+    @staticmethod
+    def installer_required():
+        installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
+        body = installer.split('REQUIRED = (')[1].split(')')[0]
+        return set(re.findall(r"'([A-Za-z0-9_.-]+)'", body))
+
+    def test_every_module_the_deployer_loads_is_required_or_shipped(self):
         deployer = SOURCE.read_text(encoding='utf-8')
         installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
         loaded = set(re.findall(r"load\('[a-z_]+', '([a-z0-9-]+\.py)'\)", deployer))
         self.assertTrue(loaded, 'no module loads found; the pattern is stale')
-        required = set(re.findall(r"'([a-z0-9-]+\.py)'", installer.split('REQUIRED = (')[1].split(')')[0]))
-        shipped = set(re.findall(r"'([a-z0-9-]+\.py)'", installer.split('EVIDENCE_SOURCE = ')[1].split('\n')[0]))
-        missing = loaded - required - shipped
-        self.assertEqual(missing, set(), f'installer does not provide: {sorted(missing)}')
+        shipped = set(re.findall(r"'([a-z0-9-]+\.py)'",
+                                 installer.split('EVIDENCE_SOURCE = ')[1].split('\n')[0]))
+        self.assertEqual(loaded - self.installer_required() - shipped, set())
 
-    def test_installer_requires_no_module_that_was_never_installed_before(self):
-        installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
-        old_helpers = (SOURCE.parent / 'install-preview-sftp-helper.py').read_text(encoding='utf-8')
-        required = set(re.findall(r"'([a-z0-9-]+\.py)'",
-                                  installer.split('REQUIRED = (')[1].split(')')[0]))
-        installed_by_old = set(re.findall(r"'([a-z0-9-]+\.py)'",
-                                          old_helpers.split('FILES = (')[1].split(')')[0]))
-        required.add('preview-fixed-operations.py')
-        required.add('preview-backup-operation.py')
-        self.assertEqual(required - installed_by_old - {'preview-fixed-operations.py',
-                                                        'preview-backup-operation.py'}, set())
+    def test_nothing_is_required_that_the_helper_install_never_creates(self):
+        helper = (SOURCE.parent / 'install-preview-sftp-helper.py').read_text(encoding='utf-8')
+        installable = set(re.findall(r"'([a-z0-9-]+\.py)'", helper.split('FILES = (')[1].split(')')[0]))
+        # The phase copies the helper installer writes under their own names.
+        installable |= {'release-check', 'current-check', 'migrate', 'activate', 'health',
+                        'rollback', 'pull-image', 'backup-verify', 'sftp-transfer', 'deploy-receiver'}
+        missing = self.installer_required() - installable
+        self.assertEqual(missing, set(), f'never installed by the helper install: {sorted(missing)}')
+
+    def test_the_source_name_of_the_fixed_operations_is_never_required(self):
+        # It exists in scripts/ but the helper installer writes only phase copies.
+        self.assertNotIn('preview-fixed-operations.py', self.installer_required())
 
 
 def relaxed_private_file(path, maximum):

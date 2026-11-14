@@ -76,9 +76,15 @@ WantedBy=timers.target
 
 # The deployer reads these at runtime; a missing one is a clear error, not a
 # silent half-deployment.
+# What the deployer and the backend it calls need to already be on the host.
+# `preview-fixed-operations.py` is deliberately absent: the helper installer
+# never writes that file under its own name — it installs copies under the phase
+# names (release-check, migrate, …), which is what the backend executes. Asking
+# for the source name made this installer fail on a correctly installed host.
 REQUIRED = ('preview-deploy-backend.py', 'preview-deploy-manifest.py', 'preview-deploy-state.py',
             'preview-deploy-lock.py', 'preview-release-verifier.py',
-            'preview-fixed-operations.py', 'preview-backup-operation.py')
+            'preview-backup-operation.py', 'pull-image',
+            'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback')
 
 
 def clean(path, *, executable=False):
