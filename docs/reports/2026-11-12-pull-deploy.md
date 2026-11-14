@@ -55,6 +55,19 @@ xennic-pull-deploy.timer  (هر ۵ دقیقه، systemd، root)
 
 اعلان از **بله** (پیام‌رسان رسمی سازمان) ارسال می‌شود؛ API بازوی بله با تلگرام سازگار است و آدرس پایهٔ آن `https://tapi.bale.ai/bot<token>/sendMessage` است. تلگرام هم همچنان به‌عنوان گزینهٔ دوم پشتیبانی می‌شود (`"provider": "telegram"`)، ولی پیش‌فرض بله است.
 
+### ساختن فایل تنظیمات از همان `.env` زیرساخت
+
+اطلاعات ربات از قبل در یک جا روی میزبان است (`/home/xennic/xennic-infra/.env` با کلیدهای `BALE_NAME_BOT`، `BALE_TOKEN_BOT`، `BALE_CHAT_ID`). اسکریپت `scripts/configure-preview-notify.py` همان را می‌خواند و فایل نهایی را می‌سازد، بدون اینکه توکن را چاپ کند:
+
+```
+sudo -i; python3 /root/xennic-preview-pull-deploy/configure-preview-notify.py --send-test; echo "exit=$?"
+```
+
+- خروجی فقط `provider`، `chat_id` و **طول** توکن را نشان می‌دهد، نه خود توکن.
+- فایل مبدأ باید root-owned و `0600` باشد؛ `.env` با حالت `0644` رد می‌شود (این همان خطری است که اسکریپت می‌خواهد نباشد).
+- `--send-test` پس از نوشتن، یک پیام آزمایشی می‌فرستد و فقط `ok:true` را قبول می‌کند.
+- مسیر دیگر با `--source /path/.env` قابل تغییر است.
+
 ### فایل تنظیمات (روی میزبان، مالک root، `0600`)
 
 `/srv/xennic-preview/secrets/notify.json`:
@@ -107,7 +120,15 @@ journalctl -u xennic-pull-deploy.service -n 30 --no-pager; echo "exit=$?"
 systemctl list-timers xennic-pull-deploy.timer --no-pager; echo "exit=$?"
 ```
 
-**سه فایل لازم است، نه دو.** نخستین نسخهٔ این دستور فقط دو فایل را دانلود می‌کرد و پوشهٔ مبدأ هم ساخته نمی‌شد؛ نتیجه `curl: (23) Failure writing output to destination` بود. اکنون نصب‌کننده پوشه را نمی‌سازد (خودش باید وجود داشته باشد) ولی هر سه فایل را می‌خواهد:
+**سه فایل لازم است، نه دو.** نخستین نسخهٔ این دستور فقط دو فایل را دانلود می‌کرد و پوشهٔ مبدأ هم ساخته نمی‌شد؛ نتیجه `curl: (23) Failure writing output to destination` بود.
+
+پس از رفع آن، نصب در مرحلهٔ بررسی فایل‌های موجود شکست خورد:
+
+```
+pull deploy install failed: /usr/local/libexec/xennic-preview/preview-fixed-operations.py is missing
+```
+
+این درخواست از پایه غلط بود: نصب‌کنندهٔ helperها `preview-fixed-operations.py` را **هرگز با این نام** نصب نمی‌کند؛ نسخه‌هایی از آن را با نام فازها می‌نویسد (`release-check`، `migrate`، `activate`، `health`، `rollback`، `current-check`) و بک‌اند همان‌ها را اجرا می‌کند. فهرست `REQUIRED` اکنون فقط چیزهایی را می‌خواهد که واقعاً روی میزبان وجود دارند: ماژول‌های پایتون نصب‌شده به‌همراه `pull-image` و شش فاز بالا. همین اشتباه در `ci-gateway` هم بود و اصلاح شد (کپی نصب‌شدهٔ `release-check` بارگذاری می‌شود).
 
 | فایل مبدأ | مقصد |
 | --- | --- |
@@ -115,7 +136,7 @@ systemctl list-timers xennic-pull-deploy.timer --no-pager; echo "exit=$?"
 | `preview-ci-evidence.py` | `/usr/local/libexec/xennic-preview/preview-ci-evidence.py` (0644) |
 | `install-preview-pull-deploy.py` | فقط اجرا می‌شود |
 
-`preview-ci-evidence.py` در نصب قبلی helperها نبود؛ اگر ماژول نصب نشود، `ci-pull-deploy` هنگام اتصال artifact به run شکست می‌خورد. آزمون تازه‌ای در `tests/preview-pull-deploy.py` تضمین می‌کند هر ماژولی که deployer در زمان اجرا `load` می‌کند، یا در فهرست `REQUIRED` نصب‌کننده باشد یا خودش نصب شود.
+سه آزمون تازه در `tests/preview-pull-deploy.py` جلوی تکرار این خطا را می‌گیرند: هر ماژولی که deployer در زمان اجرا بارگذاری می‌کند باید نصب شود، هیچ فایلی نباید خواسته شود که نصب helper آن را نمی‌سازد، و نام منبع `preview-fixed-operations.py` هرگز نباید در فهرست باشد.
 
 ## ۶) چرخهٔ روزمره پس از نصب
 

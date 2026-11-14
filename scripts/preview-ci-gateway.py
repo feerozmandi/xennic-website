@@ -235,7 +235,7 @@ def preview_report(release):
 
 def live_ledger(release):
     """Read the applied migration names from the running database, read-only."""
-    ops = load('ci_gateway_ops', 'preview-fixed-operations.py')
+    ops = load('ci_gateway_ops', 'release-check')
     snapshot = load('ci_gateway_snapshot', 'preview-backup-operation.py')
     snapshot.ENV = dict(ops.SAFE, PREVIEW_IMAGE=ops.reference(release))
     _app, database, _volume = snapshot.single_app_and_database()
@@ -271,7 +271,9 @@ def command_approve(release, expected_sha256, previous_migrations):
         raise Rejected('the release journal is blocked; clear it before approving')
     # The candidate image has to be local for any of this to mean anything.
     run_helper('pull-image', manifest_line(release), timeout=1800)
-    ops = load('ci_gateway_ops_hash', 'preview-fixed-operations.py')
+    # `preview-fixed-operations.py` is installed under its phase names only, so
+    # load the copy that is certainly on the host rather than the source name.
+    ops = load('ci_gateway_ops_hash', 'release-check')
     computed = ops.migration_tree_hash(release)
     if computed != expected_sha256:
         raise Rejected(f'migration hash mismatch: image gives {computed}')
