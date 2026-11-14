@@ -1,10 +1,11 @@
 #!/usr/bin/python3
 """Install the pull-based deployer and its timer; root only, no arguments.
 
-Installs exactly two things:
+Installs exactly these, all root-owned:
 
-    /usr/local/libexec/xennic-preview/ci-pull-deploy     0755 root
-    /etc/systemd/system/xennic-pull-deploy.{service,timer}  0644 root
+    /usr/local/libexec/xennic-preview/ci-pull-deploy           0755
+    /usr/local/libexec/xennic-preview/preview-ci-evidence.py   0644
+    /etc/systemd/system/xennic-pull-deploy.{service,timer}     0644
 
 then reloads systemd and enables the timer. It does not create users, keys,
 tokens or notification settings, and it never runs a deployment itself: the
@@ -22,13 +23,20 @@ import sys
 
 sys.dont_write_bytecode = True
 
-SOURCE = Path('/root/xennic-preview-pull-deploy/preview-pull-deploy.py')
+SOURCE_DIR = Path('/root/xennic-preview-pull-deploy')
+SOURCE = SOURCE_DIR / 'preview-pull-deploy.py'
+# The deployer binds a release artifact to its run, so it needs this module.
+# It is not part of the privileged helper set installed earlier, which is why
+# this installer ships it rather than merely requiring it.
+EVIDENCE_SOURCE = SOURCE_DIR / 'preview-ci-evidence.py'
 HELPERS = Path('/usr/local/libexec/xennic-preview')
 TARGET = HELPERS / 'ci-pull-deploy'
+EVIDENCE_TARGET = HELPERS / 'preview-ci-evidence.py'
 UNITS = Path('/etc/systemd/system')
 SERVICE = UNITS / 'xennic-pull-deploy.service'
 TIMER = UNITS / 'xennic-pull-deploy.timer'
 MODE_FILE = 0o755
+MODE_MODULE = 0o644
 MODE_UNIT = 0o644
 MAX_BYTES = 200 * 1024
 
@@ -69,12 +77,15 @@ WantedBy=timers.target
 # The deployer reads these at runtime; a missing one is a clear error, not a
 # silent half-deployment.
 REQUIRED = ('preview-deploy-backend.py', 'preview-deploy-manifest.py', 'preview-deploy-state.py',
-            'preview-deploy-lock.py', 'preview-release-verifier.py', 'preview-ci-evidence.py',
+            'preview-deploy-lock.py', 'preview-release-verifier.py',
             'preview-fixed-operations.py', 'preview-backup-operation.py')
 
 
 def clean(path, *, executable=False):
-    info = os.lstat(path)
+    try:
+        info = os.lstat(path)
+    except OSError as exc:
+        raise RuntimeError(f'{path} is missing; run the earlier helper install first') from exc
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
         raise RuntimeError(f'{path} has an unsafe owner or mode')
     if executable and not info.st_mode & stat.S_IXUSR:
@@ -105,16 +116,25 @@ def main():
                 or str(HELPERS) != '/usr/local/libexec/xennic-preview'):
             raise RuntimeError('unsafe installation directory')
         clean(SOURCE)
+        clean(EVIDENCE_SOURCE)
         data = SOURCE.read_bytes()
         if len(data) > MAX_BYTES or not data.startswith(b'#!/usr/bin/python3'):
             raise RuntimeError('deployer source is unexpected')
+        evidence = EVIDENCE_SOURCE.read_bytes()
+        if len(evidence) > MAX_BYTES or not evidence.startswith(b'#!/usr/bin/env python3'):
+            raise RuntimeError('evidence module is unexpected')
         for name in REQUIRED:
             clean(HELPERS / name)
         if os.path.lexists(TARGET):
             clean(TARGET, executable=True)
+        if os.path.lexists(EVIDENCE_TARGET):
+            clean(EVIDENCE_TARGET)
         write_atomic(TARGET, data, MODE_FILE)
         if TARGET.read_bytes() != data:
             raise RuntimeError('installed deployer differs from the source')
+        write_atomic(EVIDENCE_TARGET, evidence, MODE_MODULE)
+        if EVIDENCE_TARGET.read_bytes() != evidence:
+            raise RuntimeError('installed evidence module differs from the source')
         for path, body in ((SERVICE, SERVICE_BODY), (TIMER, TIMER_BODY)):
             write_atomic(path, body.encode(), MODE_UNIT)
             if path.read_bytes() != body.encode():
@@ -123,6 +143,7 @@ def main():
         subprocess.run(['systemctl', 'enable', '--now', TIMER.name], check=True)
         status = subprocess.run(['systemctl', 'is-active', TIMER.name], capture_output=True, text=True)
         print(f'pull deployer installed: {hashlib.sha256(data).hexdigest()} ({len(data)} bytes)')
+        print(f'evidence module installed: {hashlib.sha256(evidence).hexdigest()} ({len(evidence)} bytes)')
         print(f'timer: {status.stdout.strip() or "unknown"}')
         print('first run: systemctl start xennic-pull-deploy.service   (or wait for the timer)')
         print('dry run : sudo /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run')

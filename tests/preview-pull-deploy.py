@@ -7,6 +7,7 @@ it is deliberately not re-implemented or mocked into "success".
 """
 import importlib.util
 import json
+import re
 import os
 from pathlib import Path
 import tempfile
@@ -208,6 +209,33 @@ class RunIdentityTest(unittest.TestCase):
                 return {'sha': A} if path == '/commits/dev' else {'workflow_runs': []}
         with self.assertRaises(pull.PullFailed):
             pull.newest_run(Verifier(), b'token')
+
+
+class InstallCoverageTest(unittest.TestCase):
+    """Every module the deployer loads must exist after the installer runs."""
+
+    def test_installer_covers_every_module_the_deployer_loads(self):
+        import re
+        deployer = SOURCE.read_text(encoding='utf-8')
+        installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
+        loaded = set(re.findall(r"load\('[a-z_]+', '([a-z0-9-]+\.py)'\)", deployer))
+        self.assertTrue(loaded, 'no module loads found; the pattern is stale')
+        required = set(re.findall(r"'([a-z0-9-]+\.py)'", installer.split('REQUIRED = (')[1].split(')')[0]))
+        shipped = set(re.findall(r"'([a-z0-9-]+\.py)'", installer.split('EVIDENCE_SOURCE = ')[1].split('\n')[0]))
+        missing = loaded - required - shipped
+        self.assertEqual(missing, set(), f'installer does not provide: {sorted(missing)}')
+
+    def test_installer_requires_no_module_that_was_never_installed_before(self):
+        installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
+        old_helpers = (SOURCE.parent / 'install-preview-sftp-helper.py').read_text(encoding='utf-8')
+        required = set(re.findall(r"'([a-z0-9-]+\.py)'",
+                                  installer.split('REQUIRED = (')[1].split(')')[0]))
+        installed_by_old = set(re.findall(r"'([a-z0-9-]+\.py)'",
+                                          old_helpers.split('FILES = (')[1].split(')')[0]))
+        required.add('preview-fixed-operations.py')
+        required.add('preview-backup-operation.py')
+        self.assertEqual(required - installed_by_old - {'preview-fixed-operations.py',
+                                                        'preview-backup-operation.py'}, set())
 
 
 def relaxed_private_file(path, maximum):

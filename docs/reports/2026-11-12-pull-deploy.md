@@ -96,17 +96,26 @@ curl -s -X POST "https://tapi.bale.ai/bot<TOKEN>/sendMessage" -H 'Content-Type: 
 ## ۵) نصب (یک‌بار، با `sudo -i`)
 
 ```
-C=95fe6b8e01168a46bdcb69464e0665f37a7bb730; echo "exit=$?"
+C=38ad1707c176ab62ed084d4335dd2fc72e4b6e75; echo "exit=$?"
 mkdir -p /root/xennic-preview-pull-deploy; chmod 700 /root/xennic-preview-pull-deploy; echo "exit=$?"
 curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$C/scripts/preview-pull-deploy.py" -o /root/xennic-preview-pull-deploy/preview-pull-deploy.py; echo "exit=$?"
+curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$C/scripts/preview-ci-evidence.py" -o /root/xennic-preview-pull-deploy/preview-ci-evidence.py; echo "exit=$?"
 curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$C/scripts/install-preview-pull-deploy.py" -o /root/xennic-preview-pull-deploy/install-preview-pull-deploy.py; echo "exit=$?"
 python3 /root/xennic-preview-pull-deploy/install-preview-pull-deploy.py; echo "exit=$?"
-sudo /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run; echo "exit=$?"
+/usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run; echo "exit=$?"
 journalctl -u xennic-pull-deploy.service -n 30 --no-pager; echo "exit=$?"
 systemctl list-timers xennic-pull-deploy.timer --no-pager; echo "exit=$?"
 ```
 
-انتظار `--dry-run` در حالت عادی: `dry-run: waiting-approval` یا `dry-run: would deploy` یا `up-to-date` — هر سه یعنی مسیر GitHub خوانده شد و تصمیم گرفته شد، بدون تغییر روی سرور.
+**سه فایل لازم است، نه دو.** نخستین نسخهٔ این دستور فقط دو فایل را دانلود می‌کرد و پوشهٔ مبدأ هم ساخته نمی‌شد؛ نتیجه `curl: (23) Failure writing output to destination` بود. اکنون نصب‌کننده پوشه را نمی‌سازد (خودش باید وجود داشته باشد) ولی هر سه فایل را می‌خواهد:
+
+| فایل مبدأ | مقصد |
+| --- | --- |
+| `preview-pull-deploy.py` | `/usr/local/libexec/xennic-preview/ci-pull-deploy` (0755) |
+| `preview-ci-evidence.py` | `/usr/local/libexec/xennic-preview/preview-ci-evidence.py` (0644) |
+| `install-preview-pull-deploy.py` | فقط اجرا می‌شود |
+
+`preview-ci-evidence.py` در نصب قبلی helperها نبود؛ اگر ماژول نصب نشود، `ci-pull-deploy` هنگام اتصال artifact به run شکست می‌خورد. آزمون تازه‌ای در `tests/preview-pull-deploy.py` تضمین می‌کند هر ماژولی که deployer در زمان اجرا `load` می‌کند، یا در فهرست `REQUIRED` نصب‌کننده باشد یا خودش نصب شود.
 
 ## ۶) چرخهٔ روزمره پس از نصب
 
