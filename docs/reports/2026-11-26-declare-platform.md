@@ -99,10 +99,27 @@ python3 install-preview-pull-deploy.py
 
 ```bash
 /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run   # انتظار: waiting-approval
-/usr/local/libexec/xennic-preview/ci-pull-deploy             # پس از تأیید ردیف گذار
 systemctl list-timers xennic-pull-deploy.timer
-curl -fsS https://xennic.ir/health                          # انتظار: 200
-curl -fsS https://xennic.ir/platform | grep -o 'data-declare-embed' | head -1
+journalctl -u xennic-pull-deploy.service -n 30 --no-pager
 ```
 
-اگر timer از پیش نصب است، فقط گام ۳ لازم است. وضعیت پیش از این نشست: **نصب روی میزبان انجام نشده** (بلوک مالک بدون خروجی برگشت)، پس گام ۲ هنوز لازم است.
+**۴) تأیید ردیف گذار** (از رایانهٔ خودتان؛ این PR هیچ مهاجرت دیتابیسی ندارد، پس فهرست همان است)
+
+```bash
+./scripts/approve-transition.sh --run-id <run id> --migrations '["20261030_163225_baseline"]'
+```
+
+**۵) استقرار و بررسیِ همان چیزی که این PR می‌آورد**
+
+```bash
+curl -fsS https://xennic.ir/health                          # انتظار: 200
+curl -fsS https://xennic.ir/platform | grep -o 'data-declare-embed' | head -1
+curl -fsS -o /dev/null -w '%{http_code} %{size_download}\n' \
+  https://xennic.ir/_next/static/declare-platform/app.d01d2eda.js   # انتظار: 200 و 565037
+curl -fsS -o /dev/null -w '%{http_code}\n' \
+  https://xennic.ir/declare-platform/app.d01d2eda.js                # انتظار: 404 (کپی توسعه نباید منتشر باشد)
+curl -fsS https://xennic.ir/sitemap.xml | grep -c '/platform'        # انتظار: 1
+```
+
+اگر timer از پیش نصب است، فقط گام‌های ۳ تا ۵ لازم است. وضعیت پیش از این نشست: **نصب روی میزبان انجام نشده** (بلوک مالک بدون خروجی برگشت)، پس گام ۲ هنوز لازم است.
+
