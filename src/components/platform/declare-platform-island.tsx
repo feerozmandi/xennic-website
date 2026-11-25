@@ -18,8 +18,9 @@
  *      the file after a hash of its content, so a hardcoded name would rot on
  *      the first rebuild. `declare-apps/…/tools/manifest.mjs` records it.
  *   3. **The page owns the page.** The app paints only inside its box and does
- *      not touch the document's theme, scroll position or history. It asks for
- *      one thing — a theme change — and the site's own switch acts on it.
+ *      not touch the document's theme, scroll position or history. It follows
+ *      the site's theme instead of owning one, and it asks for exactly one
+ *      thing in return: that its figures travel with the request.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
