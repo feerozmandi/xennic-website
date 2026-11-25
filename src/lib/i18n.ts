@@ -141,7 +141,6 @@ const fa = {
   platformIsland: {
     hint: 'محاسبه‌گرها را می‌توانید همین‌جا اجرا کنید؛ نتیجه تخمین اولیه است.',
     load: 'اجرای محاسبه‌گر',
-    reload: 'اجرای دوباره',
     idle: 'محاسبه‌گر با رسیدن به این بخش بارگذاری می‌شود. اگر بارگذاری نشد، دکمهٔ بالا را بزنید.',
     loading: 'در حال آماده‌سازی محاسبه‌گر…',
     failed: 'محاسبه‌گر بارگذاری نشد. متن صفحه دست‌نخورده است؛ دوباره تلاش کنید یا از فرم تماس استفاده کنید.',
@@ -361,7 +360,6 @@ const en: Dictionary = {
   platformIsland: {
     hint: 'You can run the calculators here; the result is a first estimate.',
     load: 'Run the calculators',
-    reload: 'Run them again',
     idle: 'The calculator loads when this section comes into view. If it did not, use the button above.',
     loading: 'Getting the calculator ready…',
     failed: 'The calculator did not load. The page itself is fine — try again, or use the contact form.',

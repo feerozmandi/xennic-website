@@ -39,9 +39,6 @@ type HostMessage = { topic: string; payload?: PlatformRequest }
 
 type Phase = 'idle' | 'loading' | 'ready' | 'failed'
 
-/** Room reserved before the app exists, so the page does not jump under a thumb. */
-const MIN_HEIGHT = '520px'
-
 function currentTheme(): Theme {
   if (typeof document === 'undefined') return 'dark'
   return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
@@ -129,7 +126,14 @@ export function DeclarePlatformIsland({ locale = 'fa' }: { locale?: Locale }) {
     return () => observer.disconnect()
   }, [])
 
+  /**
+   * Start the app by hand.
+   *
+   * There is only ever one instance in the box: the button is gone once the
+   * app is running, so a second boot cannot stack a second panel on the first.
+   */
   const start = () => {
+    if (phase === 'ready') return
     bootedRef.current = false
     void boot()
   }
@@ -138,9 +142,11 @@ export function DeclarePlatformIsland({ locale = 'fa' }: { locale?: Locale }) {
     <div className="declare-island">
       <div className="declare-island__bar">
         <p className="declare-island__hint">{dict.hint}</p>
-        <button type="button" className="btn btn--glass" onClick={start} disabled={phase === 'loading'}>
-          <span>{phase === 'idle' ? dict.load : dict.reload}</span>
-        </button>
+        {phase === 'idle' && (
+          <button type="button" className="btn btn--glass" onClick={start}>
+            <span>{dict.load}</span>
+          </button>
+        )}
       </div>
 
       <div
@@ -148,7 +154,6 @@ export function DeclarePlatformIsland({ locale = 'fa' }: { locale?: Locale }) {
         className="declare-island__host"
         data-declare-embed
         data-declare-phase={phase}
-        style={{ minBlockSize: MIN_HEIGHT }}
       >
         {phase === 'failed' && (
           <div className="declare-island__fallback" role="alert">
