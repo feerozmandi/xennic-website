@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { ContactBand, Founder, Hero, Platform, Principles, Services } from '@/components/home/sections'
+import { BentoHero } from '@/components/home/hero-bento'
+import { ContactBand, Founder, Platform, Principles, Services } from '@/components/home/sections'
 import { buildEnglishHomeContent } from '@/lib/i18n-content'
 import { pageMetadata } from '@/lib/seo'
 
@@ -22,7 +23,7 @@ export default function EnglishHome() {
   const content = buildEnglishHomeContent()
   return (
     <>
-      <Hero content={content.hero} locale="en" />
+      <BentoHero content={content.hero} locale="en" />
       <Principles pillars={content.pillars} locale="en" />
       <Services services={content.services} locale="en" />
       <Founder founder={content.founder} locale="en" />

@@ -20,6 +20,12 @@ private-fonts/
 *.[oO][tT][fF]
 *.[eE][oO][tT]
 
+# Vazirmatn is SIL Open Font License 1.1 and ships with the Persian interface.
+# The blanket rule above keeps licensed faces (IRANSans) out of this repository
+# and must keep applying to every other font file: this exception is one exact
+# name, and the license text travels beside it.
+!public/fonts/vazirmatn-variable.woff2
+
 !.env.preview.example
 
 # Python bytecode

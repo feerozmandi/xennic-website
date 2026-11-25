@@ -79,15 +79,26 @@ const fa = {
   legal: { privacy: 'حریم خصوصی', terms: 'شرایط استفاده', cookies: 'کوکی‌ها' },
   hero: {
     note: 'اطلاعات تماس رسمی فقط پس از تأیید سازمان منتشر می‌شود؛ تا آن زمان درخواست‌ها از صفحهٔ تماس پیگیری می‌شوند.',
-    factsLabel: 'نگاه کلی در یک نگاه',
-    carouselLabel: 'معرفی شرکت در سه پرده',
-    previous: 'پردهٔ پیشین',
-    next: 'پردهٔ بعدی',
-    pause: 'توقف پخش خودکار',
-    play: 'شروع پخش خودکار',
-    slideOf: (index: number, total: number) => `پردهٔ ${index} از ${total}`,
-    slideChange: (index: number, total: number, title: string) => `پردهٔ ${index} از ${total}: ${title}`,
-    goTo: (index: number) => `رفتن به پردهٔ ${index}`,
+    primaryCta: 'ثبت درخواست بررسی فنی پروژه',
+    platformCta: 'آشنایی با Xennic Platform',
+    diagramNote:
+      'تصویر بالا یک شماتیک فنی از مسیر انرژی است (خورشیدی، توزیع ۲۰ کیلوولت و تابلو صنعتی)؛ عکس پروژه یا کارفرمای مشخصی نیست.',
+    figuresLabel: 'شاخص‌های اعتبار',
+    diagram: {
+      caption:
+        'شماتیک یک مسیر انرژی: آرایهٔ خورشیدی و توزیع ۲۰ کیلوولت به یک تابلوی ۴۰۰ ولت می‌رسند و لایهٔ تحلیل، اندازه‌گیری‌ها را می‌خواند؛ نه پروژهٔ مشخصی.',
+      alt:
+        'شماتیک: آرایهٔ خورشیدی از راه اینورتر و ترکیب‌گر، و توزیع ۲۰ کیلوولت از راه ترانس، به تابلوی برق صنعتی ۴۰۰ ولت می‌رسند؛ بانک خازنی روی همان شینه جبران می‌کند و لایهٔ تحلیل از یک شاخهٔ اندازه‌گیری، ولتاژ و توان را می‌خواند.',
+      grid: 'توزیع ۲۰ کیلوولت',
+      transformer: 'ترانس ۲۰ / ۴۰۰ ولت',
+      analytics: 'تحلیل Xennic',
+      capacitor: 'بانک خازنی',
+      inverter: 'اینورتر',
+      array: 'آرایهٔ خورشیدی',
+      panel: 'تابلو ۴۰۰ ولت',
+      unitCap: 'kVAr',
+      unitInverter: 'AC',
+    },
   },
   principles: {
     eyebrow: 'اصول کاری',
@@ -254,15 +265,26 @@ const en: Dictionary = {
   legal: { privacy: 'Privacy', terms: 'Terms of use', cookies: 'Cookies' },
   hero: {
     note: 'The approved contact channels are published on the contact page, where you can also send a request.',
-    factsLabel: 'Overview at a glance',
-    carouselLabel: 'The company in three slides',
-    previous: 'Previous slide',
-    next: 'Next slide',
-    pause: 'Pause the automatic slideshow',
-    play: 'Start the automatic slideshow',
-    slideOf: (index: number, total: number) => `Slide ${index} of ${total}`,
-    slideChange: (index: number, total: number, title: string) => `Slide ${index} of ${total}: ${title}`,
-    goTo: (index: number) => `Go to slide ${index}`,
+    primaryCta: 'Request a technical review',
+    platformCta: 'About Xennic Platform',
+    diagramNote:
+      'The drawing above is a technical schematic of one energy path — solar, a 20 kV distribution board and an industrial panel. It is not a photograph of a project or a client.',
+    figuresLabel: 'Credentials at a glance',
+    diagram: {
+      caption:
+        'One energy path, drawn: a solar array and the 20 kV feeder meet at a 400 V panel, with metering read by the analysis layer. It illustrates a system, not a specific project.',
+      alt:
+        'Schematic: a rooftop solar array feeds the panel through an inverter and combiner; the 20 kV feeder steps down through a transformer to the same 400 V industrial panel. A capacitor bank compensates on that bus, and the analysis layer reads voltage and power from a measurement tap.',
+      grid: '20 kV feeder',
+      transformer: '20 / 400 V transformer',
+      analytics: 'Xennic analytics',
+      capacitor: 'Capacitors',
+      inverter: 'Inverter',
+      array: 'Solar array',
+      panel: '400 V panel',
+      unitCap: 'kVAr',
+      unitInverter: 'AC',
+    },
   },
   principles: {
     eyebrow: 'How we work',

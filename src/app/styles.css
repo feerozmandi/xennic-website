@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
 /*
+ * Persian face.
+ * -------------
+ * Vazirmatn (variable, SIL OFL 1.1 — `public/fonts/Vazirmatn-OFL.txt`) is the
+ * one face this repository may ship: IRANSans stays first in `--font-fa` and is
+ * used only when the licensed files are present on the host. `ss01` renders the
+ * Persian digits the approved copy already uses, so figures match their text
+ * instead of falling back to Latin shapes.
+ */
+@font-face {
+  font-family: "Vazirmatn";
+  src: url("/fonts/vazirmatn-variable.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
  * Xennic design tokens.
  * This file is the single source of truth for the visual language: colours,
  * spacing rhythm, glass surfaces and motion. Components must not invent
@@ -146,6 +163,7 @@
   --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   /* IRANSans is used only when a licensed webfont is present; never shipped in Git. */
   --font-fa: "IRANSansX", "IRANSans", "Vazirmatn", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+  --font-feature-fa: "ss01" 1;
 }
 
 /*
@@ -280,6 +298,7 @@ body {
   background-color: var(--page-bg);
   color: var(--text);
   font-family: var(--font-fa);
+  font-feature-settings: var(--font-feature-fa);
   line-height: 1.75;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -588,78 +607,44 @@ html[dir='ltr'] .btn__arrow { display: inline-block; transform: scaleX(-1); }
   .brand__sub { display: none; }
 }
 
-/* ---------- hero: three-slide cover ---------- */
-/* The hero is a photographic cover, not a card: the picture runs edge to edge
- * and the copy sits on a scrim so the type keeps its contrast in both themes.
- * The scrim is direction-aware — it is deepest on the side the text starts
- * from — so RTL and LTR read the same way without a mirrored layout hack. */
-.hero {
+/* ---------- hero: Bento Grid 2.0 ---------- */
+/* The hero is a grid of glass panels, not a slide deck: the brand message, a
+ * living schematic of the energy path, and the four credit figures are on
+ * screen at once, so nothing important waits for an animation to arrive.
+ *
+ * Desktop: copy (2fr) beside the diagram (1.15fr), four figures across the
+ * full width below. Tablet: the diagram moves under the copy. Phone: one
+ * column, in reading order, with the figures two-up. Every step is a
+ * `grid-template` change — no absolute positioning, so nothing can overflow. */
+.bento-hero {
   position: relative;
-  isolation: isolate;
-  padding-block-end: clamp(1.5rem, 3vw, 2.5rem);
-  border-block-end: 1px solid var(--glass-border-soft);
-  --hero-flip: 1;
-  --hero-side: left;
+  padding-block: clamp(2rem, 5vw, 3.5rem) clamp(2rem, 4vw, 3rem);
 }
-/* The photograph is composed with its dense structure (poles, cabinet) on one
- * side. It is flipped so that side faces *away* from the copy in either
- * direction, and the scrim is deepest under the copy itself. */
-html[dir='rtl'] .hero { --hero-flip: 1; --hero-side: left; }
-html[dir='ltr'] .hero { --hero-flip: -1; --hero-side: right; }
-
-.hero__slides {
-  position: relative;
-  min-block-size: clamp(29rem, 68vh, 42rem);
-  overflow: hidden;
-}
-.hero__slide {
-  position: absolute;
-  inset: 0;
+.bento-hero__grid {
   display: grid;
-  align-content: end;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 800ms var(--ease-out), visibility 800ms;
+  gap: clamp(0.9rem, 1.6vw, 1.25rem);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
 }
-.hero__slide[data-active='true'] { opacity: 1; visibility: visible; }
-
-.hero__art { position: absolute; inset: 0; overflow: hidden; }
-.hero__art-image {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-  transform: scaleX(var(--hero-flip)) scale(1.02);
-  transform-origin: center;
+@media (min-width: 780px) {
+  .bento-hero__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .bento-hero__copy { grid-column: 1 / -1; }
 }
-.hero__slide[data-active='true'] .hero__art-image {
-  animation: hero-drift 12s var(--ease-out) both;
-}
-/* Two layers: the side scrim that carries the type, and a soft foot that hands
- * the photograph over to the page surface instead of cutting it with a line. */
-.hero__scrim {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(to var(--hero-side), var(--hero-scrim-a) 0%, var(--hero-scrim-b) 42%, var(--hero-scrim-c) 78%, transparent 100%),
-    linear-gradient(to top, var(--hero-veil-end) 0%, transparent 42%);
+@media (min-width: 1060px) {
+  .bento-hero__grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+  .bento-hero__copy { grid-column: auto; }
+  .bento-hero__figures { grid-column: 1 / -1; }
 }
 
-/* On a phone the copy covers the full width across the foot of the picture, so
- * the side scrim cannot protect it: the gradient runs upwards instead. */
-@media (max-width: 899px) {
-  .hero__scrim {
-    /* The copy occupies the lower half on a phone, so the scrim is driven by
-     * height, not by side: near-solid under the type, clearing towards the top
-     * of the picture where it is only decoration. */
-    background:
-      linear-gradient(to top, var(--hero-veil-end) 0%, var(--hero-scrim-a) 44%, var(--hero-scrim-b) 78%, var(--hero-scrim-c) 100%);
-  }
+.bento-hero__copy {
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+  justify-items: start;
+  border-radius: var(--radius-lg);
 }
-.hero__layout { position: relative; padding-block: clamp(3.5rem, 8vw, 6.5rem) clamp(2.5rem, 5vw, 3.5rem); display: grid; }
-.hero__copy { display: grid; gap: 1rem; justify-items: start; max-inline-size: 44rem; }
-.hero__eyebrow {
+.bento-hero__eyebrow {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -669,129 +654,125 @@ html[dir='ltr'] .hero { --hero-flip: -1; --hero-side: right; }
   border-radius: 999px;
   background: var(--hero-chip);
 }
-.hero h1,
-.hero__title {
-  font-size: clamp(1.85rem, 4.6vw, 3.35rem);
+.bento-hero__title {
+  font-size: clamp(1.7rem, 3.6vw, 2.85rem);
   font-weight: 900;
-  line-height: 1.24;
-  max-width: 24ch;
-  color: var(--hero-ink);
+  line-height: 1.26;
+  color: var(--text);
   text-wrap: balance;
+  max-width: 26ch;
   margin: 0;
 }
-.hero__summary {
-  font-size: clamp(0.98rem, 1.3vw, 1.12rem);
+.bento-hero__summary {
+  font-size: clamp(0.96rem, 1.15vw, 1.08rem);
   line-height: 1.85;
-  color: var(--hero-ink-muted);
-  max-width: 52ch;
+  color: var(--text-muted);
+  max-width: 54ch;
 }
-.hero__actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-block-start: 0.3rem; }
-.hero__caption {
+.bento-hero__actions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-block-start: 0.35rem; }
+.bento-hero__note {
   font-size: 0.74rem;
-  color: var(--hero-ink-muted);
-  opacity: 0.85;
-  max-inline-size: 46ch;
-  margin-block-start: 0.25rem;
-}
-
-/* The copy of the incoming slide rises; the outgoing one just fades, so a
- * change never looks like a jump. */
-.hero__slide[data-active='true'] .hero__copy > * { animation: hero-rise 720ms var(--ease-out) both; }
-.hero__slide[data-active='true'] .hero__copy > *:nth-child(2) { animation-delay: 60ms; }
-.hero__slide[data-active='true'] .hero__copy > *:nth-child(3) { animation-delay: 120ms; }
-.hero__slide[data-active='true'] .hero__copy > *:nth-child(4) { animation-delay: 180ms; }
-.hero__slide[data-active='true'] .hero__copy > *:nth-child(5) { animation-delay: 230ms; }
-
-@keyframes hero-drift {
-  from { transform: scaleX(var(--hero-flip)) scale(1.02); }
-  to { transform: scaleX(var(--hero-flip)) scale(1.075); }
-}
-@keyframes hero-rise {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Facts, note and controls: one quiet band under the picture. */
-.hero__strip {
-  display: grid;
-  gap: 0.9rem 1.5rem;
-  align-items: center;
-  margin-block-start: clamp(1rem, 2.5vw, 1.6rem);
-  padding-block-start: clamp(1rem, 2vw, 1.35rem);
-  border-block-start: 1px solid var(--glass-border-soft);
-}
-.hero__facts { display: flex; flex-wrap: wrap; gap: 0.35rem 1.2rem; margin: 0; padding: 0; }
-.hero__facts > div { display: grid; gap: 0.1rem; position: relative; }
-.hero__facts > div + div { padding-inline-start: 1.2rem; }
-.hero__facts > div + div::before {
-  content: "";
-  position: absolute;
-  inset-block: 0.15rem;
-  inset-inline-start: 0;
-  inline-size: 1px;
-  background: var(--glass-border);
-}
-.hero__facts dd { order: -1; margin: 0; font-size: clamp(1rem, 1.3vw, 1.18rem); font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
-.hero__facts dt { font-size: 0.7rem; color: var(--text-muted); }
-.hero__note {
-  font-size: 0.75rem;
   line-height: 1.7;
   color: var(--text-muted);
-  max-inline-size: 46ch;
+  max-inline-size: 48ch;
   border-inline-start: 2px solid var(--accent-soft);
-  padding-inline-start: 0.7rem;
-  margin: 0;
-}
-@media (min-width: 900px) {
-  .hero__strip { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto; }
-  .hero__note { border-inline-start: 0; padding-inline-start: 0; }
+  padding-inline-start: 0.6rem;
 }
 
-/* Controls: every glyph is a real button with a name and a 44 px target. */
-.hero__controls { display: flex; align-items: center; gap: 0.4rem; }
-.hero__arrow,
-.hero__play {
-  display: grid;
-  place-items: center;
-  inline-size: 2.75rem;
-  block-size: 2.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--glass-border-soft);
-  background: var(--footer-chip);
-  color: var(--text);
-  transition: border-color 180ms var(--ease-out), color 180ms var(--ease-out), transform 180ms var(--ease-out);
-}
-.hero__arrow:hover,
-.hero__play:hover { border-color: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
-.hero__arrow svg,
-.hero__play svg { inline-size: 1.15rem; block-size: 1.15rem; }
-/* In RTL the arrows point the other way, because "previous" is to the right. */
-html[dir='rtl'] .hero__controls { flex-direction: row-reverse; }
-.hero__dots { display: flex; align-items: center; gap: 0.3rem; padding-inline: 0.25rem; }
-.hero__dot {
-  inline-size: 0.55rem;
-  block-size: 0.55rem;
-  padding: 0;
-  border-radius: 999px;
-  border: 0;
-  background: var(--glass-border);
-  /* The visible dot stays small; the tappable area is 44 px via the pseudo. */
+.bento-hero__art {
   position: relative;
-  transition: inline-size 220ms var(--ease-out), background-color 220ms var(--ease-out);
-}
-.hero__dot::after { content: ""; position: absolute; inset: -1.15rem -0.5rem; }
-.hero__dot[data-active='true'] { inline-size: 1.5rem; background: var(--accent); }
-
-@media (max-width: 620px) {
-  .hero__slides { min-block-size: clamp(26rem, 74vh, 34rem); }
-  .hero__controls { justify-content: center; inline-size: 100%; }
+  padding: clamp(0.6rem, 1.4vw, 1rem);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: grid;
+  align-items: center;
+  min-inline-size: 0;
 }
 
+.bento-hero__figures {
+  display: grid;
+  gap: clamp(0.6rem, 1.2vw, 0.9rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 620px) and (max-width: 1059px) {
+  .bento-hero__figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1060px) {
+  .bento-hero__figures { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.bento-hero__figure {
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
+  min-inline-size: 0;
+  /* The four cards are one row on a desktop: the tallest label decides the
+   * height and the rest fill it, so the row reads as one band. */
+  min-block-size: 100%;
+}
+.bento-hero__figure strong {
+  font-size: clamp(1.02rem, 1.45vw, 1.28rem);
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+.bento-hero__figure span { font-size: 0.76rem; line-height: 1.65; color: var(--text-muted); text-wrap: pretty; }
+.bento-hero__figure a { color: var(--accent); text-underline-offset: 3px; text-decoration: underline; }
+.bento-hero__figure a:hover { color: var(--gold-2); }
+
+/* ---------- the living single-line diagram ---------- */
+/* Every label sits inside its own rounded tag, so text and wire can never
+ * collide and the drawing survives translation and any column width.
+ *
+ * Strokes are solid colours, not gradients: a gradient on a zero-width vertical
+ * path has no bounding box and paints nothing, which is how an "invisible"
+ * circuit happens. The flow lives in `stroke-dashoffset`, which needs no paint
+ * server and stops cleanly under `prefers-reduced-motion`. */
+.sld { margin: 0; display: grid; gap: 0.55rem; min-inline-size: 0; }
+.sld__canvas { inline-size: 100%; block-size: auto; display: block; }
+.sld__grid line { stroke: var(--diagram-line); stroke-width: 1; }
+.sld__rail { fill: none; stroke: var(--teal); stroke-width: 2.2; stroke-linecap: round; opacity: 0.45; }
+.sld__rail--thin { stroke-width: 1.3; stroke-dasharray: 3 5; opacity: 0.4; }
+.sld__flow {
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 16 104;
+  animation: sld-flow 5s linear infinite;
+}
+.sld__flow--thin { stroke-width: 1.5; stroke-dasharray: 9 66; animation-duration: 7s; }
+.sld__flow--gold { stroke: var(--gold); }
+.sld__flow--cyan { stroke: var(--teal); }
+.sld__tag rect { fill: var(--surface-d); stroke: var(--glass-border); stroke-width: 1.2; }
+.sld__tag--accent rect { stroke: var(--teal); }
+.sld__bus { stroke: var(--teal); stroke-width: 3.5; stroke-linecap: round; opacity: 0.9; }
+.sld__dot { fill: var(--teal); }
+.sld__coil { fill: none; stroke: var(--text-muted); stroke-width: 1.8; opacity: 0.9; }
+.sld__way { fill: none; stroke: var(--gold); stroke-width: 1.8; opacity: 0.85; }
+.sld__module rect, .sld__module line { fill: none; stroke: var(--gold); stroke-width: 1.4; opacity: 0.9; }
+.sld__plate { stroke: var(--teal); stroke-width: 3; stroke-linecap: round; }
+.sld__wave { fill: none; stroke: var(--gold); stroke-width: 2; stroke-linecap: round; }
+.sld__ray { fill: none; stroke: var(--gold); stroke-width: 1.4; stroke-dasharray: 2 7; opacity: 0.6; }
+.sld__sun-glow { fill: url(#sld-sun); }
+.sld__sun-core { fill: var(--gold); }
+.sld__ray-line { stroke: var(--gold); stroke-width: 2; stroke-linecap: round; opacity: 0.85; }
+.sld__bars rect { fill: var(--teal); }
+.sld__label { font-size: 15px; font-weight: 700; fill: var(--text); }
+.sld__label--small { font-size: 13px; font-weight: 600; }
+.sld__unit { font-size: 11px; font-weight: 600; fill: var(--text-muted); letter-spacing: 0.02em; }
+.sld__caption { font-size: 0.72rem; line-height: 1.7; color: var(--text-muted); }
+
+@keyframes sld-flow {
+  from { stroke-dashoffset: 120; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* The drawing keeps every wire and loses only the travelling light, so a
+ * reduced-motion reader sees the same system at rest. */
 @media (prefers-reduced-motion: reduce) {
-  .hero__slide { transition: none; }
-  .hero__slide[data-active='true'] .hero__art-image,
-  .hero__slide[data-active='true'] .hero__copy > * { animation: none; }
-  .hero__arrow:hover, .hero__play:hover { transform: none; }
+  .sld__flow { animation: none; stroke-dasharray: none; opacity: 0.55; }
 }
 
 /* ---------- single-line diagram backdrop ---------- */

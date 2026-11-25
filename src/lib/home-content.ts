@@ -60,6 +60,30 @@ export function extractBlocks(content: unknown): Block[] {
 
 export const FOUNDER_NAME = 'احمد فیروزمندی'
 
+export type BentoFigure = { id: string; value: string; label: string; href?: string }
+
+/**
+ * The four figures in the hero grid.
+ *
+ * Each one is a restatement of approved copy — the founder's four decades of
+ * practical experience, the standards the design work cites, the number of
+ * approved service areas, and the analysis layer's honest "not published yet"
+ * status. No new claim: the count is derived from the approved service list, so
+ * adding a service updates the figure instead of making it wrong, and the
+ * platform card links to the section that states its status rather than
+ * promising a capability.
+ */
+export function BENTO_FIGURES(locale: 'fa' | 'en', serviceCount = 6): BentoFigure[] {
+  const fa = locale === 'fa'
+  const digits = (value: number) => (fa ? faNumber(value) : String(value))
+  return [
+    { id: 'experience', value: fa ? '+۴ دهه' : '40+ years', label: fa ? 'تجربهٔ عملی مؤسس در صنعت برق و خط گرم' : 'The founder’s hands-on experience in power and live-line work' },
+    { id: 'standards', value: fa ? 'IEC / مبحث ۱۳' : 'IEC / Section 13', label: fa ? 'مبنای طراحی ارتینگ، صاعقه‌گیر و تأسیسات' : 'The basis for earthing, lightning protection and building services' },
+    { id: 'services', value: fa ? `${digits(serviceCount)} حوزه` : `${serviceCount} areas`, label: fa ? 'حوزهٔ خدمت تخصصی، از شبکهٔ توزیع تا انرژی و آموزش' : 'Specialist service areas, from distribution networks to energy and training' },
+    { id: 'platform', value: 'Xennic AI', label: fa ? 'لایهٔ تحلیل و محاسبه‌گر مهندسی؛ پیش‌نمایش، هنوز منتشر نشده' : 'The analysis layer and engineering calculators: a preview, not yet published', href: '/platform' },
+  ]
+}
+
 /** Locale-independent Persian digits (keeps server and client markup identical). */
 export function faNumber(value: number): string {
   return String(value).replace(/[0-9]/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)])

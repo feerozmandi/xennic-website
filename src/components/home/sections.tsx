@@ -3,8 +3,6 @@ import Link from 'next/link'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import { serviceImage } from '@/lib/imagery'
-import { heroSlides } from '@/lib/hero-slides'
-import { HeroCarousel } from './hero-carousel'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
 
@@ -18,10 +16,6 @@ const principleIndex = (index: number, locale: Locale) =>
  * from the reviewed translation) and takes the interface strings from the
  * dictionary, so the same markup renders both editions.
  */
-
-export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero']; locale?: Locale }) {
-  return <HeroCarousel slides={heroSlides(locale)} facts={content.facts} locale={locale} />
-}
 
 export function Principles({ pillars, locale = 'fa' }: { pillars: HomeContent['pillars']; locale?: Locale }) {
   const dict = getDictionary(locale)
