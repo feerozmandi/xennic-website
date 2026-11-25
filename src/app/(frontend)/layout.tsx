@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { SiteDocument } from '@/components/site'
+import { THEME_COLORS } from '@/lib/structured-data'
 import { SITE_URL } from '@/lib/seo'
 import '../styles.css'
 
@@ -34,8 +35,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'dark light',
   themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#071120' },
-    { media: '(prefers-color-scheme: light)', color: '#f4f7fb' },
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLORS.dark },
+    { media: '(prefers-color-scheme: light)', color: THEME_COLORS.light },
   ],
 }
 

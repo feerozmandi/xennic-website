@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3000'
@@ -52,9 +53,78 @@ test('homepage introduces the approved pillars, track record and platform scope'
   const platform = html.match(/<section\b[^>]*data-testid="platform-intro"[^>]*>([\s\S]*?)<\/section>/)?.[1]
   assert.ok(platform, 'platform section is missing')
   assert.ok(platform.includes('Xennic Platform'))
-  assert.ok(platform.includes('به‌زودی'))
-  // The platform is not live: the section must not offer a link or button into it.
-  assert.doesNotMatch(platform, /<(?:a|button)\b/i)
+  assert.ok(platform.includes('محاسبه‌گرهای مهندسی'), 'the platform section states what the calculators are')
+  // It is published: the section now offers one link into it, and no "soon" promise.
+  assert.match(platform, /href="\/platform"/)
+  assert.ok(!platform.includes('به‌زودی'), 'the platform is live; the coming-soon badge must be gone')
+})
+
+test('the platform page describes its three tools and hosts the Declare island', async () => {
+  for (const [path, lang, title] of [
+    ['/platform', 'fa', 'محاسبه‌گرهای مهندسی Xennic'],
+    ['/en/platform', 'en', 'Xennic engineering calculators'],
+  ]) {
+    const response = await fetch(`${base}${path}`)
+    assert.equal(response.status, 200, path)
+    const html = await response.text()
+    // One h1, carrying the page's own title.
+    assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${path}: exactly one h1`)
+    assert.ok(html.includes(title), `${path}: page title`)
+    // The three tools are server-rendered text, so the page is useful — and
+    // indexable — before the program exists.
+    assert.ok((html.match(/class="tool-list__item"/g) ?? []).length === 3, `${path}: three tools`)
+    // The island is a marked, sized box: the app fills the element, not the page.
+    assert.match(html, /data-declare-embed/)
+    assert.match(html, /declare-island__host/)
+    // It boots nothing until it is asked: no bundle is referenced in the markup.
+    assert.ok(!/declare-platform\/app\.[0-9a-f]+\.js/.test(html), `${path}: no eager bundle reference`)
+    // JSON-LD: breadcrumb + the application, from approved facts only.
+    assert.ok(html.includes('"@type":"SoftwareApplication"'), `${path}: application JSON-LD`)
+    assert.ok(html.includes('"@type":"BreadcrumbList"'), `${path}: breadcrumb JSON-LD`)
+    assert.match(html, new RegExp(`lang="${lang}"`))
+  }
+})
+
+test('the Declare bundle the island asks for exists and is a prebuilt ES module', async () => {
+  // The manifest is a record of the build, not a page: it lives beside the
+  // program it names, in the repository.
+  const manifest = JSON.parse(
+    readFileSync(new URL('../declare-apps/xennic-platform/dist/manifest.json', import.meta.url), 'utf8'),
+  )
+  assert.match(manifest.entry, /^app\.[0-9a-f]+\.js$/)
+
+  // The island asks for the program on the path the public edge already
+  // serves. A path outside that list is answered with a sign-in redirect, so
+  // the program would never arrive on the live site.
+  //
+  // The development server has no build output and serves the program from
+  // `public/` instead, so both are checked and one of them must answer.
+  const built = readFileSync(
+    new URL(`../declare-apps/xennic-platform/dist/${manifest.entry}`, import.meta.url),
+    'utf8',
+  )
+  const staticPath = `/_next/static/declare-platform/${manifest.entry}`
+  const devPath = `/declare-platform/${manifest.entry}`
+  const staticResponse = await fetch(`${base}${staticPath}`)
+  const devResponse = await fetch(`${base}${devPath}`)
+  assert.ok(
+    staticResponse.status === 200 || devResponse.status === 200,
+    `the bundle ${manifest.entry} is served at neither ${staticPath} nor ${devPath}`,
+  )
+  const source = staticResponse.status === 200 ? await staticResponse.text() : await devResponse.text()
+  // A precompiled program: it exports `boot` as its default and carries no
+  // WebAssembly, so it needs neither a compiler nor a CSP allowance to run.
+  assert.match(source, /export\{[^}]*as default\}/)
+  assert.ok(!source.includes('.wasm'), 'the JavaScript kernel build carries no WebAssembly')
+  assert.ok(source.length > 100_000, 'the program is in the bundle, not fetched later')
+  // The same bytes as the artifact in the repository: the published program is
+  // the program, not another one.
+  assert.equal(source, built, 'the published program and the built one are the same file')
+
+  // Which of the two paths is right depends on what is running: the build
+  // publishes the program on the edge's path, the development server on its
+  // own. A deployment has to use the first — that is asserted where a
+  // deployment is actually running, in `tests/preview-production.mjs`.
 })
 
 test('the contact page publishes only owner-confirmed channels and a real form', async () => {
@@ -166,7 +236,7 @@ test('content pages carry one H1, approved framing and no placeholder text', asy
 })
 
 test('SEO policy: published pages are indexable, unpublished and private ones are not', async () => {
-  const indexable = ['/', '/company', '/company/team', '/services', '/services/energy-audit', '/track-record', '/contact']
+  const indexable = ['/', '/company', '/company/team', '/services', '/services/energy-audit', '/track-record', '/platform', '/contact']
   for (const path of indexable) {
     const html = await (await fetch(`${base}${path}`)).text()
     assert.ok(!/<meta name="robots"[^>]*noindex/.test(html), `${path}: must stay indexable`)
@@ -177,7 +247,7 @@ test('SEO policy: published pages are indexable, unpublished and private ones ar
   }
 
   // Pages that are linked but not approved yet are served with noindex.
-  for (const path of ['/knowledge', '/platform', '/privacy', '/tools']) {
+  for (const path of ['/knowledge', '/privacy', '/tools']) {
     const html = await (await fetch(`${base}${path}`)).text()
     assert.match(html, /<meta name="robots" content="noindex, nofollow"/, `${path}: noindex`)
   }
@@ -245,7 +315,7 @@ test('the English edition is a separate, correctly declared language tree', asyn
   assert.match(persianContact, /href="\/en\/contact"/)
 
   // Unpublished English pages stay out of the index, and unknown ones are 404.
-  for (const path of ['/en/knowledge', '/en/platform', '/en/privacy']) {
+  for (const path of ['/en/knowledge', '/en/privacy']) {
     const html = await (await fetch(`${base}${path}`)).text()
     assert.match(html, /<meta name="robots" content="noindex, nofollow"/, `${path}: noindex`)
   }
@@ -259,4 +329,7 @@ test('the English edition is a separate, correctly declared language tree', asyn
   assert.ok(sitemap.includes('https://xennic.ir/en/contact'))
   assert.ok(sitemap.includes('hreflang="en" href="https://xennic.ir/en/contact"'))
   assert.ok(!sitemap.includes('/en/knowledge'))
+  // The platform page is published now, in both languages.
+  assert.ok(sitemap.includes('https://xennic.ir/platform'))
+  assert.ok(sitemap.includes('https://xennic.ir/en/platform'))
 })

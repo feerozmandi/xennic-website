@@ -1,0 +1,379 @@
+/*
+# Xennic Platform — the app
+#
+# The island the Next.js page boots. Read `parts.declare` first for the palette
+# and the small views; this file is the model (the formulas, as methods), where
+# the user is (`tab`, and one attribute per input), and the three panels.
+#
+# Language of the interface is Persian, so the App states `direction = rtl` and
+# `language = "fa"` once, and every run below follows.
+*/
+include [ "parts.declare" ]
+
+App [
+    appName = "Xennic Platform",
+    language = "fa",
+    direction = rtl,
+    width = { Math.max(320, app.hostWidth) },
+    theme = { app.dark ? Xennic : XennicLight },
+    fill = { provided("theme").background },
+    textColor = { provided("theme").text },
+    fontFamily = { [app.vazir, "IRANSans", "Tahoma", "sans-serif"] },
+    padding = [0, 0, 0, 0],
+
+    // ── The face ────────────────────────────────────────────────────────────
+    // The same file the site loads. `wait` holds the first paint briefly so the
+    // numbers do not reflow from a fallback face under the reader's eyes.
+    vazir: Font [ wait = 300,
+        FontFace [ src = "/fonts/vazirmatn-variable.woff2", weight = range(100, 900) ]
+        ],
+
+    // ── Assumptions, as data ────────────────────────────────────────────────
+    // One row per province. `yieldPerKwp` is what one installed kilowatt-peak
+    // produces in a year here, and `sunHours` is the peak-sun figure the area
+    // rule uses. Both are planning values for a first estimate, not measured
+    // yield from a Xennic plant: the panel says so and no client figure is
+    // implied. Editing a row changes every number below that reads it.
+    assumptions: Dataset [ schema = [ provinces[]: Province ] ] {
+        { "provinces": [
+            { "id": "qom", "name": "قم", "yieldPerKwp": 1.62, "sunHours": 5.2 },
+            { "id": "tehran", "name": "تهران", "yieldPerKwp": 1.55, "sunHours": 5.0 },
+            { "id": "isfahan", "name": "اصفهان", "yieldPerKwp": 1.72, "sunHours": 5.5 },
+            { "id": "mazandaran", "name": "مازندران", "yieldPerKwp": 1.35, "sunHours": 4.4 }
+            ] }
+        },
+
+    // ── Where the user is ───────────────────────────────────────────────────
+    // The page owns the theme; the island follows it. `hostProvided` is the
+    // read-only side of the boundary — the page writes it with
+    // `tenant.provide("dark", …)`, and everything reading it re-derives.
+    dark: boolean = { app.hostProvided("dark", false) },
+    tab: string = "pfc",
+
+    // Tool 1 — power factor correction, at the site's 400 V bus.
+    loadKw: number = 250,
+    cosNow: number = 0.78,
+    cosTarget: number = 0.95,
+    bankStep: number = 25,
+
+    // Tool 2 — solar estimate.
+    provinceId: string = "qom",
+    roofArea: number = 1200,
+    demandKw: number = 200,
+    performanceRatio: number = 0.8,
+
+    // Tool 3 — triage.
+    facts: Dataset [ schema = [ items[]: SiteFact ] ] {
+        { "items": [
+            { "id": "metering", "label": "مصرف هر انشعاب به‌تفکیک اندازه‌گیری می‌شود", "weight": 1, "action": "نصب کنتور تفکیکی و ثبت پروفایل بار" },
+            { "id": "reactive", "label": "ضریب توان زیر ۰٫۹ است", "weight": 3, "action": "اصلاح ضریب توان با بانک خازنی مرحله‌ای" },
+            { "id": "lighting", "label": "روشنایی قدیمی یا هالوژنی است", "weight": 2, "action": "جایگزینی روشنایی با LED و کنترل روشنایی" },
+            { "id": "motors", "label": "موتورها با درایو کنترل نمی‌شوند", "weight": 2, "action": "بررسی درایو برای بارهای متغیر و پرمصرف" },
+            { "id": "earthing", "label": "ارتینگ و صاعقه‌گیر بازبینی نشده است", "weight": 3, "action": "بازبینی ارتینگ و صاعقه‌گیر بر پایهٔ IEC 62305" },
+            { "id": "tariff", "label": "الگوی مصرف با تعرفهٔ فعلی هم‌خوان نیست", "weight": 1, "action": "بازچینش بار و بررسی تعرفه و دیماند" }
+            ] }
+        },
+    checked: Dataset { { "ids": [] } },
+    checkedCount: number = { app.checked.value.ids.length },
+
+    // The priority list is computed, and a view's `datapath` may only point at
+    // declared data — so the computation lands in a derived dataset and the
+    // rows read that (guide: data — derived datasets).
+    priorityList: Dataset [ schema = [ items[]: SiteFact ], contents = { { items: app.priorities() } } ],
+
+    // ── The formulas, as methods ────────────────────────────────────────────
+    // A method is read through by the compiler, so a constraint that calls one
+    // depends on what the method reads — that is why these are methods and not
+    // script functions.
+
+    /** Reactive power a bank must supply: Qc = P * (tan φ1 − tan φ2), kW→kVAr. */
+    bankKvar() -> number {
+        const p = this.loadKw
+        const now = Math.min(1, Math.max(0.05, this.cosNow))
+        const target = Math.min(1, Math.max(now, this.cosTarget))
+        const t1 = Math.tan(Math.acos(now))
+        const t2 = Math.tan(Math.acos(target))
+        return Math.max(0, p * (t1 - t2))
+        },
+
+    /** The same figure rounded up to whole steps of the switchgear. */
+    bankRounded() -> number {
+        const step = Math.max(1, this.bankStep)
+        return Math.ceil(this.bankKvar() / step) * step
+        },
+
+    /** Line current at 400 V: I = P / (√3 × U × cos φ). */
+    currentAt(cos: number) -> number {
+        const pf = Math.min(1, Math.max(0.05, cos))
+        return (this.loadKw * 1000) / (Math.sqrt(3) * 400 * pf)
+        },
+
+    /** How much of the line current the bank removes, in percent. */
+    currentDrop() -> number {
+        const before = this.currentAt(this.cosNow)
+        if (before <= 0) return 0
+        return Math.max(0, 100 * (1 - this.currentAt(Math.max(this.cosNow, this.cosTarget)) / before))
+        },
+
+    /** The province row the user chose. */
+    province() -> Province {
+        const rows = this.assumptions.value.provinces
+        return rows.find((r) => r.id == this.provinceId) ?? rows[0]
+        },
+
+    // Area rule: one kWp needs about 1 / (sunHours × 0.8 usable) m² of roof.
+    kwpFromRoof() -> number {
+        const usable = Math.max(0.2, this.province().sunHours * 0.8)
+        return Math.max(0, this.roofArea / (1 / usable))
+        },
+
+    // Demand rule: a plant that covers the site's demand at midday is worth
+    // about a fifth of it — a planning ratio, stated as such, not a measurement.
+    kwpFromDemand() -> number
+        { return Math.max(0, this.demandKw * 0.2) },
+
+    kwp() -> number {
+        const a = this.kwpFromRoof()
+        const b = this.kwpFromDemand()
+        return Math.max(0, Math.min(a > 0 ? a : b, b > 0 ? b : a))
+        },
+
+    modules() -> number {
+        // 550 W modules, the size the site's own panel row implies.
+        return Math.ceil(this.kwp() / 0.55)
+        },
+
+    annualMwh() -> number {
+        return this.kwp() * this.province().yieldPerKwp * this.performanceRatio
+        },
+
+    /** Roof actually used, so a big roof and a small plant read honestly. */
+    usedArea() -> number {
+        const perKwp = 1 / (Math.max(0.2, this.province().sunHours * 0.8))
+        return this.kwp() * perKwp
+        },
+
+    /** The triage list, heaviest first; ties keep the order they are written. */
+    priorities() -> array {
+        const all = this.facts.value.items
+        const picked = all.filter((f) => this.checked.value.ids.includes(f.id))
+        return picked.slice().sort((a, b) => b.weight - a.weight)
+        },
+
+    priorityScore() -> number {
+        return this.priorities().reduce((sum, f) => sum + f.weight, 0)
+        },
+
+    /** What the page tells the site it wants reviewed. */
+    handoff() {
+        app.postToHost("request", {
+            tab: app.tab,
+            bankKvar: app.bankRounded(),
+            kwp: Math.round(app.kwp()),
+            annualMwh: Math.round(app.annualMwh() * 10) / 10,
+            score: app.priorityScore()
+            })
+        },
+
+    // ── The screen ──────────────────────────────────────────────────────────
+    layout: SimpleLayout [ axis = y, spacing = 0 ],
+    scrolls = y,
+
+    header: View [ width = 100%, padding = [14, 16, 12, 16],
+        layout: SimpleLayout [ axis = y, spacing = 10 ],
+        // Right to left: the name at the right, then the note.
+        top: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+            note: Text [ fontSize = 10.5, textColor = { provided("theme").textMuted }, wrap = false,
+                text = "محاسبه‌گر مهندسی — پیش‌نمایش" ],
+            Text [ flexes = true, fontSize = 13.5, fontWeight = semibold, text = "Xennic Platform",
+                textColor = { provided("theme").accent } ]
+            ],
+        // The bar lays out from the left, so the tools are written in the
+        // reverse of the reading order: the first one a Persian reader looks
+        // for is the one on the right.
+        tabs: TabBar [ width = 100%, height = 36, value <-> app.tab,
+            accessibilityLabel = "ابزار محاسباتی",
+            items = { [ ({ id: "audit", label: "ممیزی و ارتینگ" }),
+                        ({ id: "solar", label: "خورشیدی" }),
+                        ({ id: "pfc", label: "ضریب توان" }) ] }
+            ],
+        rule: View [ width = 100%, height = 1, fill = { provided("theme").panelLine } ]
+        ],
+
+    body: View [ width = 100%, padding = [12, 16, 16, 16],
+        layout: SimpleLayout [ axis = y, spacing = 12 ],
+
+        // ── 1. Power factor correction ──────────────────────────────────────
+        pfc: View [ width = 100%, exists = { app.tab == "pfc" },
+            layout: SimpleLayout [ axis = y, spacing = 12 ],
+
+            PanelHeading [ title = "اصلاح ضریب توان و بانک خازنی ۴۰۰ ولت",
+                detail = "ظرفیت بانک، کاهش جریان خط و انتخاب پله‌ها از توان اکتیو و ضریب توان فعلی و هدف." ],
+
+            inputs: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 10 ],
+                Amount [ label = "توان اکتیو", unit = "kW", min = 10, max = 2000, step = 10,
+                    value = { app.loadKw }, hint = "توان مصرفی هم‌زمان واحد، نه توان نصب‌شده.",
+                    change(v: number) { app.loadKw = v } ],
+                Amount [ label = "ضریب توان فعلی", unit = "cos φ", min = 0.5, max = 1, step = 0.01,
+                    value = { app.cosNow }, change(v: number) { app.cosNow = v } ],
+                Amount [ label = "ضریب توان هدف", unit = "cos φ", min = 0.8, max = 1, step = 0.01,
+                    value = { app.cosTarget },
+                    hint = "هدف عملی شبکه‌های توزیع معمولاً ۰٫۹ تا ۰٫۹۵ است.",
+                    change(v: number) { app.cosTarget = Math.max(v, app.cosNow) } ],
+                Amount [ label = "پلهٔ بانک خازنی", unit = "kVAr", min = 5, max = 100, step = 5,
+                    value = { app.bankStep }, change(v: number) { app.bankStep = v } ]
+                ],
+
+            results: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 8 ],
+                // A row lays out from the left, so the figure a reader looks for
+                // first is written last: it ends up on the right, where the
+                // reading starts. The accented figure is that one in every row
+                // of every panel.
+                View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "ظرفیت محاسبه‌شده", value = { app.bankKvar().toFixed(1) }, unit = "kVAr" ],
+                    Stat [ flexes = true, label = "ظرفیت پیشنهادی", value = { "≤ " + app.bankRounded() }, unit = "kVAr",
+                        accent = { provided("theme").teal } ]
+                    ],
+                View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "جریان خط", value = { app.currentAt(app.cosNow).toFixed(0) }, unit = "A",
+                        hint = "پیش از اصلاح، در ۴۰۰ ولت" ],
+                    Stat [ flexes = true, label = "کاهش جریان", value = { app.currentDrop().toFixed(1) }, unit = "%",
+                        accent = { provided("theme").good } ]
+                    ],
+                View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "جریان پس از اصلاح",
+                        value = { app.currentAt(Math.max(app.cosNow, app.cosTarget)).toFixed(0) }, unit = "A" ]
+                    ],
+                ShareBar [ label = "ضریب توان پس از اصلاح نسبت به هدف",
+                    value = { Math.max(app.cosNow, app.cosTarget) }, max = 1,
+                    caption = { "از " + app.cosNow.toFixed(2) + " به " + Math.max(app.cosNow, app.cosTarget).toFixed(2) } ]
+                ],
+
+            Honesty [ text = "این عدد ظرفیت لازم در شینه است، نه انتخاب نهایی بانک: پله‌بندی، هارمونیک، خازن سری با راکتور، کلید و حفاظت باید در طراحی بررسی شوند. دیماند و تعرفهٔ هر انشعاب هم جدا محاسبه می‌شود." ]
+            ],
+
+        // ── 2. Solar estimate ───────────────────────────────────────────────
+        solar: View [ width = 100%, exists = { app.tab == "solar" },
+            layout: SimpleLayout [ axis = y, spacing = 12 ],
+
+            PanelHeading [ title = "تخمین فنی نیروگاه خورشیدی",
+                detail = "ظرفیت قابل نصب، تولید سالانه و سهم سقف یا دیماند از یک تخمین مهندسی اولیه." ],
+
+            provinceRow: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 4 ],
+                Text [ width = 100%, text = "استان پروژه", fontSize = 11.5, fontWeight = medium,
+                    textColor = { provided("theme").textMuted } ],
+                chips: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 6 ],
+                    provincePicker: Segmented [ flexes = true, height = 34, value <-> app.provinceId,
+                        accessibilityLabel = "استان پروژه",
+                        // Reversed for the same reason as the tabs: the first
+                        // province in the data is the one on the right.
+                        items = { app.assumptions.value.provinces.slice().reverse().map((p) => ({ id: p.id, label: p.name })) } ]
+                    ]
+                ],
+
+            inputs: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 10 ],
+                Amount [ label = "مساحت سقف یا سوله", unit = "m²", min = 100, max = 20000, step = 100,
+                    value = { app.roofArea }, hint = "مساحت خالی و سایه‌نگرفته.",
+                    change(v: number) { app.roofArea = v } ],
+                Amount [ label = "دیماند مصرفی", unit = "kW", min = 20, max = 5000, step = 10,
+                    value = { app.demandKw }, change(v: number) { app.demandKw = v } ],
+                Amount [ label = "نسبت کارکرد", unit = "PR", min = 0.6, max = 0.9, step = 0.01,
+                    value = { app.performanceRatio }, hint = "نسبت کارکرد سالانه؛ گردوخاک، دما و تلفات کابل.",
+                    change(v: number) { app.performanceRatio = v } ]
+                ],
+
+            results: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 8 ],
+                View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "تولید سالانه", value = { app.annualMwh().toFixed(1) }, unit = "MWh" ],
+                    Stat [ flexes = true, label = "ظرفیت قابل نصب", value = { app.kwp().toFixed(0) }, unit = "kWp",
+                        accent = { provided("theme").gold } ]
+                    ],
+                View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "سطح استفاده‌شده", value = { app.usedArea().toFixed(0) }, unit = "m²" ],
+                    Stat [ flexes = true, label = "تعداد پنل ۵۵۰ وات", value = { "" + app.modules() }, unit = "عدد" ]
+                    ],
+                ShareBar [ label = "سهم سقف از ظرفیت پیشنهادی",
+                    value = { app.usedArea() }, max = { Math.max(1, app.roofArea) },
+                    caption = { app.usedArea().toFixed(0) + " از " + app.roofArea.toFixed(0) + " متر مربع" } ]
+                ],
+
+            Honesty [ text = "این یک تخمین اولیه است: سایه‌اندازی، جهت و شیب، فاصلهٔ ردیف‌ها، ظرفیت اینورتر، شبکهٔ محلی و مجوز اتصال بررسی نشده‌اند. تولید سالانه از بازده استانی × نسبت کارکرد می‌آید و تضمین تولید نیست." ]
+            ],
+
+        // ── 3. Energy audit and earthing triage ─────────────────────────────
+        audit: View [ width = 100%, exists = { app.tab == "audit" },
+            layout: SimpleLayout [ axis = y, spacing = 12 ],
+
+            PanelHeading [ title = "ارزیاب اولیهٔ ممیزی انرژی و ارتینگ",
+                detail = "وضعیت واحد را علامت بزنید تا اولویت‌های بررسی، به‌ترتیب وزن، فهرست شوند." ],
+
+            factList: View [ width = 100%, datapath = { app.facts.value },
+                layout: SimpleLayout [ axis = y, spacing = 6 ],
+                View [ width = 100%, datapath = :items[], padding = [6, 8, 6, 8],
+                    cornerRadius = 8, fill = { provided("theme").control },
+                    layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+                    Text [ flexes = true, text = :label, fontSize = 11.5, wrap = true,
+                        textColor = { provided("theme").textMuted } ],
+                    // The tick leads the row, on the right, and the sentence
+                    // follows it — the order a Persian reader reads in.
+                    Checkbox [ checked = { app.checked.value.ids.includes(:id) },
+                        accessibilityLabel = :label,
+                        commit(v: boolean) {
+                            const ids = app.checked.value.ids.filter((x) => x != :id)
+                            app.checked.set("/ids", v ? ids.concat([:id]) : ids)
+                            }
+                        ]
+                    ]
+                ],
+
+            results: View [ width = 100%, exists = { app.checkedCount > 0 },
+                layout: SimpleLayout [ axis = y, spacing = 8 ],
+                scoreRow: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "موارد علامت‌خورده", value = { "" + app.checkedCount }, unit = "مورد" ],
+                    Stat [ flexes = true, label = "امتیاز اولویت", value = { "" + app.priorityScore() },
+                        unit = "از ۱۲", accent = { provided("theme").warn } ]
+                    ],
+                priorities: View [ width = 100%, datapath = { app.priorityList.value },
+                    layout: SimpleLayout [ axis = y, spacing = 6 ],
+                    View [ width = 100%, datapath = :items[], padding = [8, 10, 8, 10], cornerRadius = 8,
+                        // The row's own place in the list. `rowIndex` is the
+                        // replicated instance's own, and a view inside it
+                        // cannot read it — so the row states the number once
+                        // and the line below reads it (guide: collections).
+                        rank: number = { rowIndex + 1 },
+                        fill = { provided("theme").panel },
+                        stroke = { Stroke(1, provided("theme").panelLine) },
+                        layout: SimpleLayout [ axis = y, spacing = 2 ],
+                        head: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 6, align = center ],
+                            Text [ flexes = true, text = :action, fontSize = 11.8, fontWeight = medium,
+                                textColor = { provided("theme").text }, wrap = true ],
+                            Text [ text = { "" + rank + ". " }, fontSize = 12, fontWeight = bold,
+                                textColor = { provided("theme").accent } ]
+                            ],
+                        Text [ text = :label, fontSize = 10.5, textColor = { provided("theme").textMuted }, wrap = true ]
+                        ]
+                    ]
+                ],
+
+            emptyNote: Text [ width = 100%, fontSize = 11, textColor = { provided("theme").textFaint },
+                text = "هیچ موردی علامت نخورده است؛ اولویت‌ها پس از انتخاب نمایش داده می‌شوند.",
+                visible = { app.checkedCount == 0 } ],
+
+            Honesty [ text = "این ارزیاب جای ممیزی انرژی را نمی‌گیرد: اندازه‌گیری بار، تحلیل هارمونیک و بررسی میدانی ارتینگ لازم است. وزن‌ها ساده و شفاف‌اند تا بتوانید دربارهٔ ترتیب بحث کنید، نه اینکه آن را نتیجه بگیرید." ]
+            ],
+
+        // ── The hand-off to the site's real form ────────────────────────────
+        footer: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 8 ],
+            rule: View [ width = 100%, height = 1, fill = { provided("theme").panelLine } ],
+            row: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+                Text [ flexes = true, fontSize = 10.8, textColor = { provided("theme").textMuted }, wrap = true,
+                    text = "برای بررسی تخصصی، درخواست خود را در فرم تماس ثبت کنید؛ نتیجهٔ این محاسبه همراه درخواست فرستاده می‌شود." ],
+                Button [ label = "ثبت درخواست بررسی", primary = true,
+                    onClick() { app.handoff() } ]
+                ]
+            ]
+        ],
+
+    // The page reads what the app publishes and decides what to do with it.
+    exposes = [ "tab", "bankRounded", "kwp", "annualMwh", "priorityScore" ]
+    ]

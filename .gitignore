@@ -20,8 +20,27 @@ private-fonts/
 *.[oO][tT][fF]
 *.[eE][oO][tT]
 
+# Vazirmatn is SIL Open Font License 1.1 and ships with the Persian interface.
+# The blanket rule above keeps licensed faces (IRANSans) out of this repository
+# and must keep applying to every other font file: this exception is one exact
+# name, and the license text travels beside it.
+!public/fonts/vazirmatn-variable.woff2
+
 !.env.preview.example
 
 # Python bytecode
 __pycache__/
 *.pyc
+
+# The Declare program is compiled into `declare-apps/xennic-platform/dist/` and
+# published by `scripts/declare-platform.mjs`. The build writes it into
+# `.next/static/declare-platform/`; the development server, which has no build
+# output, serves a copy it makes under `public/`. Neither copy belongs in the
+# repository.
+public/declare-platform/
+
+# `declarec` writes a standalone page and a copy of its own assets next to the
+# program; only the program, its build record and the manifest are ours.
+declare-apps/xennic-platform/dist/README.md
+declare-apps/xennic-platform/dist/index.html
+declare-apps/xennic-platform/dist/tools/

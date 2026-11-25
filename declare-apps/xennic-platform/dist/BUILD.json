@@ -1,0 +1,1181 @@
+{
+ "closure": {
+  "entries": [
+   {
+    "id": "../../home/user/xennic-website/declare-apps/xennic-platform/xennic-platform.declare",
+    "kind": "file",
+    "v": {
+     "hash": "f663307f434e7d79",
+     "size": 23920
+    }
+   },
+   {
+    "id": "../../home/user/xennic-website/declare-apps/xennic-platform/parts.declare",
+    "kind": "file",
+    "v": {
+     "hash": "0344e94e6afe2935",
+     "size": 10923
+    }
+   },
+   {
+    "id": "library/autoincludes.json",
+    "kind": "file",
+    "v": {
+     "hash": "7319942dd4d6aad4",
+     "size": 4460
+    }
+   },
+   {
+    "id": "library/simplelayout.declare",
+    "kind": "file",
+    "v": {
+     "hash": "78808aa0f2e52397",
+     "size": 16750
+    }
+   },
+   {
+    "id": "library/tabbar.declare",
+    "kind": "file",
+    "v": {
+     "hash": "8718231f9b8f4d55",
+     "size": 1821
+    }
+   },
+   {
+    "id": "library/segmented.declare",
+    "kind": "file",
+    "v": {
+     "hash": "f849dc918c7a843d",
+     "size": 21563
+    }
+   },
+   {
+    "id": "library/valuecontrol.declare",
+    "kind": "file",
+    "v": {
+     "hash": "2b044875a2b2155e",
+     "size": 14435
+    }
+   },
+   {
+    "id": "library/control.declare",
+    "kind": "file",
+    "v": {
+     "hash": "6f0592dfbc0bd6f3",
+     "size": 17220
+    }
+   },
+   {
+    "id": "library/textlabel.declare",
+    "kind": "file",
+    "v": {
+     "hash": "2b451f41548bd88f",
+     "size": 1548
+    }
+   },
+   {
+    "id": "library/icons/icon.declare",
+    "kind": "file",
+    "v": {
+     "hash": "ac2bb9399dccc9ef",
+     "size": 10501
+    }
+   },
+   {
+    "id": "library/checkbox.declare",
+    "kind": "file",
+    "v": {
+     "hash": "667fd2df1b56cc66",
+     "size": 6350
+    }
+   },
+   {
+    "id": "library/icons/core.declare",
+    "kind": "file",
+    "v": {
+     "hash": "fe01bcc01dcff09a",
+     "size": 8046
+    }
+   },
+   {
+    "id": "library/button.declare",
+    "kind": "file",
+    "v": {
+     "hash": "7b4e17a911be290c",
+     "size": 10607
+    }
+   },
+   {
+    "id": "library/slider.declare",
+    "kind": "file",
+    "v": {
+     "hash": "2868b7908c009d83",
+     "size": 9651
+    }
+   },
+   {
+    "id": "library/textinput.declare",
+    "kind": "file",
+    "v": {
+     "hash": "9b14114d18a70caa",
+     "size": 16927
+    }
+   },
+   {
+    "id": "library/gauge.declare",
+    "kind": "file",
+    "v": {
+     "hash": "7dae161fb42657f4",
+     "size": 2265
+    }
+   },
+   {
+    "id": "library/focusring.declare",
+    "kind": "file",
+    "v": {
+     "hash": "28e2749f541f2cc9",
+     "size": 22055
+    }
+   },
+   {
+    "id": "../../home/user/xennic-website/declare-apps/xennic-platform/README.md",
+    "kind": "file",
+    "v": {
+     "hash": "97def2de2de7cdcf",
+     "size": 3946
+    }
+   },
+   {
+    "id": "../../home/user/xennic-website/declare-apps/xennic-platform/tools/manifest.mjs",
+    "kind": "file",
+    "v": {
+     "hash": "f878ea5b5642883f",
+     "size": 1554
+    }
+   },
+   {
+    "id": "runtime/dist/errors.js",
+    "kind": "file",
+    "v": {
+     "hash": "07b0edf9b946ec18",
+     "size": 19595
+    }
+   },
+   {
+    "id": "runtime/dist/stand-in.js",
+    "kind": "file",
+    "v": {
+     "hash": "3633cbf09e49e2a4",
+     "size": 979
+    }
+   },
+   {
+    "id": "browser/live-edit.js",
+    "kind": "file",
+    "v": {
+     "hash": "44f37e235e51b097",
+     "size": 4610
+    }
+   },
+   {
+    "id": "runtime/dist/phase-timer.js",
+    "kind": "file",
+    "v": {
+     "hash": "d7449b007759f831",
+     "size": 3042
+    }
+   },
+   {
+    "id": "runtime/dist/path-plan.js",
+    "kind": "file",
+    "v": {
+     "hash": "e6c499aed0223930",
+     "size": 1541
+    }
+   },
+   {
+    "id": "runtime/dist/datapath.js",
+    "kind": "file",
+    "v": {
+     "hash": "9cb6420e0d7f5b52",
+     "size": 26228
+    }
+   },
+   {
+    "id": "runtime/dist/keys.js",
+    "kind": "file",
+    "v": {
+     "hash": "08b0e0620ef61e41",
+     "size": 36582
+    }
+   },
+   {
+    "id": "runtime/dist/css-colors.js",
+    "kind": "file",
+    "v": {
+     "hash": "9e9f9c7e40db6059",
+     "size": 3831
+    }
+   },
+   {
+    "id": "runtime/dist/stroke-sides.js",
+    "kind": "file",
+    "v": {
+     "hash": "5d6e61cdc2ca04bb",
+     "size": 7384
+    }
+   },
+   {
+    "id": "runtime/dist/literal-parse.js",
+    "kind": "file",
+    "v": {
+     "hash": "270c8cabd1951dda",
+     "size": 29756
+    }
+   },
+   {
+    "id": "runtime/dist/purpose.js",
+    "kind": "file",
+    "v": {
+     "hash": "4d711a38deca6bc0",
+     "size": 2981
+    }
+   },
+   {
+    "id": "runtime/dist/value.js",
+    "kind": "file",
+    "v": {
+     "hash": "1377d2c2bc0c6817",
+     "size": 26753
+    }
+   },
+   {
+    "id": "runtime/dist/color.js",
+    "kind": "file",
+    "v": {
+     "hash": "11729916a35d35f4",
+     "size": 4844
+    }
+   },
+   {
+    "id": "runtime/dist/effects.js",
+    "kind": "file",
+    "v": {
+     "hash": "f22ffc5daa87171a",
+     "size": 7220
+    }
+   },
+   {
+    "id": "runtime/dist/expr.js",
+    "kind": "file",
+    "v": {
+     "hash": "157cc127e8e7576a",
+     "size": 23943
+    }
+   },
+   {
+    "id": "runtime/dist/declare-name.js",
+    "kind": "file",
+    "v": {
+     "hash": "5b87f15acb0aeb23",
+     "size": 2339
+    }
+   },
+   {
+    "id": "runtime/dist/change-event.js",
+    "kind": "file",
+    "v": {
+     "hash": "cd709ceefe6dec94",
+     "size": 5606
+    }
+   },
+   {
+    "id": "runtime/dist/kernel-loader.js",
+    "kind": "file",
+    "v": {
+     "hash": "64553b24f68d8e38",
+     "size": 22850
+    }
+   },
+   {
+    "id": "runtime/dist/kernel-wasm.js",
+    "kind": "file",
+    "v": {
+     "hash": "0f6cc52ba6ceec4b",
+     "size": 25060
+    }
+   },
+   {
+    "id": "runtime/dist/kernel-js.js",
+    "kind": "file",
+    "v": {
+     "hash": "42b2e7f3d9d8ca82",
+     "size": 56922
+    }
+   },
+   {
+    "id": "runtime/dist/kernel-trace.js",
+    "kind": "file",
+    "v": {
+     "hash": "b5076c43e63f18ed",
+     "size": 4790
+    }
+   },
+   {
+    "id": "runtime/dist/reactive.js",
+    "kind": "file",
+    "v": {
+     "hash": "d96228e4273c6c2e",
+     "size": 80105
+    }
+   },
+   {
+    "id": "runtime/dist/wallclock.js",
+    "kind": "file",
+    "v": {
+     "hash": "071af202f9147280",
+     "size": 1234
+    }
+   },
+   {
+    "id": "runtime/dist/themes-data.js",
+    "kind": "file",
+    "v": {
+     "hash": "e9e4bf6b38931d26",
+     "size": 13362
+    }
+   },
+   {
+    "id": "runtime/dist/themes.js",
+    "kind": "file",
+    "v": {
+     "hash": "d9330d350d895715",
+     "size": 3836
+    }
+   },
+   {
+    "id": "runtime/dist/attributes.js",
+    "kind": "file",
+    "v": {
+     "hash": "bd742efd6e266b0f",
+     "size": 71627
+    }
+   },
+   {
+    "id": "runtime/dist/node.js",
+    "kind": "file",
+    "v": {
+     "hash": "439d94869688282f",
+     "size": 18038
+    }
+   },
+   {
+    "id": "runtime/dist/backend.js",
+    "kind": "file",
+    "v": {
+     "hash": "da67f405fee19e90",
+     "size": 3593
+    }
+   },
+   {
+    "id": "runtime/dist/affine.js",
+    "kind": "file",
+    "v": {
+     "hash": "145823d6a6c6cd2f",
+     "size": 4008
+    }
+   },
+   {
+    "id": "runtime/dist/projective.js",
+    "kind": "file",
+    "v": {
+     "hash": "31e43c6f5575fb89",
+     "size": 8523
+    }
+   },
+   {
+    "id": "runtime/dist/hit-walk.js",
+    "kind": "file",
+    "v": {
+     "hash": "da7b3bc72909154c",
+     "size": 4763
+    }
+   },
+   {
+    "id": "runtime/dist/interaction.js",
+    "kind": "file",
+    "v": {
+     "hash": "eb53ea0fbd778d4a",
+     "size": 32579
+    }
+   },
+   {
+    "id": "runtime/dist/tooltips.js",
+    "kind": "file",
+    "v": {
+     "hash": "47b024dca7249bce",
+     "size": 4772
+    }
+   },
+   {
+    "id": "runtime/dist/drag-autoscroll.js",
+    "kind": "file",
+    "v": {
+     "hash": "ea2bd4d89cc6c907",
+     "size": 8401
+    }
+   },
+   {
+    "id": "runtime/dist/scroll-anchor.js",
+    "kind": "file",
+    "v": {
+     "hash": "cd7c3f2446742ada",
+     "size": 13706
+    }
+   },
+   {
+    "id": "runtime/dist/filter-wasm.js",
+    "kind": "file",
+    "v": {
+     "hash": "f283ca8c4ab3f042",
+     "size": 7746
+    }
+   },
+   {
+    "id": "runtime/dist/canvas-filter.js",
+    "kind": "file",
+    "v": {
+     "hash": "dc102a9246663f81",
+     "size": 24568
+    }
+   },
+   {
+    "id": "runtime/dist/face-table.js",
+    "kind": "file",
+    "v": {
+     "hash": "9cf726cd2c8ee130",
+     "size": 7317
+    }
+   },
+   {
+    "id": "runtime/dist/font-value.js",
+    "kind": "file",
+    "v": {
+     "hash": "34286150bdd998ba",
+     "size": 5967
+    }
+   },
+   {
+    "id": "runtime/dist/font-derive.js",
+    "kind": "file",
+    "v": {
+     "hash": "b6a0516480b2e55b",
+     "size": 4368
+    }
+   },
+   {
+    "id": "runtime/dist/font-features.js",
+    "kind": "file",
+    "v": {
+     "hash": "fb3b2578632eff26",
+     "size": 5509
+    }
+   },
+   {
+    "id": "runtime/dist/measure.js",
+    "kind": "file",
+    "v": {
+     "hash": "68224b95c3f805e3",
+     "size": 22391
+    }
+   },
+   {
+    "id": "runtime/dist/draw-image.js",
+    "kind": "file",
+    "v": {
+     "hash": "059977f7b515a9dc",
+     "size": 2407
+    }
+   },
+   {
+    "id": "runtime/dist/draw-text.js",
+    "kind": "file",
+    "v": {
+     "hash": "603e2e1366595eb2",
+     "size": 2318
+    }
+   },
+   {
+    "id": "runtime/dist/draw.js",
+    "kind": "file",
+    "v": {
+     "hash": "0825d04813c2f5ea",
+     "size": 62552
+    }
+   },
+   {
+    "id": "runtime/dist/animate.js",
+    "kind": "file",
+    "v": {
+     "hash": "9fae46bf6c1fa4d9",
+     "size": 8822
+    }
+   },
+   {
+    "id": "runtime/dist/modifiers.js",
+    "kind": "file",
+    "v": {
+     "hash": "888c48cd74313428",
+     "size": 405
+    }
+   },
+   {
+    "id": "runtime/dist/pointer-dispatch.js",
+    "kind": "file",
+    "v": {
+     "hash": "65769902985d2a59",
+     "size": 677
+    }
+   },
+   {
+    "id": "runtime/dist/size-probe.js",
+    "kind": "file",
+    "v": {
+     "hash": "56866dca4b9d1287",
+     "size": 1080
+    }
+   },
+   {
+    "id": "runtime/dist/boundary.js",
+    "kind": "file",
+    "v": {
+     "hash": "3e90ca89b3fde925",
+     "size": 4093
+    }
+   },
+   {
+    "id": "runtime/dist/visibility.js",
+    "kind": "file",
+    "v": {
+     "hash": "8d70e75855fe68c1",
+     "size": 13201
+    }
+   },
+   {
+    "id": "runtime/dist/size-report.js",
+    "kind": "file",
+    "v": {
+     "hash": "8973f69c850f6deb",
+     "size": 8057
+    }
+   },
+   {
+    "id": "runtime/dist/handlers.js",
+    "kind": "file",
+    "v": {
+     "hash": "92acad46ff86bf43",
+     "size": 998
+    }
+   },
+   {
+    "id": "runtime/dist/select.js",
+    "kind": "file",
+    "v": {
+     "hash": "b741a22305ae3242",
+     "size": 5795
+    }
+   },
+   {
+    "id": "runtime/dist/files.js",
+    "kind": "file",
+    "v": {
+     "hash": "2caa85228e9da3c7",
+     "size": 13053
+    }
+   },
+   {
+    "id": "runtime/dist/asset-base.js",
+    "kind": "file",
+    "v": {
+     "hash": "3a166b71d12f7448",
+     "size": 4519
+    }
+   },
+   {
+    "id": "runtime/dist/shape-resolve.js",
+    "kind": "file",
+    "v": {
+     "hash": "a00ac84fd5a0ac45",
+     "size": 5899
+    }
+   },
+   {
+    "id": "runtime/dist/data-schema.js",
+    "kind": "file",
+    "v": {
+     "hash": "785d1dba97611c63",
+     "size": 6209
+    }
+   },
+   {
+    "id": "runtime/dist/data.js",
+    "kind": "file",
+    "v": {
+     "hash": "ad0f03976473e890",
+     "size": 81302
+    }
+   },
+   {
+    "id": "runtime/dist/outside.js",
+    "kind": "file",
+    "v": {
+     "hash": "1f94306e28c38f33",
+     "size": 9020
+    }
+   },
+   {
+    "id": "runtime/dist/deferred-surface.js",
+    "kind": "file",
+    "v": {
+     "hash": "04761837796543af",
+     "size": 3322
+    }
+   },
+   {
+    "id": "runtime/dist/view.js",
+    "kind": "file",
+    "v": {
+     "hash": "5c73c05669c2c7f7",
+     "size": 176335
+    }
+   },
+   {
+    "id": "runtime/dist/input.js",
+    "kind": "file",
+    "v": {
+     "hash": "611826a5903cbbd2",
+     "size": 54491
+    }
+   },
+   {
+    "id": "runtime/dist/node-path.js",
+    "kind": "file",
+    "v": {
+     "hash": "ab1f66c560e0e668",
+     "size": 3298
+    }
+   },
+   {
+    "id": "runtime/dist/focus.js",
+    "kind": "file",
+    "v": {
+     "hash": "6931c11d14ebf1bd",
+     "size": 98760
+    }
+   },
+   {
+    "id": "runtime/dist/clipboard.js",
+    "kind": "file",
+    "v": {
+     "hash": "fb7c07370e6a5ee3",
+     "size": 8145
+    }
+   },
+   {
+    "id": "runtime/dist/commands.js",
+    "kind": "file",
+    "v": {
+     "hash": "302a605fd88bbfae",
+     "size": 4072
+    }
+   },
+   {
+    "id": "runtime/dist/inspect-service.js",
+    "kind": "file",
+    "v": {
+     "hash": "8adb775c5447047a",
+     "size": 26302
+    }
+   },
+   {
+    "id": "runtime/dist/accessibility-service.js",
+    "kind": "file",
+    "v": {
+     "hash": "a568ab657d7fad35",
+     "size": 1375
+    }
+   },
+   {
+    "id": "runtime/dist/text-measure.js",
+    "kind": "file",
+    "v": {
+     "hash": "ff178b3c78d93955",
+     "size": 3214
+    }
+   },
+   {
+    "id": "runtime/dist/services.js",
+    "kind": "file",
+    "v": {
+     "hash": "fb5f2ee7ddf815ec",
+     "size": 5503
+    }
+   },
+   {
+    "id": "runtime/dist/edit-selection.js",
+    "kind": "file",
+    "v": {
+     "hash": "4d5a8e17d99510cc",
+     "size": 975
+    }
+   },
+   {
+    "id": "runtime/dist/editable-input.js",
+    "kind": "file",
+    "v": {
+     "hash": "8480bae0a9d732bb",
+     "size": 7525
+    }
+   },
+   {
+    "id": "runtime/dist/filter-css.js",
+    "kind": "file",
+    "v": {
+     "hash": "ab4202c7ccf5ffed",
+     "size": 2068
+    }
+   },
+   {
+    "id": "runtime/dist/dom-effects.js",
+    "kind": "file",
+    "v": {
+     "hash": "0bae98433a672de7",
+     "size": 6736
+    }
+   },
+   {
+    "id": "runtime/dist/dom-rich.js",
+    "kind": "file",
+    "v": {
+     "hash": "a64079266142ede6",
+     "size": 28824
+    }
+   },
+   {
+    "id": "runtime/dist/boxpaint.js",
+    "kind": "file",
+    "v": {
+     "hash": "c73e6d57c7c98916",
+     "size": 11878
+    }
+   },
+   {
+    "id": "runtime/dist/text-clamp.js",
+    "kind": "file",
+    "v": {
+     "hash": "3600db9dd8c7ec27",
+     "size": 3984
+    }
+   },
+   {
+    "id": "runtime/dist/dpr.js",
+    "kind": "file",
+    "v": {
+     "hash": "acdda97f71eac971",
+     "size": 1671
+    }
+   },
+   {
+    "id": "runtime/dist/viewport-lock.js",
+    "kind": "file",
+    "v": {
+     "hash": "5a86f747231bbaf0",
+     "size": 3677
+    }
+   },
+   {
+    "id": "runtime/dist/dom-visibility.js",
+    "kind": "file",
+    "v": {
+     "hash": "a32b0d995f260af7",
+     "size": 3520
+    }
+   },
+   {
+    "id": "runtime/dist/tween.js",
+    "kind": "file",
+    "v": {
+     "hash": "2a4f449e2c6f2211",
+     "size": 12791
+    }
+   },
+   {
+    "id": "runtime/dist/animator-group.js",
+    "kind": "file",
+    "v": {
+     "hash": "2e9bb9a576acdb53",
+     "size": 8293
+    }
+   },
+   {
+    "id": "runtime/dist/animator.js",
+    "kind": "file",
+    "v": {
+     "hash": "fa7de4fb3cc13ac3",
+     "size": 9413
+    }
+   },
+   {
+    "id": "runtime/dist/spring.js",
+    "kind": "file",
+    "v": {
+     "hash": "9d022cb422823340",
+     "size": 13548
+    }
+   },
+   {
+    "id": "runtime/dist/replicate.js",
+    "kind": "file",
+    "v": {
+     "hash": "21dd96966c8963ad",
+     "size": 35673
+    }
+   },
+   {
+    "id": "runtime/dist/semantics.js",
+    "kind": "file",
+    "v": {
+     "hash": "207db6404f5ca53d",
+     "size": 22446
+    }
+   },
+   {
+    "id": "runtime/dist/semantics-dom.js",
+    "kind": "file",
+    "v": {
+     "hash": "2819dc4634236502",
+     "size": 24059
+    }
+   },
+   {
+    "id": "runtime/dist/platform-time.js",
+    "kind": "file",
+    "v": {
+     "hash": "3bd554b31e09b7f0",
+     "size": 1247
+    }
+   },
+   {
+    "id": "runtime/dist/dom-backend.js",
+    "kind": "file",
+    "v": {
+     "hash": "0bb1472b426fd3d6",
+     "size": 193341
+    }
+   },
+   {
+    "id": "runtime/dist/canvas-backend.js",
+    "kind": "file",
+    "v": {
+     "hash": "cfc8211b30c2e109",
+     "size": 212748
+    }
+   },
+   {
+    "id": "runtime/dist/island.js",
+    "kind": "file",
+    "v": {
+     "hash": "72b16647c03aca2d",
+     "size": 15409
+    }
+   },
+   {
+    "id": "runtime/dist/navigation.js",
+    "kind": "file",
+    "v": {
+     "hash": "286775370efb1e99",
+     "size": 1196
+    }
+   },
+   {
+    "id": "runtime/dist/hydrate.js",
+    "kind": "file",
+    "v": {
+     "hash": "214af3289d78b0d8",
+     "size": 1713
+    }
+   },
+   {
+    "id": "runtime/dist/scroll-places.js",
+    "kind": "file",
+    "v": {
+     "hash": "8e8fdb6af8a5bcb7",
+     "size": 4241
+    }
+   },
+   {
+    "id": "runtime/dist/layout.js",
+    "kind": "file",
+    "v": {
+     "hash": "327fd5e1fa861e4c",
+     "size": 55884
+    }
+   },
+   {
+    "id": "runtime/dist/state.js",
+    "kind": "file",
+    "v": {
+     "hash": "9a2b3726eb2f8369",
+     "size": 13970
+    }
+   },
+   {
+    "id": "runtime/dist/route.js",
+    "kind": "file",
+    "v": {
+     "hash": "6fc56eaf884f53ff",
+     "size": 10531
+    }
+   },
+   {
+    "id": "runtime/dist/check.js",
+    "kind": "file",
+    "v": {
+     "hash": "4ba0feb8cbeba3e6",
+     "size": 135782
+    }
+   },
+   {
+    "id": "runtime/dist/style-bundles.js",
+    "kind": "file",
+    "v": {
+     "hash": "e77031b7ff2b2b73",
+     "size": 2388
+    }
+   },
+   {
+    "id": "runtime/dist/a11y-vocab.js",
+    "kind": "file",
+    "v": {
+     "hash": "9514adb5b9ea914d",
+     "size": 1454
+    }
+   },
+   {
+    "id": "runtime/dist/a11y-roles.js",
+    "kind": "file",
+    "v": {
+     "hash": "29f2db30a8f9c606",
+     "size": 7218
+    }
+   },
+   {
+    "id": "runtime/dist/boot-deferrals.js",
+    "kind": "file",
+    "v": {
+     "hash": "a96cc0262e3b61cf",
+     "size": 1530
+    }
+   },
+   {
+    "id": "runtime/dist/bind.js",
+    "kind": "file",
+    "v": {
+     "hash": "27cb8e02d058dc08",
+     "size": 43090
+    }
+   },
+   {
+    "id": "runtime/dist/class-for.js",
+    "kind": "file",
+    "v": {
+     "hash": "3098593ecf2d088f",
+     "size": 3141
+    }
+   },
+   {
+    "id": "runtime/dist/virtualize.js",
+    "kind": "file",
+    "v": {
+     "hash": "1e0e7fe5089bb610",
+     "size": 52905
+    }
+   },
+   {
+    "id": "runtime/dist/text.js",
+    "kind": "file",
+    "v": {
+     "hash": "645eea67a9b7d575",
+     "size": 20231
+    }
+   },
+   {
+    "id": "runtime/dist/native-text.js",
+    "kind": "file",
+    "v": {
+     "hash": "1729f50af335b0d6",
+     "size": 10587
+    }
+   },
+   {
+    "id": "runtime/dist/face-literal.js",
+    "kind": "file",
+    "v": {
+     "hash": "f9f0a5417d8a0456",
+     "size": 4776
+    }
+   },
+   {
+    "id": "runtime/dist/font.js",
+    "kind": "file",
+    "v": {
+     "hash": "0fb52396ef9c3e63",
+     "size": 16300
+    }
+   },
+   {
+    "id": "runtime/dist/sources.js",
+    "kind": "file",
+    "v": {
+     "hash": "955e9a688940624a",
+     "size": 4190
+    }
+   },
+   {
+    "id": "runtime/dist/registry.js",
+    "kind": "file",
+    "v": {
+     "hash": "8da8c99bae6a6429",
+     "size": 7205
+    }
+   },
+   {
+    "id": "runtime/dist/instantiate.js",
+    "kind": "file",
+    "v": {
+     "hash": "d27c440cdbbc10dc",
+     "size": 113652
+    }
+   },
+   {
+    "id": "runtime/dist/deps.js",
+    "kind": "file",
+    "v": {
+     "hash": "e069dfb7f323e2ce",
+     "size": 2726
+    }
+   },
+   {
+    "id": "runtime/dist/inspect.js",
+    "kind": "file",
+    "v": {
+     "hash": "310be37f3d39fb41",
+     "size": 51704
+    }
+   },
+   {
+    "id": "runtime/dist/boot.js",
+    "kind": "file",
+    "v": {
+     "hash": "c232b5dbc2463c47",
+     "size": 40316
+    }
+   },
+   {
+    "id": "runtime/dist/host-api.js",
+    "kind": "file",
+    "v": {
+     "hash": "806f0d7f711d59e3",
+     "size": 3120
+    }
+   },
+   {
+    "id": "browser/host-islands.js",
+    "kind": "file",
+    "v": {
+     "hash": "cd11f21342189686",
+     "size": 22469
+    }
+   },
+   {
+    "id": "browser/inspector-boot.js",
+    "kind": "file",
+    "v": {
+     "hash": "be15feae7789c192",
+     "size": 5886
+    }
+   },
+   {
+    "id": "browser/host-client.js",
+    "kind": "file",
+    "v": {
+     "hash": "7a1f237a8c767821",
+     "size": 29174
+    }
+   },
+   {
+    "id": "browser/compiler-client.js",
+    "kind": "file",
+    "v": {
+     "hash": "ffb7d99fe9a6b994",
+     "size": 13075
+    }
+   },
+   {
+    "id": "browser/boot-page.js",
+    "kind": "file",
+    "v": {
+     "hash": "1770386487ab58ff",
+     "size": 11398
+    }
+   }
+  ],
+  "props": {
+   "render": "program",
+   "slim": "true",
+   "kernel": "js",
+   "stripPos": "true",
+   "typecheck": "true",
+   "crawler": "program",
+   "accessibility": "program"
+  }
+ },
+ "built": "../../home/user/xennic-website/declare-apps/xennic-platform",
+ "capabilities": {
+  "needed": {
+   "text-measure": "names measureText",
+   "rich-doc": "renders on dom",
+   "replication": "uses replication",
+   "state": "constructs State",
+   "animator": "constructs Spring, an Animator",
+   "spring": "constructs Spring",
+   "easing": "constructs Spring, an Animator"
+  },
+  "absent": [
+   "checker",
+   "bridge",
+   "inspector-service",
+   "inspector-boot",
+   "datapath-scanner",
+   "compiler",
+   "canvas-renderer",
+   "color",
+   "effects",
+   "rich-dom",
+   "rich-views",
+   "literal-parsing",
+   "routing",
+   "size-report",
+   "virtualize",
+   "class-for",
+   "islands",
+   "tween",
+   "animator-group",
+   "tween-layout"
+  ],
+  "cut": [
+   "theme-table",
+   "schema-table"
+  ]
+ }
+}

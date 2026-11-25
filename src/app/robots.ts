@@ -16,14 +16,13 @@ export default function robots(): MetadataRoute.Robots {
 
   // Both language editions share the same policy, so each unpublished path is
   // listed in Persian and English.
-  const unpublished = NOT_PUBLISHED_PATHS.filter((path) => path !== '/platform')
   const disallow = [
     '/admin',
     '/en/admin',
     '/api/',
     '/health',
-    ...unpublished,
-    ...unpublished.map((path) => twinPath(path, 'en')),
+    ...NOT_PUBLISHED_PATHS,
+    ...NOT_PUBLISHED_PATHS.map((path) => twinPath(path, 'en')),
   ]
 
   return {

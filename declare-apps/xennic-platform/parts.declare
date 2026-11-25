@@ -1,0 +1,220 @@
+/*
+# Xennic Platform — the engineering calculators
+# =============================================
+#
+# Three tools a client can use before asking for a review, and the one thing
+# that makes them safe to publish: every number they show is arithmetic from
+# an input this file names, over a formula written out below in the comments.
+# None of them claims to replace a design; the panel at the foot says so and
+# hands the work to the contact form.
+#
+# What lives where (guide: structure):
+#   - the *data*: the tariff and yield assumptions are a dataset, so the number
+#     of panels, the labels and the derivation below read one source.
+#   - where the user is: `tab`, and one attribute per input, on the App. Nothing
+#     else holds a copy of an input.
+#   - what the screen shows: derived attributes, computed by methods below, and
+#     three panels switched by `exists`, so the inactive ones cost nothing.
+#
+# The three tools:
+#   1. Power factor correction. A 400 V capacitor bank sized from active power
+#      and the present and target power factor:
+#          Qc = P * (tan φ1 - tan φ2),  φ = acos(cos φ)
+#      and the line current it saves: I = P / (√3 * U * cos φ).
+#   2. Solar estimate. Roof area over the area one module needs, or demand over
+#      the demand one kilowatt covers, whichever is smaller; annual yield from
+#      the province's specific yield. No shading, no losses beyond one stated
+#      performance ratio, and it says so.
+#   3. Energy-audit and earthing triage. Six yes/no facts about the site, each
+#      with a stated weight, ordered into a short priority list. It is a
+#      conversation starter, not an audit.
+#
+# Colors and the face come from the site's own tokens (see theme Xennic below),
+# so the island looks like the page it sits in, in both themes.
+
+*/
+
+// ── Shape of an assumption row ──────────────────────────────────────────────
+schema Province [
+    id: string,
+    name: string,
+    yieldPerKwp: number,     // MWh a year from one installed kWp in this province
+    sunHours: number         // peak-sun hours, for the area rule of thumb
+]
+
+schema SiteFact [
+    id: string,
+    label: string,
+    weight: number,
+    action: string
+]
+
+
+// ── The palette, as the site states it ──────────────────────────────────────
+// A theme is a record of tokens; the library reads the names it knows and the
+// program reads its own (gold, teal, panel …) with provided("theme").
+theme Xennic [
+    background = #071120, surface = #0d1b2a, line = #22304a,
+    text = #eef3fa, textMuted = #b3c0d1, textFaint = #7f92ab,
+    accent = #f5b400, accentTextColor = #23180a,
+    accentHovered = #ffc63d, accentPressed = #d99f00,
+    control = #16233a, controlHovered = #1d2d47, controlPressed = #22344f,
+    controlSelected = #2a3d59,
+    linkColor = #2dd4bf,
+    focusRingStyle = "both",
+    controlCornerRadius = 10,
+    gold = #f5b400, goldSoft = #ffd166, teal = #2dd4bf,
+    panel = #0f172a, panelLine = #ffffff17, muted = #94a3b8,
+    good = #10b981, warn = #f59e0b
+    ]
+
+theme XennicLight [
+    background = #f8fafc, surface = #ffffff, line = #dbe3ec,
+    text = #0f172a, textMuted = #4a5a6d, textFaint = #7b8a9c,
+    // The same gold the site's own light theme uses (`--accent: #8a5a08`): the
+    // lighter #b7791f read well on the button but fell below 4.5:1 as text on
+    // the paper background, and a figure a reader has to squint at is a figure
+    // they will not trust.
+    accent = #8a5a08, accentTextColor = #ffffff,
+    accentHovered = #a06a15, accentPressed = #6f4806,
+    control = #eef2f7, controlHovered = #e4eaf2, controlPressed = #d9e1eb,
+    controlSelected = #dbe7f7,
+    linkColor = #0f766e,
+    focusRingStyle = "both",
+    controlCornerRadius = 10,
+    gold = #8a5a08, goldSoft = #b7791f, teal = #0f766e,
+    panel = #ffffff, panelLine = #0b1a2b1a, muted = #4a5a6d,
+    good = #047857, warn = #b45309
+    ]
+
+
+// ── Small parts ─────────────────────────────────────────────────────────────
+
+// One labelled figure: the number a person came for, with its unit.
+//
+// A page in Persian is read from the right, and the text of a card has to be
+// read the same way. Declare does not mirror layouts (guide: size, position
+// and layout), so two things are written by hand here:
+//
+//   - a text that sizes itself to its words sits at the *left* of its box, and
+//     a box that is only as wide as its words has no room to be aligned. So
+//     every label and hint below is given the width of its card: the text is
+//     then right-aligned inside it, where a Persian reader starts.
+//   - the figure is the reason the card exists, so it goes last in its row —
+//     a row lays out from the left, so the last child is the rightmost one.
+class Stat [
+    label: string = "",
+    value: string = "—",
+    unit: string = "",
+    hint: string = "",
+    accent: Color = { provided("theme").accent },
+    width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 2 ],
+    padding = [10, 12, 10, 12],
+    cornerRadius = 10,
+    fill = { provided("theme").control },
+    Text [ width = 100%, text = { classroot.label }, fontSize = 11, textColor = { provided("theme").textMuted } ],
+    // The number first, the unit to its left — the order a Persian reader
+    // reads them in. The unit takes the room the number does not need, and
+    // its own text is right-aligned, so it ends up right beside the figure.
+    row: View [ width = 100%,
+        layout: SimpleLayout [ axis = x, spacing = 5, align = baseline ],
+        Text [ flexes = true, text = { classroot.unit }, fontSize = 11,
+            textColor = { provided("theme").textMuted } ],
+        // The figure itself is left-to-right on purpose: `≤` is a character
+        // that is *mirrored* in a right-to-left paragraph, so a line that
+        // read `≤ 125` would be drawn as `≥ 125` — the opposite of what it
+        // says. The figure keeps its own direction; the unit beside it does
+        // not need one.
+        Text [ text = { classroot.value }, fontSize = 21, fontWeight = bold, textColor = { classroot.accent },
+            direction = ltr,
+            accessibilityLabel = { classroot.label + " " + classroot.value + " " + classroot.unit } ]
+        ],
+    Text [ width = 100%, text = { classroot.hint }, fontSize = 10.5, textColor = { provided("theme").textMuted },
+        wrap = true, visible = { classroot.hint != "" } ]
+    ]
+
+// A heading inside a tab, with the sentence that says what the tool does.
+//
+// Both texts take the width of the panel. A text that sizes itself to its
+// words is as wide as its longest line and cannot wrap, so on a narrow screen
+// it would run past the edge of the panel and be cut off; given the width of
+// the panel it wraps instead, and it is right-aligned, as the rest of the
+// page is.
+class PanelHeading [
+    title: string = "",
+    detail: string = "",
+    width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 3 ],
+    Text [ width = 100%, text = { classroot.title }, fontSize = 15, fontWeight = semibold, textColor = { provided("theme").text } ],
+    Text [ width = 100%, text = { classroot.detail }, fontSize = 11.5, textColor = { provided("theme").textMuted }, wrap = true ]
+    ]
+
+// A labelled number field. The keyboard path matters more than the slider on a
+// laptop, so the field is first and the slider is a convenience beside it.
+class Amount [
+    label: string = "",
+    unit: string = "",
+    min: number = 0,
+    max: number = 100,
+    step: number = 1,
+    value: number = 0,
+    hint: string = "",
+    change(v: number) { },
+    width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 4 ],
+    Text [ width = 100%, text = { classroot.label + " (" + classroot.unit + ")" }, fontSize = 11.5,
+        fontWeight = medium, textColor = { provided("theme").textMuted } ],
+    // A row lays out from the left, so the slider is declared first and the
+    // field lands on the right — under the right-aligned label, where the
+    // reader's eye already is (guide: layouts are not mirrored).
+    row: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+        Slider [ flexes = true, min = { classroot.min }, max = { classroot.max },
+            step = { classroot.step }, value = { classroot.value },
+            accessibilityLabel = { classroot.label },
+            commit(v: number) { classroot.change(v) }
+            ],
+        field: TextInput [ width = 96, height = 32, purpose = decimal,
+            value = { "" + classroot.value },
+            accessibilityLabel = { classroot.label + " (" + classroot.unit + ")" },
+            commit(t: string) {
+                const n = Number(("" + t).replace(/[^0-9.]/g, ""))
+                if (!isNaN(n)) classroot.change(Math.min(classroot.max, Math.max(classroot.min, n)))
+                }
+            ]
+        ],
+    Text [ width = 100%, text = { classroot.hint }, fontSize = 10.5, textColor = { provided("theme").textMuted },
+        wrap = true, visible = { classroot.hint != "" } ]
+    ]
+
+// A bar and a number in one line: the share of a target a value reaches.
+class ShareBar [
+    label: string = "",
+    value: number = 0,
+    max: number = 1,
+    caption: string = "",
+    width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 3 ],
+    Text [ width = 100%, text = { classroot.label }, fontSize = 11, textColor = { provided("theme").textMuted } ],
+    Gauge [ width = 100%, height = 10, value = { classroot.max <= 0 ? 0 : Math.min(100, 100 * classroot.value / classroot.max) },
+        tint = { provided("theme").teal }, accessibilityLabel = { classroot.label + ": " + classroot.caption } ],
+    Text [ width = 100%, text = { classroot.caption }, fontSize = 10.5, textColor = { provided("theme").textMuted } ]
+    ]
+
+// The honesty panel. It says what the tool is and what it is not, once, at the
+// foot of every tab, because that is the claim this whole page makes.
+class Honesty [
+    text: string = "",
+    width = 100%,
+    padding = [10, 12, 10, 12],
+    cornerRadius = 10,
+    fill = { provided("theme").control },
+    stroke = { Stroke(1, provided("theme").panelLine) },
+    layout: SimpleLayout [ axis = x, spacing = 9, align = stretch ],
+    // The rule is written last, so it stands on the right of the panel — the
+    // side a Persian reader starts from, and the side the site's own callouts
+    // put their accent border on.
+    Text [ flexes = true, text = { classroot.text }, fontSize = 10.8, lineHeight = 1.65,
+        textColor = { provided("theme").textMuted }, wrap = true ],
+    bar: View [ width = 3, cornerRadius = 2, fill = { provided("theme").warn } ]
+    ]

@@ -3,8 +3,6 @@ import Link from 'next/link'
 import { getDictionary, localeHref, type Locale } from '@/lib/i18n'
 import { FOUNDER_PORTRAIT } from '@/lib/contact'
 import { serviceImage } from '@/lib/imagery'
-import { heroSlides } from '@/lib/hero-slides'
-import { HeroCarousel } from './hero-carousel'
 import { Action, Container, Eyebrow, SectionHeading } from '../ui/primitives'
 import { faNumber, type HomeContent } from '../../lib/home-content'
 
@@ -18,10 +16,6 @@ const principleIndex = (index: number, locale: Locale) =>
  * from the reviewed translation) and takes the interface strings from the
  * dictionary, so the same markup renders both editions.
  */
-
-export function Hero({ content, locale = 'fa' }: { content: HomeContent['hero']; locale?: Locale }) {
-  return <HeroCarousel slides={heroSlides(locale)} facts={content.facts} locale={locale} />
-}
 
 export function Principles({ pillars, locale = 'fa' }: { pillars: HomeContent['pillars']; locale?: Locale }) {
   const dict = getDictionary(locale)
@@ -147,6 +141,9 @@ export function Platform({ platform, locale = 'fa' }: { platform: HomeContent['p
             <h2 id="platform-title" className="h2" lang="en" dir="ltr">{platform.title}</h2>
             <p className="lede">{platform.description}</p>
             <p className="platform__status">{dict.platform.status}</p>
+            {/* The calculators are live on that page, so the section offers the
+                one route into them instead of a promise. */}
+            <Action href={localeHref(locale, '/platform')} tone="glass">{dict.platform.open}</Action>
           </div>
           <div className="platform__art" aria-hidden="true">
             <Image src="/images/platform-glass.jpg" alt="" fill sizes="(max-width: 860px) 100vw, 46vw" style={{ objectFit: 'cover' }} />

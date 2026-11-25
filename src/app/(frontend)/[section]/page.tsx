@@ -28,14 +28,13 @@ const sectionMeta: Record<string, { title: string; description: string }> = {
   },
   knowledge: { title: 'دانشنامه', description: 'دانشنامهٔ فنی Xennic؛ در حال آماده‌سازی.' },
   tools: { title: 'ابزارهای مهندسی', description: 'ابزارهای مهندسی Xennic؛ در حال آماده‌سازی.' },
-  platform: { title: 'Xennic Platform', description: 'پلتفرم مهندسی Xennic؛ در حال آماده‌سازی.' },
   privacy: { title: 'حریم خصوصی', description: 'سیاست حریم خصوصی Xennic؛ در حال آماده‌سازی.' },
   terms: { title: 'شرایط استفاده', description: 'شرایط استفاده از وب‌سایت Xennic؛ در حال آماده‌سازی.' },
   cookies: { title: 'کوکی‌ها', description: 'سیاست کوکی وب‌سایت Xennic؛ در حال آماده‌سازی.' },
 }
 
 /** Sections whose content is not approved yet must not be indexed. */
-const unpublished = new Set(['knowledge', 'tools', 'platform', 'privacy', 'terms', 'cookies'])
+const unpublished = new Set(['knowledge', 'tools', 'privacy', 'terms', 'cookies'])
 
 export async function generateMetadata({ params }: { params: Promise<{ section: string }> }): Promise<Metadata> {
   const { section } = await params
@@ -48,7 +47,6 @@ export async function generateMetadata({ params }: { params: Promise<{ section: 
 const notPublished: Record<string, string> = {
   knowledge: 'دانشنامه',
   tools: 'ابزارهای مهندسی',
-  platform: 'Xennic Platform',
   privacy: 'حریم خصوصی',
   terms: 'شرایط استفاده',
   cookies: 'کوکی‌ها',

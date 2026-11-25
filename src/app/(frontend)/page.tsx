@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
-import { ContactBand, Founder, Hero, Platform, Principles, Services } from '@/components/home/sections'
+import { BentoHero } from '@/components/home/hero-bento'
+import { ContactBand, Founder, Platform, Principles, Services } from '@/components/home/sections'
+import { JsonLd } from '@/components/ui/json-ld'
 import { getPage, getServiceCards } from '@/lib/content'
 import { buildHomeContent, extractBlocks, type HomeService } from '@/lib/home-content'
 import { pageMetadata } from '@/lib/seo'
+import { homeStructuredData } from '@/lib/structured-data'
 import { notFound } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +42,8 @@ export default async function Home() {
 
   return (
     <>
-      <Hero content={content.hero} />
+      <JsonLd data={homeStructuredData()} />
+      <BentoHero content={content.hero} />
       <Principles pillars={content.pillars} />
       <Services services={content.services} />
       <Founder founder={content.founder} />
