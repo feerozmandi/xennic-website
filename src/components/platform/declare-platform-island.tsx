@@ -1,0 +1,175 @@
+'use client'
+
+/**
+ * The Declare island.
+ *
+ * The platform's three calculators are not React. They are a Declare program,
+ * compiled ahead of time into `public/declare-platform/` by `declarec`, and this
+ * component is the whole of the bridge: a sized box marked `data-declare-embed`
+ * (the marker is the contract — the app fills the element, not the window), and
+ * a dynamic import of the prebuilt bundle.
+ *
+ * Three decisions are worth keeping in view:
+ *
+ *   1. **Nothing is fetched until the box is near the viewport.**
+ *      `IntersectionObserver` with a generous root margin is the trigger, and a
+ *      reader who prefers reduced data gets a button instead of a load.
+ *   2. **The bundle name comes from the build's own manifest.** `declarec` names
+ *      the file after a hash of its content, so a hardcoded name would rot on
+ *      the first rebuild. `declare-apps/…/tools/manifest.mjs` records it.
+ *   3. **The page owns the page.** The app paints only inside its box and does
+ *      not touch the document's theme, scroll position or history. It asks for
+ *      one thing — a theme change — and the site's own switch acts on it.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { getDictionary, type Locale } from '@/lib/i18n'
+import { contactHref, requestSummary, type PlatformRequest } from '@/lib/platform-handoff'
+import type { Theme } from '@/lib/theme'
+
+type Manifest = { entry: string }
+
+type Tenant = {
+  provide: (name: string, value: unknown) => void
+  exposed: (name: string, fallback: unknown) => unknown
+}
+
+/** What the program posts to the page. */
+type HostMessage = { topic: string; payload?: PlatformRequest }
+
+type Phase = 'idle' | 'loading' | 'ready' | 'failed'
+
+/** Room reserved before the app exists, so the page does not jump under a thumb. */
+const MIN_HEIGHT = '520px'
+
+function currentTheme(): Theme {
+  if (typeof document === 'undefined') return 'dark'
+  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'
+}
+
+export function DeclarePlatformIsland({ locale = 'fa' }: { locale?: Locale }) {
+  const dict = getDictionary(locale).platformIsland
+  const router = useRouter()
+  const hostRef = useRef<HTMLDivElement>(null)
+  const tenantRef = useRef<Tenant | null>(null)
+  const bootedRef = useRef(false)
+  const [phase, setPhase] = useState<Phase>('idle')
+
+  /**
+   * Boot the app. Idempotent: the observer, the button and a late callback may
+   * all ask for it, and exactly one boot happens.
+   */
+  const boot = useCallback(async () => {
+    if (bootedRef.current) return
+    const host = hostRef.current
+    if (!host) return
+    bootedRef.current = true
+    setPhase('loading')
+
+    try {
+      const manifest = (await fetch('/declare-platform/manifest.json', { cache: 'no-cache' }).then(
+        (response) => {
+          if (!response.ok) throw new Error(`manifest: ${response.status}`)
+          return response.json() as Promise<Manifest>
+        },
+      )) as Manifest
+
+      // A static file with a hashed name. `webpackIgnore` keeps the bundler out
+      // of it: the URL is resolved at runtime, and the file is not part of the
+      // Next.js build.
+      const bundle = await import(/* webpackIgnore: true */ `/declare-platform/${manifest.entry}`)
+      const tenant = (await bundle.default({
+        host,
+        // The app reads this with `app.hostProvided("dark", false)`.
+        provides: { dark: currentTheme() === 'dark' },
+        onPost: (message: HostMessage) => {
+          // The program asks for one thing: that its numbers travel with the
+          // request. The page writes them into the contact form's own fields
+          // and sends the reader there.
+          if (message.topic === 'request') {
+            const summary = requestSummary(message.payload ?? {}, dict.handoff, locale)
+            router.push(contactHref(locale, dict.handoff.subject, summary))
+          }
+        },
+      })) as Tenant
+
+      tenantRef.current = tenant
+      setPhase('ready')
+    } catch (error) {
+      // A failed boot leaves an honest message and a retry — never an empty
+      // frame and never a hidden failure.
+      console.error('declare: boot failed', error)
+      setPhase('failed')
+    }
+  }, [dict.handoff, locale, router])
+
+  /** Load when the box is within a screen and a half of the viewport. */
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect()
+          void boot()
+        }
+      },
+      { rootMargin: '600px 0px' },
+    )
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [boot])
+
+  /** Follow the page's theme for as long as the app lives. */
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      tenantRef.current?.provide('dark', currentTheme() === 'dark')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  const start = () => {
+    bootedRef.current = false
+    void boot()
+  }
+
+  return (
+    <div className="declare-island">
+      <div className="declare-island__bar">
+        <p className="declare-island__hint">{dict.hint}</p>
+        <button type="button" className="btn btn--glass" onClick={start} disabled={phase === 'loading'}>
+          <span>{phase === 'idle' ? dict.load : dict.reload}</span>
+        </button>
+      </div>
+
+      <div
+        ref={hostRef}
+        className="declare-island__host"
+        data-declare-embed
+        data-declare-phase={phase}
+        style={{ minBlockSize: MIN_HEIGHT }}
+      >
+        {phase === 'failed' && (
+          <div className="declare-island__fallback" role="alert">
+            <p>{dict.failed}</p>
+            <button type="button" className="btn btn--glass" onClick={start}>
+              <span>{dict.retry}</span>
+            </button>
+          </div>
+        )}
+        {phase !== 'ready' && phase !== 'failed' && (
+          <p className="declare-island__loading" role="status" aria-live="polite">
+            {phase === 'loading' ? dict.loading : dict.idle}
+          </p>
+        )}
+      </div>
+
+      <ul className="declare-island__notes">
+        {dict.notes.map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}

@@ -80,7 +80,7 @@ export function BENTO_FIGURES(locale: 'fa' | 'en', serviceCount = 6): BentoFigur
     { id: 'experience', value: fa ? '+۴ دهه' : '40+ years', label: fa ? 'تجربهٔ عملی مؤسس در صنعت برق و خط گرم' : 'The founder’s hands-on experience in power and live-line work' },
     { id: 'standards', value: fa ? 'IEC / مبحث ۱۳' : 'IEC / Section 13', label: fa ? 'مبنای طراحی ارتینگ، صاعقه‌گیر و تأسیسات' : 'The basis for earthing, lightning protection and building services' },
     { id: 'services', value: fa ? `${digits(serviceCount)} حوزه` : `${serviceCount} areas`, label: fa ? 'حوزهٔ خدمت تخصصی، از شبکهٔ توزیع تا انرژی و آموزش' : 'Specialist service areas, from distribution networks to energy and training' },
-    { id: 'platform', value: 'Xennic AI', label: fa ? 'لایهٔ تحلیل و محاسبه‌گر مهندسی؛ پیش‌نمایش، هنوز منتشر نشده' : 'The analysis layer and engineering calculators: a preview, not yet published', href: '/platform' },
+    { id: 'platform', value: 'Xennic AI', label: fa ? 'سه محاسبه‌گر مهندسی که در صفحهٔ پلتفرم اجرا می‌شوند' : 'Three engineering calculators you can run on the platform page', href: '/platform' },
   ]
 }
 
@@ -124,10 +124,12 @@ export function buildHomeContent(input: {
       text: founderBlock?.text ?? '',
       note: 'این پیشینه، سابقهٔ حرفه‌ای مؤسس پیش از تأسیس Xennic است و به‌معنای سابقهٔ پروژه‌های شرکت نیست.',
     },
+    // Published: the platform page carries three calculators that run in the
+    // browser. The section says what they do, not that something is coming.
     platform: {
       title: 'Xennic Platform',
-      badge: 'به‌زودی',
-      description: 'پلتفرم مهندسی Xennic در حال آماده‌سازی است؛ اطلاعات بیشتر پس از انتشار رسمی اعلام می‌شود.',
+      badge: 'محاسبه‌گرهای مهندسی',
+      description: 'سه محاسبه‌گر برای اصلاح ضریب توان، تخمین نیروگاه خورشیدی و ارزیابی اولیهٔ ممیزی انرژی و ارتینگ؛ تخمین، نه طراحی.',
     },
     contact: {
       title: 'برای بررسی فنی پروژهٔ خود با ما گفت‌وگو کنید',

@@ -23,9 +23,9 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://xennic.ir'
  * Paths that are linked but not published. They must never be indexed and must
  * never appear in the sitemap; the crawler should reach them only by direct link.
  */
-export const NOT_PUBLISHED_PATHS = ['/knowledge', '/platform', '/privacy', '/terms', '/cookies', '/tools'] as const
+export const NOT_PUBLISHED_PATHS = ['/knowledge', '/privacy', '/terms', '/cookies', '/tools'] as const
 
-export const INDEXABLE_PATHS = ['/', '/company', '/company/team', '/services', '/track-record', '/contact'] as const
+export const INDEXABLE_PATHS = ['/', '/company', '/company/team', '/services', '/track-record', '/platform', '/contact'] as const
 
 export function isNotPublished(path: string) {
   return (NOT_PUBLISHED_PATHS as readonly string[]).includes(path)

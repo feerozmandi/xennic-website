@@ -1582,6 +1582,12 @@ html[dir='ltr'] .footer-contact a { padding: 0.5rem 0.6rem 0.5rem 0.85rem; }
 .breadcrumb a { color: var(--text-muted); }
 .breadcrumb a:hover { color: var(--accent); }
 
+/* The heading block of a page built outside `ContentPage` (the platform page
+   owns its own sections, so it repeats this one shape rather than the whole
+   component). */
+.page-heading { display: grid; gap: 0.85rem; justify-items: start; margin-block-end: clamp(1.5rem, 3vw, 2.25rem); }
+.page-heading .h1 { max-width: 30ch; }
+
 .page-head {
   display: grid;
   gap: 0.85rem;
@@ -1723,4 +1729,106 @@ html[dir='ltr'] .footer-contact a { padding: 0.5rem 0.6rem 0.5rem 0.85rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .card--link:hover, .card:hover { transform: none; }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Platform page and the Declare island
+ *
+ * The island is a foreign element inside the page: it paints its own pixels and
+ * none of the site's CSS reaches inside it. So the rules below stop at the frame
+ * — the box, its reserved room and the notes around it — and the palette the
+ * program uses is declared in the program itself (`parts.declare`), token for
+ * token from this file.
+ * ------------------------------------------------------------------------- */
+
+.tool-list {
+  display: grid;
+  gap: clamp(0.9rem, 1.8vw, 1.25rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+.tool-list__item {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  padding: clamp(1rem, 2vw, 1.35rem);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border-soft);
+  background: linear-gradient(165deg, var(--surface-a), var(--surface-b));
+  box-shadow: var(--shadow-soft);
+}
+.tool-list__item p { font-size: 0.92rem; color: var(--text-muted); }
+.tool-list__item .h3 { color: var(--accent); }
+.tool-list__inputs { font-size: 0.82rem; padding-block-start: 0.35rem; border-block-start: 1px solid var(--glass-border-soft); }
+.tool-list__inputs span { color: var(--text); font-weight: 600; }
+
+.declare-island { display: grid; gap: 0.85rem; margin-block-start: clamp(1rem, 2vw, 1.5rem); }
+.declare-island__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.declare-island__hint { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
+
+/* The box the program fills. It is sized here and nowhere else: the app reads
+   `app.hostWidth`/`hostHeight` and never asks the page for room. */
+.declare-island__host {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  /* The program fills its host and never measures the page, so the host states
+     one height and scrolls inside it. A page that grew with the app would make
+     the app's own scrolling pane the page's, and a phone would then have two
+     scrollers fighting over one thumb. */
+  block-size: clamp(540px, 78vh, 820px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border-soft);
+  background: var(--page-bg);
+  box-shadow: var(--shadow-soft);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* Before the app exists the box is empty; it holds the same room so the page
+   does not jump when the program arrives. */
+.declare-island__host[data-declare-phase='idle'],
+.declare-island__host[data-declare-phase='loading'],
+.declare-island__host[data-declare-phase='failed'] { overflow: hidden; }
+.declare-island__host > * { border-radius: inherit; }
+
+.declare-island__loading,
+.declare-island__fallback {
+  display: grid;
+  gap: 0.65rem;
+  justify-items: start;
+  padding: clamp(1.1rem, 2.4vw, 1.6rem);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.declare-island__fallback { border-inline-start: 3px solid var(--accent); }
+
+.declare-island__notes {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.declare-island__notes li { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem; }
+.declare-island__notes li::before { content: '—'; color: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .declare-island__host { scroll-behavior: auto; }
+}
+
+/* On a phone the panel keeps most of the screen and its own scroll, with the
+   page's scroll untouched around it. */
+@media (max-width: 640px) {
+  .declare-island__host { block-size: clamp(520px, 82vh, 700px); }
+  .declare-island__bar { flex-direction: column; align-items: stretch; }
 }

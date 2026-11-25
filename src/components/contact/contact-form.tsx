@@ -34,6 +34,25 @@ export function ContactForm({ locale = 'fa' }: { locale?: Locale }) {
     if (state.status !== 'idle') statusRef.current?.focus()
   }, [state])
 
+  /**
+   * A request that starts at the platform's calculator arrives with its
+   * numbers in the URL. The fields belong to the visitor, so the values are
+   * only a starting point — they are filled once, on arrival, and only where
+   * the visitor has not already typed.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const carried: [string, string][] = [
+      ['subject', 'contact-subject'],
+      ['message', 'contact-message'],
+    ]
+    for (const [param, id] of carried) {
+      const value = params.get(param)
+      const field = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null
+      if (value && field && !field.value) field.value = value
+    }
+  }, [])
+
   if (state.status === 'success') {
     return (
       <div className="form-success" role="status" tabIndex={-1} ref={statusRef}>

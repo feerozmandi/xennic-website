@@ -114,5 +114,32 @@ export function breadcrumbStructuredData(items: { name: string; path: string }[]
   }
 }
 
+/**
+ * The platform page: the calculators as a `SoftwareApplication`, offered by the
+ * company, plus the trail that leads to it.
+ *
+ * `applicationCategory` is the closest published schema.org category, and
+ * `offers` states the one thing that is true — the tools are free to use on the
+ * site. No version, rating, download or operating system claim is made.
+ */
+export function softwareApplicationLd(): JsonLd {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    '@id': `${SITE_URL}/platform#application`,
+    name: 'Xennic Platform — محاسبه‌گرهای مهندسی برق',
+    url: absoluteUrl('/platform'),
+    applicationCategory: 'https://schema.org/EngineeringApplication',
+    applicationSubCategory: 'محاسبه‌گر مهندسی برق، انرژی و ارتینگ',
+    operatingSystem: 'Web',
+    inLanguage: 'fa-IR',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'IRR' },
+    publisher: { '@id': `${SITE_URL}/#organization` },
+    description:
+      'محاسبهٔ ظرفیت بانک خازنی و اصلاح ضریب توان در ۴۰۰ ولت، تخمین فنی نیروگاه خورشیدی، و ارزیابی اولیهٔ ممیزی انرژی و ارتینگ.',
+  }
+}
+
 /** The theme colour a browser paints its chrome with; one palette, two themes. */
 export const THEME_COLORS = { dark: palette.ink, light: palette.paper } as const

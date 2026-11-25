@@ -141,6 +141,9 @@ export function Platform({ platform, locale = 'fa' }: { platform: HomeContent['p
             <h2 id="platform-title" className="h2" lang="en" dir="ltr">{platform.title}</h2>
             <p className="lede">{platform.description}</p>
             <p className="platform__status">{dict.platform.status}</p>
+            {/* The calculators are live on that page, so the section offers the
+                one route into them instead of a promise. */}
+            <Action href={localeHref(locale, '/platform')} tone="glass">{dict.platform.open}</Action>
           </div>
           <div className="platform__art" aria-hidden="true">
             <Image src="/images/platform-glass.jpg" alt="" fill sizes="(max-width: 860px) 100vw, 46vw" style={{ objectFit: 'cover' }} />

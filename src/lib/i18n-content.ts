@@ -230,10 +230,12 @@ export function buildEnglishHomeContent(): HomeContent {
       text: en.founderBio,
       note: 'This is the founder’s professional record before Xennic existed; it is not a record of company projects.',
     },
+    // The platform page is published now: the badge and the promise are gone,
+    // and the section says what the three calculators do.
     platform: {
       title: 'Xennic Platform',
-      badge: 'Coming soon',
-      description: 'The Xennic engineering platform is in preparation; more information will be announced with its official release.',
+      badge: 'Engineering calculators',
+      description: 'Three calculators for power factor correction, solar yield and a first energy-audit and earthing triage — estimates, not designs.',
     },
     contact: {
       title: 'Talk to us about the technical review of your project',
@@ -252,7 +254,6 @@ export function buildEnglishHomeContent(): HomeContent {
 export const englishNotPublished: Record<string, string> = {
   knowledge: 'Knowledge base',
   tools: 'Engineering tools',
-  platform: 'Xennic Platform',
   privacy: 'Privacy',
   terms: 'Terms of use',
   cookies: 'Cookies',
@@ -278,7 +279,6 @@ export const englishSectionMeta: Record<string, { title: string; description: st
   },
   knowledge: { title: 'Knowledge base', description: 'The Xennic technical knowledge base; in preparation.' },
   tools: { title: 'Engineering tools', description: 'Xennic engineering tools; in preparation.' },
-  platform: { title: 'Xennic Platform', description: 'The Xennic engineering platform; in preparation.' },
   privacy: { title: 'Privacy', description: 'The Xennic privacy policy; in preparation.' },
   terms: { title: 'Terms of use', description: 'Terms of use for the Xennic website; in preparation.' },
   cookies: { title: 'Cookies', description: 'The Xennic cookie policy; in preparation.' },

@@ -80,7 +80,7 @@ const fa = {
   hero: {
     note: 'اطلاعات تماس رسمی فقط پس از تأیید سازمان منتشر می‌شود؛ تا آن زمان درخواست‌ها از صفحهٔ تماس پیگیری می‌شوند.',
     primaryCta: 'ثبت درخواست بررسی فنی پروژه',
-    platformCta: 'آشنایی با Xennic Platform',
+    platformCta: 'اجرای محاسبه‌گرها',
     diagramNote:
       'تصویر بالا یک شماتیک فنی از مسیر انرژی است (خورشیدی، توزیع ۲۰ کیلوولت و تابلو صنعتی)؛ عکس پروژه یا کارفرمای مشخصی نیست.',
     figuresLabel: 'شاخص‌های اعتبار',
@@ -120,7 +120,45 @@ const fa = {
     role: 'مؤسس',
   },
   platform: {
-    status: 'این بخش پیش‌نمایش طراحی است؛ هیچ قابلیت یا دسترسی جدیدی در سایت فعال نشده است.',
+    status: 'هر سه ابزار یک برنامهٔ مستقل‌اند که در همین صفحه بارگذاری می‌شود و نتیجه‌شان تخمین اولیه است، نه طراحی.',
+    open: 'اجرای محاسبه‌گرها',
+  },
+  // The Declare island. Every string here is interface copy: the calculators
+  // themselves carry their own Persian text inside the Declare program.
+  // The platform page: the copy around the Declare island, in both editions.
+  // The calculators' own interface is Persian inside the program; these strings
+  // explain them to the reader before the program loads, and to a crawler that
+  // never runs it.
+  platformPage: {
+    eyebrow: 'ابزارهای مهندسی',
+    title: 'محاسبه‌گرهای مهندسی Xennic',
+    lead: 'سه محاسبه‌گر که پیش از درخواست مشاوره به کار می‌آیند: ظرفیت بانک خازنی در ۴۰۰ ولت، تخمین فنی یک نیروگاه خورشیدی، و ارزیابی اولیهٔ وضعیت ممیزی انرژی و ارتینگ. هر سه با فرمول‌های استاندارد و ورودی‌های خودتان کار می‌کنند و خروجی‌شان تخمین اولیه است، نه طراحی.',
+    toolsTitle: 'ابزارها',
+    inputsLabel: 'ورودی‌ها:',
+    islandTitle: 'اجرای محاسبه‌گرها',
+    islandLead: 'محاسبه‌گرها یک برنامهٔ مستقل‌اند که پس از رسیدن به این بخش بارگذاری می‌شود؛ تا آن زمان هیچ کدی از آن به مرورگر شما نمی‌آید.',
+  },
+  platformIsland: {
+    hint: 'محاسبه‌گرها را می‌توانید همین‌جا اجرا کنید؛ نتیجه تخمین اولیه است.',
+    load: 'اجرای محاسبه‌گر',
+    reload: 'اجرای دوباره',
+    idle: 'محاسبه‌گر با رسیدن به این بخش بارگذاری می‌شود. اگر بارگذاری نشد، دکمهٔ بالا را بزنید.',
+    loading: 'در حال آماده‌سازی محاسبه‌گر…',
+    failed: 'محاسبه‌گر بارگذاری نشد. متن صفحه دست‌نخورده است؛ دوباره تلاش کنید یا از فرم تماس استفاده کنید.',
+    retry: 'تلاش دوباره',
+    handoff: {
+      subject: 'درخواست بررسی فنی — محاسبه‌گر Xennic',
+      intro: 'خروجی محاسبه‌گر Xennic:',
+      bank: 'بانک خازنی',
+      plant: 'نیروگاه خورشیدی',
+      triage: 'اولویت‌بندی ممیزی و ارتینگ',
+      score: 'امتیاز اولویت',
+      empty: 'موردی علامت نخورده است',
+    },
+    notes: [
+      'هر سه ابزار با فرمول‌های استاندارد و ورودی‌های خودتان کار می‌کنند؛ هیچ عددی از پروژه یا کارفرمای مشخصی نیست.',
+      'نتیجهٔ محاسبه تخمین اولیه است، نه طراحی؛ طراحی نهایی به بازدید و بررسی میدانی نیاز دارد.',
+    ],
   },
   content: {
     aboutEyebrow: 'دربارهٔ شرکت',
@@ -266,7 +304,7 @@ const en: Dictionary = {
   hero: {
     note: 'The approved contact channels are published on the contact page, where you can also send a request.',
     primaryCta: 'Request a technical review',
-    platformCta: 'About Xennic Platform',
+    platformCta: 'Run the calculators',
     diagramNote:
       'The drawing above is a technical schematic of one energy path — solar, a 20 kV distribution board and an industrial panel. It is not a photograph of a project or a client.',
     figuresLabel: 'Credentials at a glance',
@@ -306,7 +344,41 @@ const en: Dictionary = {
     role: 'Founder',
   },
   platform: {
-    status: 'This section is a design preview; no new capability or access has been enabled on the site.',
+    status: 'All three tools are a separate program that loads on that page, and what they return is a first estimate, not a design.',
+    open: 'Run the calculators',
+  },
+  // The Declare island. The calculators' own copy is Persian inside the
+  // program; this is the frame around it in this language.
+  platformPage: {
+    eyebrow: 'Engineering tools',
+    title: 'Xennic engineering calculators',
+    lead: 'Three calculators to use before asking for a consultation: capacitor bank capacity at 400 V, a first estimate for a solar plant, and an initial read on a site’s energy audit and earthing. All three work from standard formulas and the figures you enter, and all three return an estimate rather than a design.',
+    toolsTitle: 'The tools',
+    inputsLabel: 'Inputs:',
+    islandTitle: 'Run the calculators',
+    islandLead: 'The calculators are a separate program that loads when this section comes into view; nothing of it reaches your browser before that. The interface inside the panel is Persian, the language the tools were written in.',
+  },
+  platformIsland: {
+    hint: 'You can run the calculators here; the result is a first estimate.',
+    load: 'Run the calculators',
+    reload: 'Run them again',
+    idle: 'The calculator loads when this section comes into view. If it did not, use the button above.',
+    loading: 'Getting the calculator ready…',
+    failed: 'The calculator did not load. The page itself is fine — try again, or use the contact form.',
+    retry: 'Try again',
+    handoff: {
+      subject: 'Technical review request — Xennic calculator',
+      intro: 'Xennic calculator output:',
+      bank: 'Capacitor bank',
+      plant: 'Solar plant',
+      triage: 'Audit and earthing triage',
+      score: 'Priority score',
+      empty: 'no items were selected',
+    },
+    notes: [
+      'All three tools work from standard formulas and the figures you enter; none of them is a figure from a specific project or client.',
+      'The result is a first estimate, not a design; a final design needs a site visit and measurement.',
+    ],
   },
   content: {
     aboutEyebrow: 'About the company',
