@@ -13,7 +13,9 @@ export default defineConfig([
     // because it is what the browser downloads. Linting a compiler's output
     // says nothing about this repository's code. `declare-apps/` is the source
     // and is checked by `declare-verify`, not by ESLint.
-    'public/declare-platform/**',
     'declare-apps/**',
+    // The development server's copy of the program; the build writes the
+    // other one into `.next/static/`, which is ignored above.
+    'public/declare-platform/**',
   ]),
 ])

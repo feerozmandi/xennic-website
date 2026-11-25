@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
-import { writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import { test } from 'node:test'
 
@@ -26,6 +26,25 @@ const email = 'ci-staff@example.invalid'
 const json = { 'Content-Type': 'application/json' }
 const origin = 'https://preview.xennic.ir'
 const untrusted = 'https://untrusted.example.invalid'
+
+test('the compiled program is published where the public edge serves it', async () => {
+  // The edge lists its public paths explicitly and answers anything else
+  // with a sign-in redirect, so a program published outside that list never
+  // reaches a visitor. `/_next/static/*` is on the list; this is where the
+  // program has to be.
+  const manifest = JSON.parse(
+    await readFile(new URL('../declare-apps/xennic-platform/dist/manifest.json', import.meta.url), 'utf8'),
+  )
+  const path = `/_next/static/declare-platform/${manifest.entry}`
+  const response = await fetch(`${upstream}${path}`)
+  assert.equal(response.status, 200, `the program must be served at ${path}`)
+  const source = await response.text()
+  assert.match(source, /export\{[^}]*as default\}/, 'a prebuilt module, not a page')
+  assert.ok(!source.includes('.wasm'), 'the JavaScript kernel build carries no WebAssembly')
+  // The development server's copy is not a deployment: it must not be there.
+  const devCopy = await fetch(`${upstream}/declare-platform/${manifest.entry}`)
+  assert.notEqual(devCopy.status, 200, 'the development copy must not be published')
+})
 
 test('isolated proxy, Payload auth, media and protected paths', async () => {
   try {
@@ -119,6 +138,10 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     r = await request('/api/pages?where[slug][equals]=track-record-intro', { headers: { Authorization: `Bearer ${token}` } })
     const page = (await r.json()).docs[0]
     assert.ok(page?.id)
+    // This test writes to the same database the site reads from. The words it
+    // writes are the test's own, so it puts the page back before it leaves —
+    // a preview that kept them would be publishing somebody else's edit.
+    const originalSummary = page.summary
     for (const headers of [
       { ...json, Cookie: cookie, Origin: untrusted },
       { ...json, Cookie: cookie, 'Sec-Fetch-Site': 'cross-site' },
@@ -131,6 +154,8 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     assert.equal(r.status, 200, 'trusted origin cookie write')
     r = await request(`/api/pages/${page.id}`, { method: 'PATCH', headers: { ...json, Cookie: cookie, 'Sec-Fetch-Site': 'same-origin' }, body: JSON.stringify({ summary: 'CI edit preserved' }) })
     assert.equal(r.status, 200, 'origin-less same-origin cookie write')
+    r = await request(`/api/pages/${page.id}`, { method: 'PATCH', headers: { ...json, Cookie: cookie, Origin: origin }, body: JSON.stringify({ summary: originalSummary }) })
+    assert.equal(r.status, 200, 'the page is put back the way it was')
     const makeForm = () => {
       const form = new FormData()
       form.set('_payload', JSON.stringify({ alt: 'CI image' }))

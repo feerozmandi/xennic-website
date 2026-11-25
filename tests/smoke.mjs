@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:3000'
@@ -85,19 +86,45 @@ test('the platform page describes its three tools and hosts the Declare island',
 })
 
 test('the Declare bundle the island asks for exists and is a prebuilt ES module', async () => {
-  const manifestResponse = await fetch(`${base}/declare-platform/manifest.json`)
-  assert.equal(manifestResponse.status, 200, 'manifest.json is served')
-  const manifest = await manifestResponse.json()
+  // The manifest is a record of the build, not a page: it lives beside the
+  // program it names, in the repository.
+  const manifest = JSON.parse(
+    readFileSync(new URL('../declare-apps/xennic-platform/dist/manifest.json', import.meta.url), 'utf8'),
+  )
   assert.match(manifest.entry, /^app\.[0-9a-f]+\.js$/)
 
-  const bundle = await fetch(`${base}/declare-platform/${manifest.entry}`)
-  assert.equal(bundle.status, 200, `the bundle ${manifest.entry} is served`)
-  const source = await bundle.text()
+  // The island asks for the program on the path the public edge already
+  // serves. A path outside that list is answered with a sign-in redirect, so
+  // the program would never arrive on the live site.
+  //
+  // The development server has no build output and serves the program from
+  // `public/` instead, so both are checked and one of them must answer.
+  const built = readFileSync(
+    new URL(`../declare-apps/xennic-platform/dist/${manifest.entry}`, import.meta.url),
+    'utf8',
+  )
+  const staticPath = `/_next/static/declare-platform/${manifest.entry}`
+  const devPath = `/declare-platform/${manifest.entry}`
+  const staticResponse = await fetch(`${base}${staticPath}`)
+  const devResponse = await fetch(`${base}${devPath}`)
+  assert.ok(
+    staticResponse.status === 200 || devResponse.status === 200,
+    `the bundle ${manifest.entry} is served at neither ${staticPath} nor ${devPath}`,
+  )
+  const source = staticResponse.status === 200 ? await staticResponse.text() : await devResponse.text()
   // A precompiled program: it exports `boot` as its default and carries no
   // WebAssembly, so it needs neither a compiler nor a CSP allowance to run.
   assert.match(source, /export\{[^}]*as default\}/)
   assert.ok(!source.includes('.wasm'), 'the JavaScript kernel build carries no WebAssembly')
   assert.ok(source.length > 100_000, 'the program is in the bundle, not fetched later')
+  // The same bytes as the artifact in the repository: the published program is
+  // the program, not another one.
+  assert.equal(source, built, 'the published program and the built one are the same file')
+
+  // Which of the two paths is right depends on what is running: the build
+  // publishes the program on the edge's path, the development server on its
+  // own. A deployment has to use the first — that is asserted where a
+  // deployment is actually running, in `tests/preview-production.mjs`.
 })
 
 test('the contact page publishes only owner-confirmed channels and a real form', async () => {

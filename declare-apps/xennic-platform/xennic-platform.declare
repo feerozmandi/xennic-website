@@ -225,19 +225,20 @@ App [
                 ],
 
             results: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 8 ],
-                // Every row of figures is written in the reverse of the reading
-                // order, so the figure a reader looks for first is the one on
-                // the right.
+                // A row lays out from the left, so the figure a reader looks for
+                // first is written last: it ends up on the right, where the
+                // reading starts. The accented figure is that one in every row
+                // of every panel.
                 View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
+                    Stat [ flexes = true, label = "ظرفیت محاسبه‌شده", value = { app.bankKvar().toFixed(1) }, unit = "kVAr" ],
                     Stat [ flexes = true, label = "ظرفیت پیشنهادی", value = { "≤ " + app.bankRounded() }, unit = "kVAr",
-                        accent = { provided("theme").teal } ],
-                    Stat [ flexes = true, label = "ظرفیت محاسبه‌شده", value = { app.bankKvar().toFixed(1) }, unit = "kVAr" ]
+                        accent = { provided("theme").teal } ]
                     ],
                 View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
-                    Stat [ flexes = true, label = "کاهش جریان", value = { app.currentDrop().toFixed(1) }, unit = "%",
-                        accent = { provided("theme").good } ],
                     Stat [ flexes = true, label = "جریان خط", value = { app.currentAt(app.cosNow).toFixed(0) }, unit = "A",
-                        hint = "پیش از اصلاح، در ۴۰۰ ولت" ]
+                        hint = "پیش از اصلاح، در ۴۰۰ ولت" ],
+                    Stat [ flexes = true, label = "کاهش جریان", value = { app.currentDrop().toFixed(1) }, unit = "%",
+                        accent = { provided("theme").good } ]
                     ],
                 View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 8 ],
                     Stat [ flexes = true, label = "جریان پس از اصلاح",
@@ -259,7 +260,7 @@ App [
                 detail = "ظرفیت قابل نصب، تولید سالانه و سهم سقف یا دیماند از یک تخمین مهندسی اولیه." ],
 
             provinceRow: View [ width = 100%, layout: SimpleLayout [ axis = y, spacing = 4 ],
-                Text [ text = "استان پروژه", fontSize = 11.5, fontWeight = medium,
+                Text [ width = 100%, text = "استان پروژه", fontSize = 11.5, fontWeight = medium,
                     textColor = { provided("theme").textMuted } ],
                 chips: View [ width = 100%, layout: SimpleLayout [ axis = x, spacing = 6 ],
                     provincePicker: Segmented [ flexes = true, height = 34, value <-> app.provinceId,

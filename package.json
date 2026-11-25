@@ -7,7 +7,9 @@
     "node": ">=20.18.1"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/declare-platform.mjs dev",
+    "prebuild": "node scripts/declare-platform.mjs prepare",
+    "postbuild": "node scripts/declare-platform.mjs publish",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",

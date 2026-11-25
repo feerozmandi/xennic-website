@@ -4,19 +4,22 @@
  * The Declare island.
  *
  * The platform's three calculators are not React. They are a Declare program,
- * compiled ahead of time into `public/declare-platform/` by `declarec`, and this
- * component is the whole of the bridge: a sized box marked `data-declare-embed`
- * (the marker is the contract — the app fills the element, not the window), and
- * a dynamic import of the prebuilt bundle.
+ * compiled ahead of time into `declare-apps/xennic-platform/dist/` by
+ * `declarec`, and this component is the whole of the bridge: a sized box
+ * marked `data-declare-embed` (the marker is the contract — the app fills the
+ * element, not the window), and a dynamic import of the prebuilt bundle.
  *
  * Three decisions are worth keeping in view:
  *
  *   1. **Nothing is fetched until the box is near the viewport.**
  *      `IntersectionObserver` with a generous root margin is the trigger, and a
  *      reader who prefers reduced data gets a button instead of a load.
- *   2. **The bundle name comes from the build's own manifest.** `declarec` names
- *      the file after a hash of its content, so a hardcoded name would rot on
- *      the first rebuild. `declare-apps/…/tools/manifest.mjs` records it.
+ *   2. **The bundle name comes from the build.** `declarec` names the file
+ *      after a hash of its content, so a hardcoded name would rot on the first
+ *      rebuild. `scripts/declare-platform.mjs` writes the name into a generated
+ *      module before the build and copies the program into the build's own
+ *      static directory after it — `/_next/static/declare-platform/…`, a path
+ *      the public edge already serves.
  *   3. **The page owns the page.** The app paints only inside its box and does
  *      not touch the document's theme, scroll position or history. It follows
  *      the site's theme instead of owning one, and it asks for exactly one
@@ -24,11 +27,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { DECLARE_PLATFORM_PATH } from '@/lib/declare-platform.generated'
 import { getDictionary, type Locale } from '@/lib/i18n'
 import { contactHref, requestSummary, type PlatformRequest } from '@/lib/platform-handoff'
 import type { Theme } from '@/lib/theme'
-
-type Manifest = { entry: string }
 
 type Tenant = {
   provide: (name: string, value: unknown) => void
@@ -65,17 +67,13 @@ export function DeclarePlatformIsland({ locale = 'fa' }: { locale?: Locale }) {
     setPhase('loading')
 
     try {
-      const manifest = (await fetch('/declare-platform/manifest.json', { cache: 'no-cache' }).then(
-        (response) => {
-          if (!response.ok) throw new Error(`manifest: ${response.status}`)
-          return response.json() as Promise<Manifest>
-        },
-      )) as Manifest
-
       // A static file with a hashed name. `webpackIgnore` keeps the bundler out
-      // of it: the URL is resolved at runtime, and the file is not part of the
-      // Next.js build.
-      const bundle = await import(/* webpackIgnore: true */ `/declare-platform/${manifest.entry}`)
+      // of it: the URL is resolved at runtime, and the file is a build artifact
+      // rather than a module of the site.
+      // The development server has no build output, so it serves the program
+      // from `public/` and says so through the environment.
+      const url = process.env.NEXT_PUBLIC_DECLARE_PLATFORM_URL ?? DECLARE_PLATFORM_PATH
+      const bundle = await import(/* webpackIgnore: true */ url)
       const tenant = (await bundle.default({
         host,
         // The app reads this with `app.hostProvided("dark", false)`.

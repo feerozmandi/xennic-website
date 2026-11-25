@@ -5,16 +5,16 @@
     "id": "../../home/user/xennic-website/declare-apps/xennic-platform/xennic-platform.declare",
     "kind": "file",
     "v": {
-     "hash": "9a0f07830569fe9e",
-     "size": 23822
+     "hash": "f663307f434e7d79",
+     "size": 23920
     }
    },
    {
     "id": "../../home/user/xennic-website/declare-apps/xennic-platform/parts.declare",
     "kind": "file",
     "v": {
-     "hash": "5bc8dd364001c40e",
-     "size": 9279
+     "hash": "0344e94e6afe2935",
+     "size": 10923
     }
    },
    {
@@ -141,16 +141,16 @@
     "id": "../../home/user/xennic-website/declare-apps/xennic-platform/README.md",
     "kind": "file",
     "v": {
-     "hash": "ca510279543059fd",
-     "size": 1537
+     "hash": "97def2de2de7cdcf",
+     "size": 3946
     }
    },
    {
     "id": "../../home/user/xennic-website/declare-apps/xennic-platform/tools/manifest.mjs",
     "kind": "file",
     "v": {
-     "hash": "98145993ed0d9f66",
-     "size": 1450
+     "hash": "f878ea5b5642883f",
+     "size": 1554
     }
    },
    {

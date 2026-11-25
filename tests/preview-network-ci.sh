@@ -183,8 +183,8 @@ if ! "${app[@]}" exec -T app node - <<'JS'
     '/en/services/industrial-electrical-consulting', '/en/services/energy-audit',
     '/en/track-record', '/en/knowledge', '/en/tools', '/en/platform', '/en/contact',
     '/en/privacy', '/en/terms', '/en/cookies',
-    '/robots.txt', '/sitemap.xml', '/images/hero-distribution.webp', '/brand/og-cover.png',
-    '/icon.png', '/apple-icon.png', '/_next/image?url=%2Fimages%2Fhero-distribution.webp&w=640&q=75'];
+    '/robots.txt', '/sitemap.xml', '/images/field-distribution-lines.webp', '/brand/og-cover.png',
+    '/icon.png', '/apple-icon.png', '/_next/image?url=%2Fimages%2Ffield-distribution-lines.webp&w=640&q=75'];
   let publicHtml = '';
   for (const path of publicPages) {
     const result = await call(path, null, 'xennic.ir');
@@ -197,6 +197,20 @@ if ! "${app[@]}" exec -T app node - <<'JS'
   }
   const assetPath = publicHtml.match(/\/_next\/static\/[^"'?\s<>]+/)?.[0];
   if (!assetPath || (await call(assetPath, null, 'xennic.ir')).status !== 200) throw Error('rendered static asset not reachable');
+  // Every picture the home page actually asks for must arrive. A hardcoded
+  // list goes stale the moment a picture is renamed or removed, so the page's
+  // own references are the list: if the markup names it, the visitor gets it.
+  const renderedImages = [...new Set([
+    // `&amp;` is how an ampersand is written in HTML; the request needs the
+    // real one.
+    ...[...publicHtml.matchAll(/\/_next\/image\?url=[^"'?\s<>\\]+/g)].map((match) => match[0].replace(/&amp;/g, '&')),
+    ...[...publicHtml.matchAll(/\/images\/[^"'?\s<>\\]+/g)].map((match) => match[0]),
+  ])];
+  if (renderedImages.length === 0) throw Error('home page rendered no picture to check');
+  for (const path of renderedImages) {
+    const result = await call(path, null, 'xennic.ir');
+    if (result.status !== 200) throw Error('picture the page renders is not reachable: ' + path + ' ' + result.status);
+  }
   const staticAsset = await call('/_next/static/nonexistent.js', null, 'xennic.ir');
   if (![200, 404].includes(staticAsset.status)) throw Error('static route blocked unexpectedly');
   for (const path of ['/admin', '/en/admin', '/media/missing.png', '/health', '/unknown', '/services/unknown']) {
