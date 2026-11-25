@@ -139,8 +139,11 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     const page = (await r.json()).docs[0]
     assert.ok(page?.id)
     // This test writes to the same database the site reads from. The words it
-    // writes are the test's own, so it puts the page back before it leaves —
-    // a preview that kept them would be publishing somebody else's edit.
+    // writes are the test's own, so outside the disposable CI database it puts
+    // the page back before it leaves — a preview that kept them would be
+    // publishing somebody else's edit. In CI the edit stays: that is how the
+    // run proves a seed does not overwrite it.
+    const disposable = Boolean(process.env.RESTORE_FIXTURE_PATH)
     const originalSummary = page.summary
     for (const headers of [
       { ...json, Cookie: cookie, Origin: untrusted },
@@ -154,8 +157,10 @@ test('isolated proxy, Payload auth, media and protected paths', async () => {
     assert.equal(r.status, 200, 'trusted origin cookie write')
     r = await request(`/api/pages/${page.id}`, { method: 'PATCH', headers: { ...json, Cookie: cookie, 'Sec-Fetch-Site': 'same-origin' }, body: JSON.stringify({ summary: 'CI edit preserved' }) })
     assert.equal(r.status, 200, 'origin-less same-origin cookie write')
-    r = await request(`/api/pages/${page.id}`, { method: 'PATCH', headers: { ...json, Cookie: cookie, Origin: origin }, body: JSON.stringify({ summary: originalSummary }) })
-    assert.equal(r.status, 200, 'the page is put back the way it was')
+    if (!disposable) {
+      r = await request(`/api/pages/${page.id}`, { method: 'PATCH', headers: { ...json, Cookie: cookie, Origin: origin }, body: JSON.stringify({ summary: originalSummary }) })
+      assert.equal(r.status, 200, 'the page is put back the way it was')
+    }
     const makeForm = () => {
       const form = new FormData()
       form.set('_payload', JSON.stringify({ alt: 'CI image' }))
