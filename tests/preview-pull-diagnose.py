@@ -144,6 +144,41 @@ class StorageHostTest(unittest.TestCase):
         self.assertEqual(seen[1][1], None)
 
 
+class LoadTest(unittest.TestCase):
+    """The modules import each other by sibling path, so a partial copy in one
+    directory must not abort the diagnosis: the installed set comes first and
+    is complete, because the installer writes it as a whole."""
+
+    def test_a_broken_copy_in_the_first_directory_does_not_stop_the_search(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        broken = Path(tmp.name) / 'broken'
+        broken.mkdir()
+        # A module whose sibling import cannot resolve: exactly what the host
+        # hit when the diagnosis loaded the evidence module from the refresh
+        # directory, where its manifest sibling had not been fetched.
+        (broken / 'sibling-user.py').write_text(
+            "import importlib.util\n"
+            "from pathlib import Path\n"
+            "SPEC = importlib.util.spec_from_file_location('m', Path(__file__).with_name('missing.py'))\n"
+            "m = importlib.util.module_from_spec(SPEC)\n"
+            "SPEC.loader.exec_module(m)\n", encoding='utf-8')
+        good = Path(tmp.name) / 'good'
+        good.mkdir()
+        (good / 'sibling-user.py').write_text("VALUE = 1\n", encoding='utf-8')
+
+        with mock.patch.object(diagnose, 'HELPER_DIRECTORIES', (broken, good)):
+            module = diagnose.load('sibling_user', 'sibling-user.py')
+        self.assertEqual(module.VALUE, 1)
+
+    def test_a_module_that_is_nowhere_is_reported_not_raised_raw(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        with mock.patch.object(diagnose, 'HELPER_DIRECTORIES', (Path(tmp.name),)):
+            with self.assertRaises(RuntimeError):
+                diagnose.load('nothing', 'not-here.py')
+
+
 class OutputTest(unittest.TestCase):
     """The token must never reach the output, and the output must say what failed."""
 
@@ -204,6 +239,16 @@ class RefreshScriptTest(unittest.TestCase):
     def test_it_installs_and_then_diagnoses(self):
         self.assertIn('install-preview-pull-deploy.py', self.source)
         self.assertIn('diagnose-preview-pull-deploy.py', self.source)
+
+    def test_it_fetches_the_sibling_the_evidence_module_imports(self):
+        # preview-ci-evidence.py imports preview-deploy-manifest.py by sibling
+        # path. Without it the diagnosis cannot read the evidence envelope.
+        self.assertIn('preview-deploy-manifest.py', self.source)
+        files = [line for line in self.source.splitlines() if line.startswith('FILES=')]
+        self.assertEqual(len(files), 1)
+        for name in ('preview-ci-evidence.py', 'preview-deploy-manifest.py',
+                     'diagnose-preview-pull-deploy.py'):
+            self.assertIn(name, files[0])
 
 
 class CandidateFileTest(unittest.TestCase):

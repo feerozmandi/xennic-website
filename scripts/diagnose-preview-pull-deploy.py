@@ -30,9 +30,11 @@ import zipfile
 sys.dont_write_bytecode = True
 
 ROOT = Path('/srv/xennic-preview')
-# The modules this program needs are installed with the privileged helpers,
-# but the program itself may sit anywhere (it is a diagnostic, not a helper).
-HELPER_DIRECTORIES = (Path(__file__).resolve().parent, Path('/usr/local/libexec/xennic-preview'))
+# The modules this program needs are installed with the privileged helpers, and
+# the installed helper directory comes first: it is the set the deployer itself
+# runs from, and the set the installer writes as a whole. The directory this
+# program sits in is the fallback, for running it from a checkout.
+HELPER_DIRECTORIES = (Path('/usr/local/libexec/xennic-preview'), Path(__file__).resolve().parent)
 TOKEN = Path('/root/.xennic-release-token')
 TRANSITIONS = ROOT / 'config/compatible-transitions.json'
 CANDIDATE = Path('/root/xennic-preview-candidate.json')
@@ -49,16 +51,27 @@ failures = []
 
 
 def load(name, filename):
-    """Load an installed module, from this directory or from the helper set."""
+    """Load an installed module, from the helper set or from this directory.
+
+    The installed helper directory comes first, because that is the set the
+    deployer itself runs from and the set the installer writes as a whole. A
+    module that cannot be loaded from one directory does not stop the search:
+    the modules import each other by sibling path, so a partial copy elsewhere
+    would otherwise abort the diagnosis with a traceback.
+    """
+    problem = f'{filename} is not installed'
     for directory in HELPER_DIRECTORIES:
         path = directory / filename
         if not path.is_file():
             continue
-        spec = importlib.util.spec_from_file_location(name, path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
-    raise RuntimeError(f'{filename} is not installed')
+        try:
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+        except (OSError, ImportError, SyntaxError) as exc:
+            problem = f'{filename} could not be loaded from {path}: {type(exc).__name__}'
+    raise RuntimeError(problem)
 
 
 def heading(text):

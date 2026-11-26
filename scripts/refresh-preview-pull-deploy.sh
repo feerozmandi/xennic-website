@@ -25,7 +25,10 @@ fi
 
 BASE="https://raw.githubusercontent.com/feerozmandi/xennic-website"
 SRC="/root/xennic-preview-pull-deploy"
-FILES="preview-pull-deploy.py preview-ci-evidence.py install-preview-pull-deploy.py diagnose-preview-pull-deploy.py"
+# `preview-ci-evidence.py` imports its manifest module as a sibling, so that
+# module has to travel with it: without it the diagnosis cannot read the
+# evidence envelope at all.
+FILES="preview-pull-deploy.py preview-ci-evidence.py preview-deploy-manifest.py install-preview-pull-deploy.py diagnose-preview-pull-deploy.py"
 GATEWAY_SRC="/root/xennic-preview-ci-gateway"
 GATEWAY_FILES="preview-ci-gateway.py preview-ci-gateway-ssh install-preview-ci-gateway.py"
 GATEWAY_TARGET="/usr/local/libexec/xennic-preview/ci-gateway"
