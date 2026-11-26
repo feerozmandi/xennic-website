@@ -21,6 +21,7 @@ to knock, and reports what happened.
 Run by systemd as root, one shot, no arguments. `--dry-run` prints the decision
 without touching anything (still needs the token to read GitHub).
 """
+import contextlib
 import importlib.util
 import json
 import os
@@ -39,6 +40,20 @@ ROOT = Path('/srv/xennic-preview')
 HELPERS = Path(__file__).resolve().parent
 TOKEN = Path('/root/.xennic-release-token')
 BACKEND = HELPERS / 'preview-deploy-backend.py'
+# The deployment lock is the one the backend takes for the whole transaction:
+# it is the only writer of the journal, so every deployment, whether a person
+# or the timer starts it, is serialised behind it. This program must not hold
+# that same lock while the backend runs. A second, independent open of one
+# lock file blocks until the first is released, so the backend would wait for
+# a lock its own caller already held, and the deploy would sit there until the
+# timeout below expired. That is exactly what the host did: every run took
+# 3600 seconds, ended with "deployment backend did not finish", and left the
+# journal untouched because the backend never got past its first statement.
+#
+# This program therefore takes its own lock, which only guards "one pull
+# deploy at a time", and leaves the deployment lock to the backend alone.
+PULL_LOCK = Path('/run/lock/xennic-preview-pull-deploy.lock')
+DEPLOY_LOCK = Path('/run/lock/xennic-preview-deploy.lock')
 TRANSITIONS = ROOT / 'config/compatible-transitions.json'
 RECORD = ROOT / 'state/pull-deploy.json'
 NOTIFY = ROOT / 'secrets/notify.json'
@@ -57,6 +72,11 @@ INTERPRETER = sys.executable or '/usr/bin/python3'
 MAX_RECORD = 8192
 MAX_NOTIFY = 4096
 RESULTS = ('up-to-date', 'waiting-approval', 'deployed', 'failed', 'in-flight', 'no-journal', 'dry-run')
+# The phase marker the backend writes on the host. These names are fixed
+# constants, so a marker carrying anything else is ignored rather than shown.
+PHASE_MARKER = ROOT / 'state/deploy-phase.json'
+KNOWN_PHASES = ('release-check', 'current-check', 'backup-verify', 'pull-image', 'migrate',
+                'activate', 'health', 'rollback', 'complete', 'failed')
 # A reason that reaches a log and a chat message has to be safe to print: only
 # the verifier's own fixed strings are shown, and nothing that could quote a
 # URL, a header or a token.
@@ -297,6 +317,22 @@ def public_check():
         return 0
 
 
+def phase_marker():
+    """The phase the backend recorded on the host, if it recorded one.
+
+    The backend writes this before it starts a helper, so a phase that hung
+    or was killed still leaves the host saying where it stopped. The file is
+    root-owned and holds a fixed phase name; anything else is ignored.
+    """
+    try:
+        data = json.loads(private_file(PHASE_MARKER, 4096))
+    except (OSError, ValueError, UnicodeError):
+        return None
+    if not isinstance(data, dict) or data.get('phase') not in KNOWN_PHASES:
+        return None
+    return data['phase']
+
+
 def deploy(release, token):
     """The same request a human would pipe into the backend, nothing more."""
     manifest = load('pull_manifest', 'preview-deploy-manifest.py')
@@ -319,8 +355,13 @@ def deploy(release, token):
         completed = subprocess.run([INTERPRETER, str(BACKEND)], input=line + token + b'\n',
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3600,
                                    env=SAFE_ENV, cwd='/')
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise PullFailed('deployment backend did not finish') from exc
+    except OSError as exc:
+        # The backend never started: a missing interpreter, a missing file or a
+        # refused execution. This is not the same as a backend that ran and
+        # said no, and the operator has to be able to tell them apart.
+        raise PullFailed('deployment backend did not start') from exc
+    except subprocess.TimeoutExpired as exc:
+        raise PullFailed('deployment backend timed out') from exc
     output = completed.stdout.decode('utf-8', 'replace').strip()
     if completed.returncode != 0:
         raise PullFailed(f'deployment backend failed with exit {completed.returncode}')
@@ -355,7 +396,15 @@ def run(dry_run=False):
     release = release_from_run(verifier, evidence, token, newest_run(verifier, token))
     call('the release is no longer the dev head', lambda: verifier.assert_current(release, token))
 
-    with locks.acquire_lock(nonblocking=True):
+    with contextlib.ExitStack() as stack:
+        try:
+            stack.enter_context(locks.acquire_lock(PULL_LOCK, nonblocking=True))
+        except BlockingIOError:
+            # Another pull deploy already holds this lock. This lock only keeps
+            # two pull deploys from deciding at the same time; it is not the
+            # deployment lock, which the backend takes for itself. The design
+            # says: already running, stop, say nothing.
+            return 0
         journal = None if states.Journal().absent() else states.Journal().read()
         action = decide(journal, release)
         stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
@@ -393,8 +442,15 @@ def run(dry_run=False):
         try:
             output = deploy(release, token)
         except PullFailed as exc:
-            write_record({'version': 1, 'at': stamp, 'result': 'failed', 'stage': 'backend',
-                          'run_number': release['run_number'], 'to_commit': release['commit']})
+            # The phase marker is written by the backend before each helper
+            # starts, so it names the phase that stopped even when the backend
+            # itself was killed and could not report anything.
+            phase = phase_marker()
+            record = {'version': 1, 'at': stamp, 'result': 'failed', 'stage': 'backend',
+                      'run_number': release['run_number'], 'to_commit': release['commit']}
+            if phase is not None:
+                record['phase'] = phase
+            write_record(record)
             notify(f'Xennic: deployment of run {release["run_number"]} failed: {exc}. '
                    'The host journal and release-state.json hold the exact phase.')
             raise

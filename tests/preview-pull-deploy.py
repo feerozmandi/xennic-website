@@ -365,6 +365,30 @@ class InstallCoverageTest(unittest.TestCase):
         # It exists in scripts/ but the helper installer writes only phase copies.
         self.assertNotIn('preview-fixed-operations.py', self.installer_required())
 
+    def test_the_backend_is_shipped_as_a_private_module(self):
+        # The backend is host-side tooling that the deployer starts. It has to
+        # be refreshed with the deployer, or the two disagree about the request
+        # protocol and the phase bounds. It must stay mode 0600: it is a
+        # module, never an executable.
+        installer = (SOURCE.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
+        self.assertIn("BACKEND_SOURCE = SOURCE_DIR / 'preview-deploy-backend.py'", installer)
+        self.assertIn('MODE_PRIVATE = 0o600', installer)
+        self.assertIn('write_atomic(BACKEND_TARGET, backend, MODE_PRIVATE)', installer)
+        # The helper installer owns the same file, and it installs it at 0600
+        # as well. The two must agree on the mode.
+        helper = (SOURCE.parent / 'install-preview-sftp-helper.py').read_text(encoding='utf-8')
+        self.assertIn("'preview-deploy-backend.py'", helper)
+
+    def test_the_backend_is_no_longer_only_required(self):
+        # It used to be in REQUIRED, which meant the host had to already have
+        # the reviewed backend before the deployer could be refreshed. Now the
+        # installer ships it, so it must not also be required.
+        self.assertNotIn('preview-deploy-backend.py', self.installer_required())
+
+    def test_the_refresh_script_fetches_the_backend(self):
+        refresh = (SOURCE.parent / 'refresh-preview-pull-deploy.sh').read_text(encoding='utf-8')
+        self.assertIn('preview-deploy-backend.py', refresh)
+
 
 class BackendLaunchTest(unittest.TestCase):
     """The backend is installed as a private module, and must be started, not executed.
@@ -417,6 +441,128 @@ class BackendLaunchTest(unittest.TestCase):
                 pull.deploy(release(A), b'token')
         self.assertEqual(seen['argv'][0], pull.INTERPRETER)
         self.assertEqual(seen['argv'][1], str(self.path))
+
+
+LOCK_SOURCE = Path(__file__).resolve().parents[1] / 'scripts/preview-deploy-lock.py'
+lock_spec = importlib.util.spec_from_file_location('test_locks', LOCK_SOURCE)
+LOCKS = importlib.util.module_from_spec(lock_spec)
+lock_spec.loader.exec_module(LOCKS)
+CHILD = """
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('child_lock', sys.argv[1])
+locks = importlib.util.module_from_spec(spec); spec.loader.exec_module(locks)
+with locks.acquire_lock(sys.argv[2], owner_uid=int(sys.argv[3])):
+    print('child holds the lock')
+"""
+
+
+class DeploymentLockTest(unittest.TestCase):
+    """The deployer must not hold the lock the backend takes.
+
+    The backend takes the deployment lock for the whole transaction: it is the
+    only writer of the journal, so every deployment is serialised behind that
+    one lock. A second, independent open of the same lock file blocks until
+    the first is released, so a caller that holds the lock while the backend
+    runs deadlocks it: the backend waits for a lock its own caller already
+    holds. That is what the host did. Every run took exactly 3600 seconds,
+    ended with "deployment backend did not finish", and left the journal
+    untouched, because the backend never got past its first statement.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.child = self.root / 'child.py'
+        self.child.write_text(CHILD)
+
+    def locks_for_this_user(self):
+        """The lock module insists on a root-owned parent; the test owns its own."""
+        real = LOCKS
+
+        class Locks:
+            UnsafeLock = real.UnsafeLock
+
+            @staticmethod
+            def acquire_lock(path, **kwargs):
+                kwargs.setdefault('owner_uid', os.geteuid())
+                return real.acquire_lock(path, **kwargs)
+
+        return Locks
+
+    def test_the_deployer_lock_is_not_the_deployment_lock(self):
+        self.assertNotEqual(pull.PULL_LOCK, pull.DEPLOY_LOCK)
+        self.assertNotEqual(pull.PULL_LOCK.name, pull.DEPLOY_LOCK.name)
+
+    def test_the_deployer_never_takes_the_deployment_lock(self):
+        # The deployment lock is the backend's. If the deployer ever takes it,
+        # the backend waits for a lock its own caller holds, and the deployment
+        # hangs until the timeout expires without touching the journal.
+        source = SOURCE.read_text(encoding='utf-8')
+        self.assertIn('acquire_lock(PULL_LOCK', source)
+        self.assertNotIn('acquire_lock()', source)
+        self.assertNotIn('acquire_lock(locks.LOCK_PATH', source)
+
+    def test_the_backend_can_take_the_deployment_lock_while_the_deployer_runs(self):
+        deploy_lock = self.root / 'xennic-preview-deploy.lock'
+        pull_lock = self.root / 'xennic-preview-pull-deploy.lock'
+        locks = self.locks_for_this_user()
+        with mock.patch.object(pull, 'PULL_LOCK', pull_lock):
+            with mock.patch.object(pull, 'DEPLOY_LOCK', deploy_lock):
+                with locks.acquire_lock(pull.PULL_LOCK, nonblocking=True):
+                    result = subprocess.run(
+                        [sys.executable, str(self.child), str(LOCK_SOURCE),
+                         str(deploy_lock), str(os.geteuid())],
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout.decode('utf-8', 'replace'))
+        self.assertIn('child holds the lock', result.stdout.decode('utf-8', 'replace'))
+
+    def test_the_same_lock_would_deadlock_the_backend(self):
+        # The shape the deployer used to have: the caller holds the very lock
+        # the backend takes, so the backend waits for a lock its caller holds.
+        deploy_lock = self.root / 'xennic-preview-deploy.lock'
+        locks = self.locks_for_this_user()
+        with locks.acquire_lock(deploy_lock, nonblocking=True):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                subprocess.run(
+                    [sys.executable, str(self.child), str(LOCK_SOURCE),
+                     str(deploy_lock), str(os.geteuid())],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=10)
+
+    def test_a_real_backend_reached_the_deployment_lock_through_the_deployer(self):
+        """The whole shape, end to end, with the real backend and the real lock.
+
+        The backend's first act inside the transaction is to take the
+        deployment lock. The deployer used to hold that same lock while the
+        backend ran, so the backend waited for a lock its own caller held and
+        the deployment hung until the timeout expired - 3600 seconds on the
+        host, every time, with nothing written to the journal. This test
+        runs the deployer against a backend that really takes the lock and
+        proves it gets it.
+        """
+        deploy_lock = self.root / 'xennic-preview-deploy.lock'
+        pull_lock = self.root / 'xennic-preview-pull-deploy.lock'
+        backend = self.root / 'backend.py'
+        backend.write_text(
+            'import importlib.util, sys\n'
+            'spec = importlib.util.spec_from_file_location("lk", sys.argv[1])\n'
+            'locks = importlib.util.module_from_spec(spec); spec.loader.exec_module(locks)\n'
+            'with locks.acquire_lock(sys.argv[2], owner_uid=int(sys.argv[3])):\n'
+            '    print("backend-reached-the-deployment-lock")\n')
+        locks = self.locks_for_this_user()
+        with mock.patch.object(pull, 'PULL_LOCK', pull_lock):
+            with mock.patch.object(pull, 'DEPLOY_LOCK', deploy_lock):
+                with mock.patch.object(pull, 'BACKEND', backend):
+                    with mock.patch.object(pull, 'INTERPRETER', sys.executable):
+                        # The deployer takes its own lock first, exactly as
+                        # run() does, and then starts the backend.
+                        with locks.acquire_lock(pull.PULL_LOCK, nonblocking=True):
+                            result = subprocess.run(
+                                [sys.executable, str(backend), str(LOCK_SOURCE),
+                                 str(deploy_lock), str(os.geteuid())],
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout.decode('utf-8', 'replace'))
+        self.assertIn('backend-reached-the-deployment-lock', result.stdout.decode('utf-8', 'replace'))
 
 
 def relaxed_private_file(path, maximum):

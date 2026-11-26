@@ -258,5 +258,141 @@ class BackendTest(unittest.TestCase):
             self.assertEqual(run.call_count, 1)
 
 
+class PhaseTimeoutTest(unittest.TestCase):
+    """A helper that hangs must not eat the deployer's whole budget.
+
+    The pull deployer gives the backend 3600 seconds in total. Without a
+    per-phase bound, one helper that never returns consumes all of it and the
+    operator is told only that "the backend did not finish" - which is what
+    the host reported, over and over, for hours. With a bound, the phase that
+    hung is named and the deployment fails long before the budget is gone.
+    """
+
+    def test_every_phase_has_a_finite_bound(self):
+        self.assertEqual(set(backend.PHASE_TIMEOUTS), set(backend.PHASES))
+        for phase, seconds in backend.PHASE_TIMEOUTS.items():
+            self.assertIsInstance(seconds, int, phase)
+            self.assertGreater(seconds, 0, phase)
+            # No single phase may claim the whole deployer budget, and all of
+            # them together must leave room for the rollback that a failure
+            # triggers.
+            self.assertLess(seconds, 3600, phase)
+
+    def test_the_bounds_are_below_the_deployer_budget(self):
+        # The budget the backend gives itself is smaller than what the caller
+        # allows, so the backend always finishes with an answer of its own.
+        self.assertLess(backend.TRANSACTION_TIMEOUT, 3600)
+        for phase, seconds in backend.PHASE_TIMEOUTS.items():
+            self.assertLess(seconds, backend.TRANSACTION_TIMEOUT, phase)
+
+    def test_a_phase_never_gets_more_than_the_budget_that_is_left(self):
+        # The phases together cannot exceed the transaction budget: what is
+        # left after the earlier phases is what the next one may use.
+        runner = backend.FixedRunner(budget=100)
+        runner.started = 0.0
+        with mock.patch.object(backend.time, "monotonic", return_value=95.0):
+            self.assertEqual(runner.phase_timeout("migrate"), 5)
+
+    def test_a_phase_is_refused_when_the_budget_is_gone(self):
+        runner = backend.FixedRunner(budget=10)
+        runner.started = 0.0
+        with mock.patch.object(backend.time, "monotonic", return_value=20.0):
+            with self.assertRaises(backend.BackendError) as caught:
+                runner.phase_timeout("migrate")
+        self.assertIn("migrate", str(caught.exception))
+
+    def test_a_hanging_helper_is_stopped_and_the_phase_is_named(self):
+        runner = backend.FixedRunner()
+        with mock.patch.object(runner, "verify_helpers"), \
+             mock.patch.object(backend.subprocess, "run", side_effect=subprocess.TimeoutExpired("migrate", 1)) as run:
+            with self.assertRaises(backend.BackendError) as caught:
+                runner.call("migrate", release(2))
+        self.assertIn("migrate", str(caught.exception))
+        self.assertNotIn("TimeoutExpired", str(caught.exception))
+        # The helper was started with a bound, not without one.
+        self.assertIn("timeout", run.call_args.kwargs)
+        self.assertEqual(run.call_args.kwargs["timeout"], backend.PHASE_TIMEOUTS["migrate"])
+
+    def test_a_hanging_helper_cannot_consume_the_whole_deployer_budget(self):
+        # The bound that applies is the one that matters: the phase must be
+        # stopped long before the 3600 seconds the caller allows.
+        runner = backend.FixedRunner()
+        with mock.patch.object(runner, "verify_helpers"), \
+             mock.patch.object(backend.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, stdout=b"")
+            runner.call("migrate", release(2))
+        self.assertLess(run.call_args.kwargs["timeout"], 3600)
+
+
+class PhaseMarkerTest(unittest.TestCase):
+    """The phase must be recorded on the host, not only in a log.
+
+    A helper that hangs is killed, and the backend can be killed with it. The
+    marker is written *before* the helper starts, so the host keeps the answer
+    to "which phase was it in?" even when nothing got to report it.
+    """
+
+    def test_the_marker_is_written_before_the_helper_starts(self):
+        runner = backend.FixedRunner()
+        order = []
+        with mock.patch.object(runner, "verify_helpers"), \
+             mock.patch.object(backend, "write_phase_marker", side_effect=lambda *a: order.append("marker")), \
+             mock.patch.object(backend.subprocess, "run", side_effect=lambda *a, **k: order.append("helper") or subprocess.CompletedProcess([], 0, stdout=b"")):
+            runner.call("migrate", release(2))
+        self.assertEqual(order, ["marker", "helper"])
+
+    def test_the_marker_names_the_phase_that_was_running(self):
+        runner = backend.FixedRunner()
+        written = []
+        with mock.patch.object(runner, "verify_helpers"), \
+             mock.patch.object(backend, "write_phase_marker", side_effect=lambda phase, run=None: written.append(phase)), \
+             mock.patch.object(backend.subprocess, "run", side_effect=subprocess.TimeoutExpired("pull-image", 1)):
+            with self.assertRaises(backend.BackendError):
+                runner.call("pull-image", release(2), b"public-read")
+        self.assertEqual(written, ["pull-image"])
+
+    def test_an_unknown_phase_name_is_never_written(self):
+        # The marker is read by the operator and by the deployer. Only the
+        # fixed phase constants may ever appear in it.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "deploy-phase.json"
+            backend.write_phase_marker("not-a-phase", marker=marker, owner_uid=os.geteuid())
+            self.assertFalse(marker.exists())
+            backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
+            self.assertEqual(json.loads(marker.read_text())["phase"], "migrate")
+
+    def test_the_marker_is_private_to_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "deploy-phase.json"
+            backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
+            self.assertEqual(marker.stat().st_mode & 0o777, 0o600)
+
+    def test_the_marker_is_not_written_into_a_directory_owned_by_someone_else(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "deploy-phase.json"
+            # The marker must land in a directory the backend owns; a
+            # different owner means the path is not the one that was reviewed.
+            backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid() + 1)
+            self.assertFalse(marker.exists())
+
+    def test_a_marker_that_cannot_be_written_never_stops_a_deployment(self):
+        # The marker is a diagnostic. A read-only state directory must not
+        # turn a healthy deployment into a failure.
+        runner = backend.FixedRunner()
+        with mock.patch.object(runner, "verify_helpers"), \
+             mock.patch.object(backend.os, "replace", side_effect=OSError("read-only")), \
+             mock.patch.object(backend.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess([], 0, stdout=b"")
+            runner.call("activate", release(2))
+        self.assertEqual(run.call_count, 1)
+
+    def test_a_marker_write_failure_is_swallowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "deploy-phase.json"
+            with mock.patch.object(backend.os, "replace", side_effect=OSError("read-only")):
+                backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
+            self.assertFalse(marker.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

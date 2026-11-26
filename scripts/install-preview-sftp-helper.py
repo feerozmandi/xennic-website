@@ -372,8 +372,14 @@ REJECTED_SCOPE = PARENT / '.xennic-preview-scope-rejected'
 SCOPE_HELPERS = 'helpers'
 # Manifest of the release installed by the apex switch (activated dev
 # 465278d/da6487b helpers) and of the candidate that carries read:org.
+#
+# The scope candidate is this repository's helper set: the pinned digest
+# moves whenever a helper in ACTIVATION_FILES changes, so that the reviewed
+# candidate is always the reviewed source and not a stale copy of it. The
+# backend gained bounded phase timeouts and a durable phase marker, so the
+# digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = '712fd6da5784f10b98187f41528607598a0eff031bba85394b7de480bfbeb68f'
+SCOPE_MANIFEST = '50fef81807b0f7313c8c679ee8cf83d397dc7dd8c3de19b594a5c877abb915a9'
 
 
 def _toml_value(value):

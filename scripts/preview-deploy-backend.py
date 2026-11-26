@@ -11,6 +11,7 @@ from pathlib import Path
 import stat
 import subprocess
 import sys
+import time
 from types import MappingProxyType
 
 sys.dont_write_bytecode = True
@@ -42,10 +43,88 @@ PHASES = MappingProxyType({
     "rollback": HELPER_DIR / "rollback",
 })
 SAFE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "LANG": "C"}
+# Every phase is a helper that can hang: a docker pull that never finishes, a
+# compose command that waits for a container that never becomes healthy, a
+# database that never answers. Without a bound, one hung helper eats the whole
+# deployer budget and the deployment ends with a generic timeout that says
+# nothing about which phase it was in. Each bound below is the longest that
+# phase can legitimately take, taken from the work it does: the image pull is
+# a registry download, the migration runs the app's own migrate and seed
+# scripts, and the backup verifies a restore in a throwaway container. The
+# bounds are deliberately generous, because a phase that is killed mid-migration
+# leaves the host in maintenance; they exist to stop an unbounded wait, not to
+# hurry a healthy deployment.
+PHASE_TIMEOUTS = MappingProxyType({
+    "release-check": 900,
+    "current-check": 300,
+    "backup-verify": 1800,
+    "pull-image": 900,
+    "migrate": 1800,
+    "activate": 600,
+    "health": 600,
+    "rollback": 900,
+})
+# The whole transaction has to fit inside the caller's budget with room to
+# spare. The caller allows 3600 seconds for the backend; this is the budget
+# the backend gives itself, checked before every phase, so the backend always
+# finishes with an answer of its own instead of being killed by the caller's
+# timeout with nothing to show.
+TRANSACTION_TIMEOUT = 3300
 
 
 class BackendError(RuntimeError):
     pass
+
+
+PHASE_MARKER = Path("/srv/xennic-preview/state/deploy-phase.json")
+# The phase names are fixed constants. A marker that carries anything else is
+# ignored rather than trusted.
+KNOWN_PHASES = frozenset(PHASE_TIMEOUTS) | {"complete", "failed"}
+
+
+def write_phase_marker(phase, run_number=None, marker=PHASE_MARKER, owner_uid=0):
+    """Record the phase in progress on the host, so a stop is explainable.
+
+    A helper that hangs is killed by its phase timeout, but the backend itself
+    can also be killed, and a timeout in a log says only that something
+    waited. This file is the durable answer to "which phase was it in?", and
+    it is written before the helper is started, not after it returns. Failing
+    to write it must never stop a deployment, so every failure here is
+    ignored on purpose.
+    """
+    if phase not in KNOWN_PHASES:
+        return
+    marker = Path(marker)
+    payload = {"version": 1, "phase": phase}
+    if type(run_number) is int:
+        payload["run_number"] = run_number
+    try:
+        raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode() + b"\n"
+        directory = os.open(marker.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            info = os.fstat(directory)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
+                return
+            name = ".deploy-phase.staged"
+            fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                         0o600, dir_fd=directory)
+            try:
+                with os.fdopen(fd, "wb", closefd=False) as stream:
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            finally:
+                os.close(fd)
+            os.replace(name, marker.name, src_dir_fd=directory, dst_dir_fd=directory)
+            os.fsync(directory)
+        finally:
+            try:
+                os.unlink(".deploy-phase.staged", dir_fd=directory)
+            except (FileNotFoundError, OSError):
+                pass
+            os.close(directory)
+    except (OSError, ValueError, TypeError):
+        return
 
 
 def _validated_release(value):
@@ -57,6 +136,30 @@ def _validated_release(value):
 
 class FixedRunner:
     """Run only known root-owned helpers, without shell or caller-selected argv."""
+
+    def __init__(self, budget=TRANSACTION_TIMEOUT):
+        # The whole transaction has one budget. Every phase takes what is left
+        # of it, so the phases cannot add up to more than the caller allows
+        # and a long transaction stops with a named phase rather than being
+        # killed from outside without an answer.
+        self.budget = budget
+        self.started = None
+
+    def phase_timeout(self, phase):
+        """How long this phase may take: its own bound, within the budget.
+
+        A phase never gets more than the whole transaction's budget, and the
+        phases together can never exceed it either: what is left of the
+        budget after the earlier phases is what is left for this one. A
+        transaction that is going to run out of time says so, naming the
+        phase, instead of being killed by the caller with nothing to report.
+        """
+        if self.started is None:
+            self.started = time.monotonic()
+        remaining = self.budget - (time.monotonic() - self.started)
+        if remaining <= 0:
+            raise BackendError(f"preview deployment ran out of time before {phase}")
+        return max(1, min(PHASE_TIMEOUTS[phase], remaining))
 
     def verify_helpers(self):
         for directory in (Path("/usr"), Path("/usr/local"), Path("/usr/local/libexec"), HELPER_DIR):
@@ -89,10 +192,13 @@ class FixedRunner:
         release = _validated_release(release)
         self.verify_helpers()
         payload = json.dumps(release, separators=(",", ":"), sort_keys=True).encode("ascii") + b"\ninitial-close\n"
+        # This runs while the transaction is already failing, so it takes what
+        # is left of the budget rather than asking for a fresh one.
+        timeout = min(180, max(1, self.phase_timeout("rollback")))
         try:
             result = subprocess.run([str(PHASES["rollback"])], input=payload,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                    env=SAFE_ENV, timeout=180, check=False)
+                                    env=SAFE_ENV, timeout=timeout, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise BackendError("initial app closure failed") from exc
         if result.returncode:
@@ -110,10 +216,18 @@ class FixedRunner:
             payload += token + b"\n"
         # Root-owned operations must be rechecked before every invocation.
         self.verify_helpers()
+        timeout = self.phase_timeout(phase)
+        # The marker is written before the helper starts, so a helper that
+        # never returns still leaves the host saying where it stopped.
+        write_phase_marker(phase, release.get("run_number"))
         try:
             result = subprocess.run([str(PHASES[phase])], input=payload,
                                     stdout=subprocess.PIPE if phase == "release-check" else subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, env=SAFE_ENV, check=False)
+                                    stderr=subprocess.DEVNULL, env=SAFE_ENV, check=False,
+                                    timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            # The phase name is a fixed constant, never helper output.
+            raise BackendError(f"preview operation timed out: {phase}") from exc
         except OSError as exc:
             raise BackendError("preview operation failed") from exc
         if result.returncode != 0:
@@ -251,8 +365,11 @@ def main():
         run_request(sys.stdin.buffer.read(manifest.MAX_MANIFEST_BYTES + 4099))
     except (ValueError, RuntimeError, OSError):
         # Do not disclose tokens, untrusted input or privileged helper output.
+        # The phase marker on the host says which phase stopped; this message
+        # only says that the deployment did not happen.
         print("Preview deployment blocked or failed; review server state.", file=sys.stderr)
         return 1
+    write_phase_marker("complete")
     print("Preview deployment completed; verify release status.")
     return 0
 

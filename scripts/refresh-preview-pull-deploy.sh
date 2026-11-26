@@ -28,7 +28,12 @@ SRC="/root/xennic-preview-pull-deploy"
 # `preview-ci-evidence.py` imports its manifest module as a sibling, so that
 # module has to travel with it: without it the diagnosis cannot read the
 # evidence envelope at all.
-FILES="preview-pull-deploy.py preview-ci-evidence.py preview-deploy-manifest.py install-preview-pull-deploy.py diagnose-preview-pull-deploy.py"
+#
+# `preview-deploy-backend.py` is the privileged module the deployer starts. It
+# is host-side tooling and is refreshed with the deployer, so that the two
+# always agree on the request protocol and on the per-phase bounds. It is
+# installed as a private module, mode 0600: it is never executed directly.
+FILES="preview-pull-deploy.py preview-ci-evidence.py preview-deploy-manifest.py preview-deploy-backend.py install-preview-pull-deploy.py diagnose-preview-pull-deploy.py"
 GATEWAY_SRC="/root/xennic-preview-ci-gateway"
 GATEWAY_FILES="preview-ci-gateway.py preview-ci-gateway-ssh install-preview-ci-gateway.py"
 GATEWAY_TARGET="/usr/local/libexec/xennic-preview/ci-gateway"
@@ -41,7 +46,7 @@ for name in $FILES; do
   curl -fsSL -o "$name" "$BASE/$REF/scripts/$name"
   echo "fetched $name"
 done
-sha256sum preview-pull-deploy.py preview-ci-evidence.py
+sha256sum preview-pull-deploy.py preview-ci-evidence.py preview-deploy-backend.py
 
 # The reviewed installer: it writes the deployer, the evidence module and the
 # systemd unit, all root-owned, and it re-enables the timer.
