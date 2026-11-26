@@ -211,6 +211,118 @@ class RunIdentityTest(unittest.TestCase):
             pull.newest_run(Verifier(), b'token')
 
 
+class PublicCheckTest(unittest.TestCase):
+    """The post-deployment check must ask a route the edge really publishes.
+
+    `/health` is deliberately not on the public route allowlist: an anonymous
+    GET of it is answered by the gate's sign-in redirect, so it can never be a
+    deployment signal.
+    """
+
+    def test_the_check_uses_a_public_route(self):
+        self.assertEqual(pull.PUBLIC_CHECK_URL, 'https://xennic.ir/robots.txt')
+        self.assertNotIn('/health', pull.PUBLIC_CHECK_URL)
+
+    def test_the_deployer_never_asks_the_gated_health_route(self):
+        source = SOURCE.read_text(encoding='utf-8')
+        self.assertNotIn('xennic.ir/health', source)
+
+    def test_a_200_is_reported(self):
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        class Opener:
+            def open(self, request, timeout=0):
+                return Response()
+
+        with mock.patch.object(pull, 'PUBLIC_OPENER', Opener()):
+            self.assertEqual(pull.public_check(), 200)
+
+    def test_a_redirect_is_reported_and_not_followed(self):
+        # A real server: the sign-in page answers 200 itself, so following the
+        # redirect would report a gated site as a healthy one.
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == '/redirect':
+                    self.send_response(302)
+                    self.send_header('Location', '/landing')
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header('Content-Length', '2')
+                self.end_headers()
+                self.wfile.write(b'ok')
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = 'http://127.0.0.1:%d/redirect' % server.server_port
+        with mock.patch.object(pull, 'PUBLIC_CHECK_URL', url):
+            self.assertEqual(pull.public_check(), 302)
+
+    def test_a_connection_failure_is_zero(self):
+        class Opener:
+            def open(self, request, timeout=0):
+                raise OSError('connection refused')
+
+        with mock.patch.object(pull, 'PUBLIC_OPENER', Opener()):
+            self.assertEqual(pull.public_check(), 0)
+
+
+class Unverified(RuntimeError):
+    """Stands in for the verifier's own exception, by name and by shape."""
+
+
+class ReasonTest(unittest.TestCase):
+    """A failure has to say what went wrong, without saying anything secret."""
+
+    def test_the_verifier_message_is_kept(self):
+        self.assertEqual(pull.reason(Unverified('GitHub evidence unavailable')),
+                         'GitHub evidence unavailable')
+
+    def test_an_arbitrary_message_is_not_printed(self):
+        self.assertEqual(pull.reason(RuntimeError('https://example.invalid/?token=secret')), '')
+
+    def test_a_failed_call_keeps_the_stage_and_the_reason(self):
+        def boom():
+            raise Unverified('GitHub evidence unavailable')
+
+        with self.assertRaises(pull.PullFailed) as caught:
+            pull.call('cannot list workflow runs', boom)
+        self.assertEqual(str(caught.exception),
+                         'cannot list workflow runs: GitHub evidence unavailable')
+
+    def test_a_failed_call_without_a_safe_reason_names_only_the_stage(self):
+        def boom():
+            raise RuntimeError('https://example.invalid/?token=secret')
+
+        with self.assertRaises(pull.PullFailed) as caught:
+            pull.call('cannot list workflow runs', boom)
+        self.assertEqual(str(caught.exception), 'cannot list workflow runs')
+
+    def test_a_pull_failure_is_not_rewritten(self):
+        def boom():
+            raise pull.PullFailed('release token is malformed')
+
+        with self.assertRaises(pull.PullFailed) as caught:
+            pull.call('cannot list workflow runs', boom)
+        self.assertEqual(str(caught.exception), 'release token is malformed')
+
+
 class InstallCoverageTest(unittest.TestCase):
     """The installer must ask only for files the host really has."""
 
