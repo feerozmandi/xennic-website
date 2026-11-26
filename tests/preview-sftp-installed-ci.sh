@@ -89,6 +89,31 @@ for name, safe in [('release-check', 0o700), ('preview-release-verifier.py', 0o6
     finally: os.chmod(path, safe)
 runner.verify_helpers()
 PY
+# The installed backend is a private module, not an executable. The reviewed
+# installer gives every phase helper an executable copy and leaves
+# `preview-deploy-backend.py` at mode 0600, and the backend's own
+# `verify_helpers` lists that file among the modules and not among the
+# executables. The deployer and the approval gateway start it through the
+# interpreter, so this is the exact installed shape: a direct execution has to
+# fail, and the interpreter launch has to reach the program itself.
+backend=/usr/local/libexec/xennic-preview/preview-deploy-backend.py
+[ "$(sudo stat -c '%a' "$backend")" = 600 ] || { echo 'The installed backend is not a private module' >&2; exit 1; }
+set +e
+direct=$(printf '%s\n%s\n' 'not-a-manifest' 'synthetic-token' | sudo "$backend" 2>&1)
+direct_rc=$?
+started=$(printf '%s\n%s\n' 'not-a-manifest' 'synthetic-token' | sudo /usr/bin/python3 "$backend" 2>&1)
+started_rc=$?
+set -e
+[ "$direct_rc" -ne 0 ] || { echo 'The installed backend was executable' >&2; exit 1; }
+case "$direct" in
+  *'Preview deployment blocked or failed'*) echo 'The direct execution reached the backend' >&2; exit 1 ;;
+esac
+[ "$started_rc" -ne 0 ] || { echo 'The backend accepted an invalid request' >&2; exit 1; }
+case "$started" in
+  *'Preview deployment blocked or failed'*) ;;
+  *) echo "The backend did not start through the interpreter: $started" >&2; exit 1 ;;
+esac
+printf 'PASS: the installed backend is a private module; it is started through the interpreter, not executed\n'
 # Negative parser checks execute the installed pull code without any network.
 if printf '%s\n%s\n' '{"repository":"other/repo"}' 'synthetic-token' | sudo /usr/local/libexec/xennic-preview/pull-image >/dev/null 2>&1; then
   echo 'Invalid pull manifest was accepted' >&2; exit 1

@@ -25,9 +25,15 @@ TARGET = Path('/usr/local/libexec/xennic-preview/ci-gateway')
 TARGET_WRAPPER = TARGET.with_name('ci-gateway-ssh')
 HELPERS = TARGET.parent
 # The gateway drives these installed files; without them it can only fail.
+# `preview-fixed-operations.py` is deliberately absent: the helper installer
+# never writes that file under its own name — it installs copies under the
+# phase names (release-check, current-check, migrate, activate, health,
+# rollback), which is what the gateway and the backend execute. Asking for the
+# source name made this installer fail on a correctly installed host; the same
+# mistake was already fixed in the pull-deploy installer.
 REQUIRED = ('release-check', 'pull-image', 'preview-deploy-backend.py',
             'preview-deploy-manifest.py', 'preview-deploy-state.py',
-            'preview-fixed-operations.py', 'preview-backup-operation.py')
+            'preview-backup-operation.py')
 MODE = 0o755
 MAX_BYTES = 200 * 1024
 

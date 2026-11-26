@@ -34,6 +34,12 @@ EXECUTABLES = {'preview-deploy-receiver.py': ('deploy-receiver',),
                'preview-backup-sftp.py': ('sftp-transfer',), 'preview-backup-operation.py': ('backup-verify', 'preview-backup-operation.py'),
                'preview-pull-image.py': ('pull-image',), 'preview-fixed-operations.py':
                ('release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback')}
+# Everything that is not listed above is installed as a private module, mode
+# 0600, and is never executed. `preview-deploy-backend.py` is one of them on
+# purpose: the backend's own `verify_helpers` lists it among the modules and
+# not among the executables, and the deploy receiver loads it as a module. The
+# programs that need it start it through the interpreter instead of executing
+# the file, so it must keep mode 0600 and must not be given an execute bit.
 
 # Specifically reviewed transition: installed 449a helpers to merged dev f18b
 # helpers. These are SHA-256 of the ordered sha256sum lines for FILES using the
@@ -366,8 +372,15 @@ REJECTED_SCOPE = PARENT / '.xennic-preview-scope-rejected'
 SCOPE_HELPERS = 'helpers'
 # Manifest of the release installed by the apex switch (activated dev
 # 465278d/da6487b helpers) and of the candidate that carries read:org.
+#
+# The scope candidate is this repository's helper set: the pinned digest
+# moves whenever a helper in ACTIVATION_FILES changes, so that the reviewed
+# candidate is always the reviewed source and not a stale copy of it. The
+# backend moved its durable phase marker out of the preview root and into
+# /run, because the root's state directory must hold nothing but the
+# journal, so the digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = '712fd6da5784f10b98187f41528607598a0eff031bba85394b7de480bfbeb68f'
+SCOPE_MANIFEST = '8268b94de9b1f1e479db7d47e48d3c6c02f38c634f6a0f985c378a65d1d33f13'
 
 
 def _toml_value(value):

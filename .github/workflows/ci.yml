@@ -60,6 +60,7 @@ jobs:
           python3 tests/preview-ci-gateway.py
           python3 tests/preview-ci-evidence.py
           python3 tests/preview-pull-deploy.py
+          python3 tests/preview-pull-diagnose.py
           python3 tests/preview-configure-notify.py
       - name: Build
         run: npm run build
@@ -363,10 +364,13 @@ jobs:
             -o StrictHostKeyChecking=yes "deploy@$VPS_HOST" deploy < manifest.json
       - name: Verify the public pages
         id: verify
+        # Only routes the edge really publishes are checked. /health is behind
+        # the gate on purpose, so an anonymous request of it is answered with
+        # the sign-in redirect and is not a signal that the site is up.
         run: |
           set -u
           failures=0
-          for path in / /en /services /contact /health; do
+          for path in / /en /services /contact /robots.txt /platform; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://xennic.ir$path" || echo 000)
             echo "- \`$path\` → \`$code\`" >> "$GITHUB_STEP_SUMMARY"
             [ "$code" = "200" ] || failures=$((failures + 1))

@@ -29,14 +29,25 @@ SOURCE = SOURCE_DIR / 'preview-pull-deploy.py'
 # It is not part of the privileged helper set installed earlier, which is why
 # this installer ships it rather than merely requiring it.
 EVIDENCE_SOURCE = SOURCE_DIR / 'preview-ci-evidence.py'
+# The backend is the privileged module the deployer starts. It is host-side
+# tooling too: it is not part of the published image, and the deployer runs
+# the copy that is installed here. It is refreshed together with the deployer
+# so that the two always agree on the request protocol and the phase bounds.
+# It stays a private module: mode 0600, root-owned, never executable. The
+# helper installer's `installed_matches` counts the same map, so giving it an
+# execute bit would break every later helper upgrade.
+BACKEND_SOURCE = SOURCE_DIR / 'preview-deploy-backend.py'
 HELPERS = Path('/usr/local/libexec/xennic-preview')
 TARGET = HELPERS / 'ci-pull-deploy'
 EVIDENCE_TARGET = HELPERS / 'preview-ci-evidence.py'
+BACKEND_TARGET = HELPERS / 'preview-deploy-backend.py'
 UNITS = Path('/etc/systemd/system')
 SERVICE = UNITS / 'xennic-pull-deploy.service'
 TIMER = UNITS / 'xennic-pull-deploy.timer'
 MODE_FILE = 0o755
 MODE_MODULE = 0o644
+# The backend is a private module, exactly as the helper installer leaves it.
+MODE_PRIVATE = 0o600
 MODE_UNIT = 0o644
 MAX_BYTES = 200 * 1024
 
@@ -81,7 +92,7 @@ WantedBy=timers.target
 # never writes that file under its own name — it installs copies under the phase
 # names (release-check, migrate, …), which is what the backend executes. Asking
 # for the source name made this installer fail on a correctly installed host.
-REQUIRED = ('preview-deploy-backend.py', 'preview-deploy-manifest.py', 'preview-deploy-state.py',
+REQUIRED = ('preview-deploy-manifest.py', 'preview-deploy-state.py',
             'preview-deploy-lock.py', 'preview-release-verifier.py',
             'preview-backup-operation.py', 'pull-image',
             'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback')
@@ -123,12 +134,16 @@ def main():
             raise RuntimeError('unsafe installation directory')
         clean(SOURCE)
         clean(EVIDENCE_SOURCE)
+        clean(BACKEND_SOURCE)
         data = SOURCE.read_bytes()
         if len(data) > MAX_BYTES or not data.startswith(b'#!/usr/bin/python3'):
             raise RuntimeError('deployer source is unexpected')
         evidence = EVIDENCE_SOURCE.read_bytes()
         if len(evidence) > MAX_BYTES or not evidence.startswith(b'#!/usr/bin/env python3'):
             raise RuntimeError('evidence module is unexpected')
+        backend = BACKEND_SOURCE.read_bytes()
+        if len(backend) > MAX_BYTES or not backend.startswith(b'#!/usr/bin/env python3'):
+            raise RuntimeError('backend module is unexpected')
         for name in REQUIRED:
             clean(HELPERS / name)
         if os.path.lexists(TARGET):
@@ -141,6 +156,11 @@ def main():
         write_atomic(EVIDENCE_TARGET, evidence, MODE_MODULE)
         if EVIDENCE_TARGET.read_bytes() != evidence:
             raise RuntimeError('installed evidence module differs from the source')
+        # The backend keeps its private mode. It is a module, never an
+        # executable, and the helper installer expects exactly that.
+        write_atomic(BACKEND_TARGET, backend, MODE_PRIVATE)
+        if BACKEND_TARGET.read_bytes() != backend:
+            raise RuntimeError('installed backend differs from the source')
         for path, body in ((SERVICE, SERVICE_BODY), (TIMER, TIMER_BODY)):
             write_atomic(path, body.encode(), MODE_UNIT)
             if path.read_bytes() != body.encode():
@@ -150,6 +170,7 @@ def main():
         status = subprocess.run(['systemctl', 'is-active', TIMER.name], capture_output=True, text=True)
         print(f'pull deployer installed: {hashlib.sha256(data).hexdigest()} ({len(data)} bytes)')
         print(f'evidence module installed: {hashlib.sha256(evidence).hexdigest()} ({len(evidence)} bytes)')
+        print(f'backend module installed: {hashlib.sha256(backend).hexdigest()} ({len(backend)} bytes)')
         print(f'timer: {status.stdout.strip() or "unknown"}')
         print('first run: systemctl start xennic-pull-deploy.service   (or wait for the timer)')
         print('dry run : sudo /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run')

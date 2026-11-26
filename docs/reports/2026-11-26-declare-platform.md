@@ -59,7 +59,7 @@
 - **نشانیِ برنامه در تولید، نشانیِ بیلدِ سایت است.** `/_next/static/declare-platform/…` فقط پس از `next build` و `postbuild` وجود دارد. اگر بیلد بدون `postbuild` اجرا شود، صفحهٔ `/platform` سالم بالا می‌آید ولی برنامه ۴۰۴ می‌دهد و جزیره «بارگذاری ناموفق» نشان می‌دهد — که آزمون `tests/preview-production.mjs` دقیقاً همین را می‌گیرد.
 - **اسلایدر در صفحهٔ فارسی از چپ به راست است.** مستندات کتابخانه `min` را «سمت چپ» تعریف می‌کند و آینه‌کردن، نگاشت مقدار را وارونه می‌کرد؛ به همین دلیل دست‌نخورده ماند و مقدار همیشه در فیلد عددی کنارش دیده می‌شود.
 - **رفتار `priorityScore` در تب ارزیابی:** امتیاز فقط از موارد علامت‌خورده می‌آید؛ بدون علامت، فهرست نمایش داده نمی‌شود و متن تحویل هم می‌گوید چیزی انتخاب نشده.
-- **استقرار:** هیچ تغییری روی سرور زنده انجام نشده. انتقال از مسیر کششیِ همیشگی است و به نصب timer روی میزبان نیاز دارد که طبق گزارش `2026-11-12-pull-deploy.md` هنوز انجام نشده است.
+- **استقرار:** نصبِ timer و deployer روی میزبان انجام شده (مالک root، توکن `0600`، timer فعال با فاصلهٔ پنج دقیقه)، اما **هیچ تغییری روی سایت زنده انجام نشده**: تا لحظهٔ نوشتن این گزارش `/platform` هنوز به صفحهٔ ورود redirect می‌شود و ایمیج منتشرشده روی سایت نیست. انتقال از مسیر کششیِ همیشگی است و به تأییدِ ردیف گذار نیاز دارد (بخش «تأیید ردیف گذار» در پایین همین گزارش).
 
 ## تصمیم‌ها و درخواست از مدیرکل
 
@@ -85,19 +85,42 @@ gh run list --repo feerozmandi/xennic-website --workflow ci.yml --limit 3
 
 **۲) نصب timer روی میزبان (یک‌بار؛ فقط اگر قبلاً نصب نشده — `systemctl list-timers xennic-pull-deploy.timer` خالی بود)**
 
+نسخهٔ `dev` از `preview-pull-deploy.py` دو ایراد داشت که پیش از هر استقراری باید
+درست شوند: بررسیِ عمومیِ پس از استقرار `/health` را می‌پرسید (و آن مسیر پشت
+دروازه است، پس هرگز ۲۰۰ نمی‌دهد)، و خطای گیت‌هاب را پشت یک کلمه پنهان می‌کرد.
+هر دو در شاخهٔ `arena/cf13d19d-xennic-website` درست شده‌اند؛ همان شاخه را
+می‌گیریم تا `dev` (و در نتیجه commit ایمیج منتشرشده) دست‌نخورده بماند.
+
+```bash
+# روی VPS (root): یک دستور — نسخهٔ درستِ deployer را نصب می‌کند و بعد تشخیص را می‌دهد
+REF=arena/cf13d19d-xennic-website
+curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/refresh-preview-pull-deploy.sh" | bash -s -- "$REF"
+```
+
+این اسکریپت چهار فایل را از همان commit می‌گیرد، با نصب‌کنندهٔ بازبینی‌شده نصب
+می‌کند (deployer، ماژول evidence، واحدهای systemd، timer) و بعد تشخیصِ
+فقط‌خواندنی را اجرا می‌کند. نه گذاری تأیید می‌کند و نه چیزی مستقر می‌کند.
+
+اگر ترجیح می‌دهید دستورها را جدا اجرا کنید:
+
 ```bash
 # روی VPS (root):
 mkdir -p /root/xennic-preview-pull-deploy
 cd /root/xennic-preview-pull-deploy
-curl -fsSL -o preview-pull-deploy.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/dev/scripts/preview-pull-deploy.py
-curl -fsSL -o preview-ci-evidence.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/dev/scripts/preview-ci-evidence.py
-curl -fsSL -o install-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/dev/scripts/install-preview-pull-deploy.py
+REF=arena/cf13d19d-xennic-website
+curl -fsSL -o preview-pull-deploy.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/preview-pull-deploy.py
+curl -fsSL -o preview-ci-evidence.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/preview-ci-evidence.py
+curl -fsSL -o install-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/install-preview-pull-deploy.py
+curl -fsSL -o diagnose-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/diagnose-preview-pull-deploy.py
 python3 install-preview-pull-deploy.py
 ```
 
-**۳) اجرای دستی و بررسی**
+**۳) تشخیصِ فقط‌خواندنی، سپس اجرای دستی و بررسی**
 
 ```bash
+# چرا deployer قبلاً فقط می‌گفت «Unverified»؟ این برنامه می‌گوید کدام درخواست و چرا.
+python3 /root/xennic-preview-pull-deploy/diagnose-preview-pull-deploy.py
+
 /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run   # انتظار: waiting-approval
 systemctl list-timers xennic-pull-deploy.timer
 journalctl -u xennic-pull-deploy.service -n 30 --no-pager
@@ -112,7 +135,7 @@ journalctl -u xennic-pull-deploy.service -n 30 --no-pager
 **۵) استقرار و بررسیِ همان چیزی که این PR می‌آورد**
 
 ```bash
-curl -fsS https://xennic.ir/health                          # انتظار: 200
+curl -fsS https://xennic.ir/robots.txt                        # انتظار: 200 (مسیر عمومی)
 curl -fsS https://xennic.ir/platform | grep -o 'data-declare-embed' | head -1
 curl -fsS -o /dev/null -w '%{http_code} %{size_download}\n' \
   https://xennic.ir/_next/static/declare-platform/app.d01d2eda.js   # انتظار: 200 و 565037
@@ -120,6 +143,32 @@ curl -fsS -o /dev/null -w '%{http_code}\n' \
   https://xennic.ir/declare-platform/app.d01d2eda.js                # انتظار: 404 (کپی توسعه نباید منتشر باشد)
 curl -fsS https://xennic.ir/sitemap.xml | grep -c '/platform'        # انتظار: 1
 ```
+
+`/health` عمداً در فهرست مسیرهای عمومی `config/routes.caddy` نیست؛ بنابراین
+درخواست ناشناسِ آن را دروازه (gate) با تغییر مسیر به صفحهٔ ورود پاسخ می‌دهد،
+نه برنامه. به همین دلیل `/health` سیگنال درستیِ استقرار نیست: هم deployer و هم
+این بررسی باید از مسیر عمومیِ منتشرشده استفاده کنند.
+
+**وضعیت زندهٔ پیش از استقرار (سنجش‌شده):** `/platform` همین حالا **۲۰۰** می‌دهد و
+صفحهٔ «هنوز منتشر نشده» را نشان می‌دهد — لبه مسیر را باز می‌کند، چون
+`/platform` از قبل در فهرست عمومیِ لبهٔ زنده هست؛ ایمیج قدیمی فقط آن صفحه را
+ندارد. `sitemap.xml` هم ۲۰۰ است ولی هنوز `/platform` ندارد (ایمیج قدیمی).
+`robots.txt` هم ۲۰۰ و همچنان `Disallow: /` است: هر ایمیجی که CI می‌سازد با
+`Dockerfile.preview` ساخته می‌شود و آن فایل `XENNIC_PREVIEW=1` را در خود
+image می‌گذارد، پس noindex سراسریِ پیش‌نمایش و `robots.txt`ِ بستهٔ کامل تا
+تصمیم مالک برای برداشتن آن دست‌نخورده می‌ماند. این تصمیمِ مالک است و در این
+PR عوض نمی‌شود؛ آنچه این PR انجام می‌دهد این است که `/platform` از مسیرهای
+منتشرنشده بیرون بیاید، در `sitemap.xml` بنشیند و برنامهٔ Declare در مسیرِ
+عمومیِ خودِ بیلد منتشر شود.
+
+**رفعِ ابهامِ ۳۰۲/۴۰۴ (با اندازه‌گیری، نه حدس):** از بیرونِ شبکه `/platform`
+۲۰۰ می‌داد و همین‌طور از خودِ میزبان هم ۲۰۰ (`ip=185.192.113.85`، همان IPی که
+`xennic.ir` به آن اشاره می‌کند). پس ۳۰۲ی که پیش‌تر دیده می‌شد، از
+redirect دروازه نبود؛ آن ۴۰۴ که یک‌بار از میزبان دیده شد مربوط به مسیرِ
+برنامه در پشتِ همان لبه بود و اکنون ۲۰۰ است. نتیجهٔ عملی: هر دو مسیر
+(`/platform` و `/robots.txt`) روی لبهٔ زنده بازند، و این PR با استقرارِ
+`c0196235` محتوای واقعیِ صفحه را جای placeholderِ «هنوز منتشر نشده» می‌گذارد
+و bundleِ Declare را منتشر می‌کند.
 
 اگر timer از پیش نصب است، فقط گام‌های ۳ تا ۵ لازم است. وضعیت پیش از این نشست: **نصب روی میزبان انجام نشده** (بلوک مالک بدون خروجی برگشت)، پس گام ۲ هنوز لازم است.
 
