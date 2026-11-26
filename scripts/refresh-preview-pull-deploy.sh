@@ -26,6 +26,9 @@ fi
 BASE="https://raw.githubusercontent.com/feerozmandi/xennic-website"
 SRC="/root/xennic-preview-pull-deploy"
 FILES="preview-pull-deploy.py preview-ci-evidence.py install-preview-pull-deploy.py diagnose-preview-pull-deploy.py"
+GATEWAY_SRC="/root/xennic-preview-ci-gateway"
+GATEWAY_FILES="preview-ci-gateway.py preview-ci-gateway-ssh install-preview-ci-gateway.py"
+GATEWAY_TARGET="/usr/local/libexec/xennic-preview/ci-gateway"
 
 mkdir -p "$SRC"
 chmod 700 "$SRC"
@@ -40,6 +43,33 @@ sha256sum preview-pull-deploy.py preview-ci-evidence.py
 # The reviewed installer: it writes the deployer, the evidence module and the
 # systemd unit, all root-owned, and it re-enables the timer.
 python3 install-preview-pull-deploy.py
+
+# The gateway is what the approval is given through. It is only refreshed when
+# it is already installed here: the installer writes two root-owned files and
+# creates no user, key, sudoers rule or SSH configuration, but installing
+# something the host never had is the operator's decision, not this script's.
+if [ -e "$GATEWAY_TARGET" ]; then
+  echo
+  echo "refreshing the approval gateway"
+  mkdir -p "$GATEWAY_SRC"
+  chmod 700 "$GATEWAY_SRC"
+  cd "$GATEWAY_SRC"
+  for name in $GATEWAY_FILES; do
+    curl -fsSL -o "$name" "$BASE/$REF/scripts/$name"
+    echo "fetched $name"
+  done
+  python3 install-preview-ci-gateway.py
+  cd "$SRC"
+else
+  echo
+  echo "the approval gateway is not installed on this host."
+  echo "to install it (it creates no user, key, sudoers rule or SSH configuration):"
+  echo "  mkdir -p $GATEWAY_SRC && cd $GATEWAY_SRC"
+  echo "  curl -fsSL -o preview-ci-gateway.py $BASE/$REF/scripts/preview-ci-gateway.py"
+  echo "  curl -fsSL -o preview-ci-gateway-ssh $BASE/$REF/scripts/preview-ci-gateway-ssh"
+  echo "  curl -fsSL -o install-preview-ci-gateway.py $BASE/$REF/scripts/install-preview-ci-gateway.py"
+  echo "  python3 install-preview-ci-gateway.py"
+fi
 
 echo
 # Read-only: it asks GitHub for the same things the deployer asks for and

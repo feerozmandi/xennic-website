@@ -7,6 +7,7 @@ is acceptable is pure and is covered below.
 """
 import importlib.util
 import json
+import re
 from pathlib import Path
 import unittest
 
@@ -111,6 +112,85 @@ class ManifestTest(unittest.TestCase):
         self.assertTrue(line.endswith(b'\n'))
         self.assertEqual(json.loads(line), release)
         self.assertEqual(line.count(b'\n'), 1)
+
+
+class HelperProtocolTest(unittest.TestCase):
+    """Every helper the gateway calls has a fixed stdin protocol.
+
+    `pull-image` reads the manifest and then the registry access token, both on
+    stdin. Sending it only the manifest makes it fail, and the approval then
+    stops for a reason that has nothing to do with the migration — so the
+    protocol is checked here, against the helper's own source.
+    """
+
+    def pull_image_expects(self):
+        source = (p.parent / 'preview-pull-image.py').read_text(encoding='utf-8')
+        self.assertIn('token = sys.stdin.buffer.readline(4098)', source)
+        self.assertIn("not token.endswith(b'\\n')", source)
+
+    def test_the_helper_needs_the_token_line(self):
+        self.pull_image_expects()
+
+    def test_the_approval_sends_the_registry_token(self):
+        source = p.read_text(encoding='utf-8')
+        self.assertIn("run_helper('pull-image', manifest_line(release) + b'public-read\\n'",
+                      source)
+
+    def test_every_helper_call_in_the_approval_sends_what_its_helper_reads(self):
+        source = p.read_text(encoding='utf-8')
+        # release-check and deploy take the manifest and the API token.
+        self.assertIn("run_helper('release-check', manifest_line(release) + read_token() + b'\\n'",
+                      source)
+        self.assertIn("run_helper('preview-deploy-backend.py', manifest_line(release) + read_token() + b'\\n'",
+                      source)
+
+
+class InstallerPrerequisitesTest(unittest.TestCase):
+    """The gateway installer must ask only for files the host really has.
+
+    The helper installer writes `preview-fixed-operations.py` under the phase
+    names only. A required list that names the source made the installer fail
+    on a correctly installed host, and the approval could never be given.
+    """
+
+    @staticmethod
+    def helper_installer():
+        return (p.parent / 'install-preview-sftp-helper.py').read_text(encoding='utf-8')
+
+    @staticmethod
+    def installed_names():
+        """The names the helper installer actually writes."""
+        helper = InstallerPrerequisitesTest.helper_installer()
+        block = helper.split('EXECUTABLES = {')[1].split('}')[0]
+        mapping = dict(re.findall(r"'([a-z0-9-]+\.py)':\s*\(([^)]*)\)", block))
+        files = set(re.findall(r"'([a-z0-9-]+\.py)'", helper.split('FILES = (')[1].split(')')[0]))
+        names = set()
+        for source, targets in mapping.items():
+            names |= set(re.findall(r"'([A-Za-z0-9_.-]+)'", targets))
+        names |= {name for name in files if name not in mapping}
+        return names
+
+    @staticmethod
+    def gateway_required():
+        installer = (p.parent / 'install-preview-ci-gateway.py').read_text(encoding='utf-8')
+        body = installer.split('REQUIRED = (')[1].split(')')[0]
+        return set(re.findall(r"'([A-Za-z0-9_.-]+)'", body))
+
+    def test_nothing_is_required_that_the_helper_install_never_creates(self):
+        missing = self.gateway_required() - self.installed_names()
+        self.assertEqual(missing, set(),
+                         f'never installed by the helper install: {sorted(missing)}')
+
+    def test_the_source_name_of_the_fixed_operations_is_never_required(self):
+        self.assertNotIn('preview-fixed-operations.py', self.gateway_required())
+
+    def test_the_pull_deploy_installer_agrees(self):
+        installer = (p.parent / 'install-preview-pull-deploy.py').read_text(encoding='utf-8')
+        body = installer.split('REQUIRED = (')[1].split(')')[0]
+        required = set(re.findall(r"'([A-Za-z0-9_.-]+)'", body))
+        missing = required - self.installed_names()
+        self.assertEqual(missing, set(),
+                         f'never installed by the helper install: {sorted(missing)}')
 
 
 if __name__ == '__main__':

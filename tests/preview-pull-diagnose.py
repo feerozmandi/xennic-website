@@ -138,9 +138,13 @@ class RefreshScriptTest(unittest.TestCase):
         self.assertIn('id -u', self.source)
 
     def test_it_never_approves_or_starts_a_deployment(self):
-        for forbidden in ('ci-gateway', 'approve', 'compatible-transitions',
+        for forbidden in ('ci-gateway approve', 'ci-gateway deploy', 'compatible-transitions',
                           'systemctl start', 'ci-pull-deploy --dry-run'):
             self.assertNotIn(forbidden, self.commands)
+
+    def test_it_refreshes_the_gateway_only_when_it_is_already_there(self):
+        self.assertIn('if [ -e "$GATEWAY_TARGET" ]; then', self.commands)
+        self.assertIn('install-preview-ci-gateway.py', self.commands)
 
     def test_it_installs_and_then_diagnoses(self):
         self.assertIn('install-preview-pull-deploy.py', self.source)

@@ -270,7 +270,11 @@ def command_approve(release, expected_sha256, previous_migrations):
     if report['blocked']:
         raise Rejected('the release journal is blocked; clear it before approving')
     # The candidate image has to be local for any of this to mean anything.
-    run_helper('pull-image', manifest_line(release), timeout=1800)
+    # The pull helper reads the manifest and then the registry access token on
+    # stdin. The package is public, so the pull is anonymous — exactly as the
+    # backend's own pull is — and the API credential is never offered to the
+    # registry.
+    run_helper('pull-image', manifest_line(release) + b'public-read\n', timeout=1800)
     # `preview-fixed-operations.py` is installed under its phase names only, so
     # load the copy that is certainly on the host rather than the source name.
     ops = load('ci_gateway_ops_hash', 'release-check')
