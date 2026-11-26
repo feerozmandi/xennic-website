@@ -34,6 +34,12 @@ EXECUTABLES = {'preview-deploy-receiver.py': ('deploy-receiver',),
                'preview-backup-sftp.py': ('sftp-transfer',), 'preview-backup-operation.py': ('backup-verify', 'preview-backup-operation.py'),
                'preview-pull-image.py': ('pull-image',), 'preview-fixed-operations.py':
                ('release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback')}
+# Everything that is not listed above is installed as a private module, mode
+# 0600, and is never executed. `preview-deploy-backend.py` is one of them on
+# purpose: the backend's own `verify_helpers` lists it among the modules and
+# not among the executables, and the deploy receiver loads it as a module. The
+# programs that need it start it through the interpreter instead of executing
+# the file, so it must keep mode 0600 and must not be given an execute bit.
 
 # Specifically reviewed transition: installed 449a helpers to merged dev f18b
 # helpers. These are SHA-256 of the ordered sha256sum lines for FILES using the

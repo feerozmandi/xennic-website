@@ -10,6 +10,8 @@ import json
 import re
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -362,6 +364,59 @@ class InstallCoverageTest(unittest.TestCase):
     def test_the_source_name_of_the_fixed_operations_is_never_required(self):
         # It exists in scripts/ but the helper installer writes only phase copies.
         self.assertNotIn('preview-fixed-operations.py', self.installer_required())
+
+
+class BackendLaunchTest(unittest.TestCase):
+    """The backend is installed as a private module, and must be started, not executed.
+
+    The reviewed helper installer gives every phase helper an executable copy
+    and leaves `preview-deploy-backend.py` at mode 0600. The backend's own
+    `verify_helpers` lists that file among the modules and not among the
+    executables. Executing it therefore fails with a permission error before
+    the backend ever runs, and the deploy reported that as "deployment backend
+    did not finish". The fixture below is the installed shape exactly.
+    """
+
+    BACKEND = ('#!/usr/bin/python3\n'
+               'import sys\n'
+               'sys.stdout.write("backend-started:" + str(sys.stdin.buffer.read().count(b"\\n")))\n')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / 'preview-deploy-backend.py'
+        self.path.write_text(self.BACKEND)
+        self.path.chmod(0o600)
+
+    def test_the_installed_backend_cannot_be_executed(self):
+        # The fixture reproduces the installed state; without an execute bit
+        # the kernel refuses the execution, exactly as it did on the host.
+        with self.assertRaises(PermissionError):
+            subprocess.run([str(self.path)], input=b'', stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=60)
+
+    def test_the_deployer_starts_the_backend_through_the_interpreter(self):
+        with mock.patch.object(pull, 'BACKEND', self.path):
+            output = pull.deploy(release(A), b'token')
+        self.assertEqual(output, 'backend-started:2')
+
+    def test_the_interpreter_is_the_one_that_runs_the_deployer(self):
+        self.assertEqual(pull.INTERPRETER, sys.executable or '/usr/bin/python3')
+
+    def test_the_backend_is_never_executed_directly(self):
+        # The command line must name the interpreter first: a direct execution
+        # of a mode 0600 file is refused by the kernel.
+        seen = {}
+
+        def fake_run(argv, **kwargs):
+            seen['argv'] = argv
+            return subprocess.CompletedProcess(argv, 0, b'backend-started:2', b'')
+
+        with mock.patch.object(pull, 'BACKEND', self.path):
+            with mock.patch.object(pull.subprocess, 'run', fake_run):
+                pull.deploy(release(A), b'token')
+        self.assertEqual(seen['argv'][0], pull.INTERPRETER)
+        self.assertEqual(seen['argv'][1], str(self.path))
 
 
 def relaxed_private_file(path, maximum):

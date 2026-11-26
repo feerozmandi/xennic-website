@@ -6,10 +6,15 @@ production host); everything that decides whether a command or a transition row
 is acceptable is pure and is covered below.
 """
 import base64
+import contextlib
 import importlib.util
+import io
 import json
+import os
 import re
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest import mock
 
@@ -189,7 +194,7 @@ class HelperProtocolTest(unittest.TestCase):
         # release-check and deploy take the manifest and the API token.
         self.assertIn("run_helper('release-check', manifest_line(release) + read_token() + b'\\n'",
                       source)
-        self.assertIn("run_helper('preview-deploy-backend.py', manifest_line(release) + read_token() + b'\\n'",
+        self.assertIn("run_backend(manifest_line(release) + read_token() + b'\\n'",
                       source)
 
 
@@ -239,6 +244,105 @@ class InstallerPrerequisitesTest(unittest.TestCase):
         missing = required - self.installed_names()
         self.assertEqual(missing, set(),
                          f'never installed by the helper install: {sorted(missing)}')
+
+
+class BackendLaunchTest(unittest.TestCase):
+    """The backend is installed as a private module, and must be started, not executed.
+
+    The reviewed helper installer gives every phase helper an executable copy
+    and leaves `preview-deploy-backend.py` at mode 0600, and the backend's own
+    `verify_helpers` lists that file among the modules and not among the
+    executables. Executing it fails with a permission error before the
+    backend ever runs. The fixture below is the installed shape exactly.
+    """
+
+    BACKEND = ('#!/usr/bin/python3\n'
+               'import sys\n'
+               'sys.stdout.write("backend-started:" + str(sys.stdin.buffer.read().count(b"\\n")))\n')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.helpers = Path(self.tmp.name)
+        self.path = self.helpers / 'preview-deploy-backend.py'
+        self.path.write_text(self.BACKEND)
+        self.path.chmod(0o600)
+        self.lstat = os.lstat
+
+    def root_owned(self):
+        """Report the fixture helpers as root-owned, the way the host's are.
+
+        The gateway refuses a helper that is not owned by root, and it always
+        runs as root itself. The disposable fixture is written by the test
+        user, so only the ownership field is adjusted; the mode, which is what
+        these tests are about, is left exactly as it was written.
+        """
+        real = self.lstat
+
+        def lstat(path, *args, **kwargs):
+            info = real(path, *args, **kwargs)
+            if str(path).startswith(str(self.helpers)):
+                fields = list(info)
+                fields[4] = 0
+                return os.stat_result(fields)
+            return info
+
+        return mock.patch.object(gateway.os, 'lstat', lstat)
+
+    def release(self):
+        return {'repository': 'feerozmandi/xennic-website', 'commit': TO, 'run_number': 260,
+                'digest': 'sha256:' + 'c' * 64, 'platform': 'linux/amd64'}
+
+    def test_the_installed_backend_cannot_be_executed(self):
+        with self.assertRaises(PermissionError):
+            subprocess.run([str(self.path)], input=b'', stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=60)
+
+    def test_the_gateway_starts_the_backend_through_the_interpreter(self):
+        buffer = io.StringIO()
+        with self.root_owned():
+            with mock.patch.object(gateway, 'HELPERS', self.helpers):
+                with mock.patch.object(gateway, 'read_token', lambda: b'token'):
+                    with contextlib.redirect_stdout(buffer):
+                        gateway.command_deploy(self.release())
+        self.assertEqual(buffer.getvalue(), 'backend-started:2')
+
+    def test_the_backend_is_never_executed_directly(self):
+        seen = {}
+
+        def fake_run(argv, **kwargs):
+            seen['argv'] = argv
+            return subprocess.CompletedProcess(argv, 0, b'backend-started:2', b'')
+
+        with self.root_owned():
+            with mock.patch.object(gateway, 'HELPERS', self.helpers):
+                with mock.patch.object(gateway, 'read_token', lambda: b'token'):
+                    with mock.patch.object(gateway.subprocess, 'run', fake_run):
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            gateway.command_deploy(self.release())
+        self.assertEqual(seen['argv'][0], gateway.INTERPRETER)
+        self.assertEqual(seen['argv'][1], str(self.path))
+
+    def test_a_phase_helper_without_an_execute_bit_is_refused(self):
+        # The phase helpers are executed directly, so a missing execute bit has
+        # to be refused with a clear message instead of a permission error.
+        phase = self.helpers / 'release-check'
+        phase.write_text('#!/usr/bin/python3\n')
+        phase.chmod(0o600)
+        with self.root_owned():
+            with mock.patch.object(gateway, 'HELPERS', self.helpers):
+                with self.assertRaises(gateway.Rejected) as caught:
+                    gateway.run_helper('release-check', b'payload\n', 60)
+        self.assertEqual(str(caught.exception), 'release-check is not executable')
+
+    def test_a_phase_helper_with_an_execute_bit_is_run(self):
+        phase = self.helpers / 'release-check'
+        phase.write_text('#!/usr/bin/python3\nimport sys\nsys.stdout.write("ran\\n")\n')
+        phase.chmod(0o700)
+        with self.root_owned():
+            with mock.patch.object(gateway, 'HELPERS', self.helpers):
+                output = gateway.run_helper('release-check', b'payload\n', 60)
+        self.assertEqual(output, b'ran\n')
 
 
 if __name__ == '__main__':

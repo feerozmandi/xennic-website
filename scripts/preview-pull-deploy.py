@@ -50,6 +50,10 @@ NOTIFY = ROOT / 'secrets/notify.json'
 # that was just activated. See config/routes.caddy for the allowlist.
 PUBLIC_CHECK_URL = 'https://xennic.ir/robots.txt'
 SAFE_ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C'}
+# The interpreter that runs this program. The installer pins the shebang of
+# the deployed file to /usr/bin/python3, so this is that interpreter on the
+# host, and the backend is started with it rather than executed directly.
+INTERPRETER = sys.executable or '/usr/bin/python3'
 MAX_RECORD = 8192
 MAX_NOTIFY = 4096
 RESULTS = ('up-to-date', 'waiting-approval', 'deployed', 'failed', 'in-flight', 'no-journal', 'dry-run')
@@ -302,8 +306,19 @@ def deploy(release, token):
     except manifest.InvalidManifest as exc:
         raise PullFailed('candidate release is invalid') from exc
     try:
-        completed = subprocess.run([str(BACKEND)], input=line + token + b'\n', stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, timeout=3600, env=SAFE_ENV, cwd='/')
+        # The backend is installed as a private module, not as an executable.
+        # The reviewed helper installer gives every phase helper an executable
+        # copy and leaves `preview-deploy-backend.py` at mode 0600, and the
+        # backend's own `verify_helpers` lists that file among the modules and
+        # not among the executables. Executing the file therefore fails with a
+        # permission error before the backend ever runs, and the deploy reported
+        # that as "deployment backend did not finish". The backend is started
+        # through the interpreter instead, exactly the way the deploy receiver
+        # loads it: it is still its own root process, with the same two-line
+        # request on stdin and the same clean environment.
+        completed = subprocess.run([INTERPRETER, str(BACKEND)], input=line + token + b'\n',
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3600,
+                                   env=SAFE_ENV, cwd='/')
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise PullFailed('deployment backend did not finish') from exc
     output = completed.stdout.decode('utf-8', 'replace').strip()

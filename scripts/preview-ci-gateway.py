@@ -46,6 +46,10 @@ TRANSITIONS = ROOT / 'config/compatible-transitions.json'
 TOKEN = Path('/root/.xennic-release-token')
 MAX_INPUT = 8192
 COMMANDS = ('preflight', 'release-check', 'deploy', 'approve')
+# The interpreter that runs this program. The installer pins the shebang of
+# the installed gateway to /usr/bin/python3, so this is that interpreter on
+# the host, and the backend module is started with it.
+INTERPRETER = sys.executable or '/usr/bin/python3'
 HEX = re.compile(r'[0-9a-f]{64}')
 COMMIT = re.compile(r'[0-9a-f]{40}')
 ROW_KEYS = {'from_commit', 'to_commit', 'migration_sha256', 'previous_migrations', 'rollback_safe'}
@@ -145,8 +149,13 @@ def read_token():
     return data
 
 
-def run_helper(executable, payload, timeout):
-    """Run one installed fixed phase; the payload is the exact stdin protocol."""
+def helper_info(executable):
+    """Check one installed helper and return its path and its stat result.
+
+    Every installed helper is root-owned and is not writable by group or
+    other. A phase helper is additionally *executed*, so it has to carry an
+    execute bit; a module does not, and is never executed.
+    """
     path = HELPERS / executable
     try:
         info = os.lstat(path)
@@ -154,10 +163,37 @@ def run_helper(executable, payload, timeout):
         raise Rejected(f'{executable} is not installed') from exc
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
         raise Rejected(f'{executable} has an unsafe owner or mode')
+    return path, info
+
+
+def run_helper(executable, payload, timeout):
+    """Run one installed fixed phase; the payload is the exact stdin protocol."""
+    path, info = helper_info(executable)
+    if not info.st_mode & stat.S_IXUSR:
+        raise Rejected(f'{executable} is not executable')
     completed = subprocess.run([str(path)], input=payload, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, timeout=timeout, cwd='/')
     if completed.returncode != 0:
         raise Rejected(f'{executable} failed with exit {completed.returncode}')
+    return completed.stdout
+
+
+def run_backend(payload, timeout):
+    """Run the installed backend, which is a module and not an executable.
+
+    The reviewed helper installer gives every phase helper an executable copy
+    and leaves `preview-deploy-backend.py` at mode 0600, and the backend's own
+    `verify_helpers` lists that file among the modules and not among the
+    executables. Executing it therefore fails with a permission error before
+    the backend ever runs. It is started through the interpreter instead,
+    exactly the way the deploy receiver loads it: it is still its own root
+    process, with the same two-line request on stdin.
+    """
+    path, _info = helper_info('preview-deploy-backend.py')
+    completed = subprocess.run([INTERPRETER, str(path)], input=payload, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, timeout=timeout, cwd='/')
+    if completed.returncode != 0:
+        raise Rejected(f'preview-deploy-backend.py failed with exit {completed.returncode}')
     return completed.stdout
 
 
@@ -287,7 +323,7 @@ def command_release_check(release):
 
 
 def command_deploy(release):
-    output = run_helper('preview-deploy-backend.py', manifest_line(release) + read_token() + b'\n', timeout=3600)
+    output = run_backend(manifest_line(release) + read_token() + b'\n', timeout=3600)
     sys.stdout.write(output.decode('utf-8', 'replace'))
 
 
