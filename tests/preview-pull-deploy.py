@@ -282,6 +282,15 @@ class PublicCheckTest(unittest.TestCase):
         with mock.patch.object(pull, 'PUBLIC_OPENER', Opener()):
             self.assertEqual(pull.public_check(), 0)
 
+    def test_the_record_of_a_deployment_is_not_overwritten_by_the_public_check(self):
+        # The backend already proved the new image is healthy inside the host.
+        # The public check observes the edge; a non-200 must not turn a
+        # finished deployment into a recorded failure.
+        source = SOURCE.read_text(encoding='utf-8')
+        self.assertNotIn("'result': 'failed', 'stage': 'public-check'", source)
+        self.assertIn("'result': 'deployed'", source)
+        self.assertIn("'public_status': status", source)
+
 
 class Unverified(RuntimeError):
     """Stands in for the verifier's own exception, by name and by shape."""

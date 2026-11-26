@@ -384,16 +384,22 @@ def run(dry_run=False):
                    'The host journal and release-state.json hold the exact phase.')
             raise
         status = public_check()
+        # The deployment itself is finished and the journal says so: the
+        # backend already proved the new image is healthy inside the host. The
+        # public check is an observation of the edge, not part of the
+        # transaction, so it is recorded as what it is. A non-200 still exits
+        # non-zero, because the operator has to look at the edge now.
+        record = {'version': 1, 'at': stamp, 'result': 'deployed',
+                  'run_number': release['run_number'], 'to_commit': release['commit'],
+                  'public_status': status, 'public_url': PUBLIC_CHECK_URL,
+                  'backend': output.splitlines()[-1][:200] if output else ''}
+        write_record(record)
         if status != 200:
-            write_record({'version': 1, 'at': stamp, 'result': 'failed', 'stage': 'public-check',
-                          'status': status, 'url': PUBLIC_CHECK_URL, 'run_number': release['run_number'],
-                          'to_commit': release['commit']})
-            notify(f'Xennic: run {release["run_number"]} deployed but the public check '
-                   f'{PUBLIC_CHECK_URL} returned {status}. Check the host now.')
+            notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}) is deployed '
+                   f'and healthy inside the host, but the public check {PUBLIC_CHECK_URL} '
+                   f'returned {status}. Look at the edge now.')
+            print('deployed')
             return 1
-        write_record({'version': 1, 'at': stamp, 'result': 'deployed',
-                      'run_number': release['run_number'], 'to_commit': release['commit'],
-                      'backend': output.splitlines()[-1][:200] if output else ''})
         notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}) is live; '
                f'{PUBLIC_CHECK_URL} returned 200.')
         print('deployed')
