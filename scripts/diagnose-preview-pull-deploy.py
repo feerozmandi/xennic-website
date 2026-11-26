@@ -30,7 +30,9 @@ import zipfile
 sys.dont_write_bytecode = True
 
 ROOT = Path('/srv/xennic-preview')
-HELPERS = Path(__file__).resolve().parent
+# The modules this program needs are installed with the privileged helpers,
+# but the program itself may sit anywhere (it is a diagnostic, not a helper).
+HELPER_DIRECTORIES = (Path(__file__).resolve().parent, Path('/usr/local/libexec/xennic-preview'))
 TOKEN = Path('/root/.xennic-release-token')
 TRANSITIONS = ROOT / 'config/compatible-transitions.json'
 BASE = 'https://api.github.com/repos/feerozmandi/xennic-website'
@@ -42,10 +44,16 @@ failures = []
 
 
 def load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, HELPERS / filename)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Load an installed module, from this directory or from the helper set."""
+    for directory in HELPER_DIRECTORIES:
+        path = directory / filename
+        if not path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    raise RuntimeError(f'{filename} is not installed')
 
 
 def heading(text):
