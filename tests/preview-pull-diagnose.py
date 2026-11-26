@@ -10,7 +10,9 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -32,10 +34,16 @@ class SourceTest(unittest.TestCase):
         for method in ("'POST'", '"POST"', "'PUT'", '"PUT"', "'DELETE'", '"DELETE"'):
             self.assertNotIn(method, self.source)
 
-    def test_it_writes_nothing(self):
-        for forbidden in ('os.write', 'os.remove', 'os.replace', 'os.rename', 'os.chmod',
-                          'shutil', 'subprocess', 'open(STAGED'):
+    def test_it_writes_nothing_by_itself(self):
+        # The only write is the candidate file, and only when it is asked for.
+        for forbidden in ('os.write', 'os.remove', 'os.rename', 'shutil', 'subprocess'):
             self.assertNotIn(forbidden, self.source)
+        self.assertIn('--write-manifest', self.source)
+        self.assertIn("if write_manifest:", self.source)
+
+    def test_the_candidate_file_is_the_only_thing_it_writes(self):
+        self.assertEqual(diagnose.CANDIDATE, Path('/root/xennic-preview-candidate.json'))
+        self.assertIn('os.replace(staged, CANDIDATE)', self.source)
 
     def test_the_token_file_is_only_ever_read(self):
         self.assertIn('TOKEN.read_bytes()', self.source)
@@ -137,6 +145,42 @@ class RefreshScriptTest(unittest.TestCase):
     def test_it_installs_and_then_diagnoses(self):
         self.assertIn('install-preview-pull-deploy.py', self.source)
         self.assertIn('diagnose-preview-pull-deploy.py', self.source)
+
+
+class CandidateFileTest(unittest.TestCase):
+    """The manifest the operator approves is written once, root-only, intact."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / 'candidate.json'
+        patcher = mock.patch.object(diagnose, 'CANDIDATE', self.path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_it_is_private_and_holds_exactly_one_line(self):
+        diagnose.write_candidate('{"commit":"' + 'a' * 40 + '"}')
+        self.assertEqual(self.path.read_text(), '{"commit":"' + 'a' * 40 + '"}\n')
+        self.assertEqual(os.lstat(self.path).st_mode & 0o777, 0o600)
+
+    def test_it_replaces_an_earlier_candidate(self):
+        diagnose.write_candidate('{"first":1}')
+        diagnose.write_candidate('{"second":2}')
+        self.assertEqual(self.path.read_text(), '{"second":2}\n')
+
+
+class ArgumentTest(unittest.TestCase):
+    def test_an_unknown_argument_is_refused(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(diagnose.sys, 'argv', ['diagnose', '--deploy']):
+                self.assertEqual(diagnose.main(), 2)
+
+    def test_the_diagnosis_runs_without_arguments(self):
+        with mock.patch.object(diagnose.sys, 'argv', ['diagnose']):
+            with mock.patch.object(diagnose, 'read_token',
+                                   side_effect=RuntimeError('no token here')):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(diagnose.main(), 1)
 
 
 if __name__ == '__main__':

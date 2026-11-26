@@ -35,10 +35,15 @@ ROOT = Path('/srv/xennic-preview')
 HELPER_DIRECTORIES = (Path(__file__).resolve().parent, Path('/usr/local/libexec/xennic-preview'))
 TOKEN = Path('/root/.xennic-release-token')
 TRANSITIONS = ROOT / 'config/compatible-transitions.json'
+CANDIDATE = Path('/root/xennic-preview-candidate.json')
+GATEWAY = Path('/usr/local/libexec/xennic-preview/ci-gateway')
 BASE = 'https://api.github.com/repos/feerozmandi/xennic-website'
 MAX_ZIP = 1024 * 1024
 PUBLIC_ROUTES = ('https://xennic.ir/robots.txt', 'https://xennic.ir/sitemap.xml',
                  'https://xennic.ir/platform', 'https://xennic.ir/health')
+# The live migration ledger the owner confirmed; the host compares it with the
+# database before it writes anything, so a wrong value is refused, not applied.
+PREVIOUS_MIGRATIONS = 'WyIyMDI2MTAzMF8xNjMyMjVfYmFzZWxpbmUiXQ=='
 
 failures = []
 
@@ -141,8 +146,26 @@ def download_artifact(artifact_id, token):
         return recorder.hops, exc
 
 
+def write_candidate(line):
+    """Write the validated manifest for the approval, root-only.
+
+    This is the only thing this program ever writes, and only when it is asked
+    to. The file holds the manifest that was just bound to the successful run,
+    so the operator never has to retype it and never can mistype it.
+    """
+    staged = CANDIDATE.with_name('.' + CANDIDATE.name + '.staged')
+    if os.path.lexists(staged):
+        os.unlink(staged)
+    fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    with os.fdopen(fd, 'wb') as handle:
+        handle.write(line.encode() + b'\n')
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(staged, CANDIDATE)
+    os.chmod(CANDIDATE, 0o600)
+
+
 def public_status(url):
-    """The status of a public route, without following a redirect."""
     request = urllib.request.Request(url, headers={'User-Agent': 'xennic-preview-diagnose'})
     opener = urllib.request.build_opener(NoRedirect)
     try:
@@ -155,6 +178,10 @@ def public_status(url):
 
 
 def main():
+    write_manifest = '--write-manifest' in sys.argv[1:]
+    if sys.argv[1:] and not write_manifest:
+        print('usage: diagnose-preview-pull-deploy.py [--write-manifest]', file=sys.stderr)
+        return 2
     heading('host')
     note(f'host name : {os.uname().nodename}')
     note(f'root      : {os.geteuid() == 0}')
@@ -230,6 +257,7 @@ def main():
 
     if not failures:
         heading('evidence envelope')
+        release = None
         try:
             with zipfile.ZipFile(io.BytesIO(result)) as archive:
                 names = archive.namelist()
@@ -242,6 +270,8 @@ def main():
                  f"digest {release['digest']}")
         except (KeyError, ValueError, UnicodeError, zipfile.BadZipFile, RuntimeError) as exc:
             fail(f'the evidence envelope is not usable: {type(exc).__name__}: {exc}')
+    else:
+        release = None
 
     heading('live release journal')
     try:
@@ -267,6 +297,28 @@ def main():
     for url in PUBLIC_ROUTES:
         note(f'{url} -> {public_status(url)}')
     note('/health is behind the gate on purpose: it answers 302 and is not a deployment signal.')
+
+    if release is not None and not failures:
+        heading('the candidate, for the approval')
+        line = json.dumps(release, separators=(',', ':'), sort_keys=True)
+        note(f'manifest: {line}')
+        if write_manifest:
+            try:
+                write_candidate(line)
+                note(f'written: {CANDIDATE} (root-owned, 0600)')
+            except OSError as exc:
+                fail(f'the candidate file could not be written: {exc}')
+        if GATEWAY.exists():
+            zeros = '0' * 64
+            note('the gateway is installed: the approval can be given on this host.')
+            note('  first pass  : cat CANDIDATE | ci-gateway approve '
+                 + zeros + ' ' + PREVIOUS_MIGRATIONS)
+            note('  second pass : cat CANDIDATE | ci-gateway approve <the hash it printed> '
+                 + PREVIOUS_MIGRATIONS)
+        else:
+            note('the gateway is not installed here: approve from your own machine with')
+            note('  ./scripts/approve-transition.sh --run-id <run id> '
+                 '--migrations \'["20261030_163225_baseline"]\'')
 
     print('\n== result')
     if failures:

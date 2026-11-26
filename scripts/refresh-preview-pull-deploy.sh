@@ -43,5 +43,7 @@ python3 install-preview-pull-deploy.py
 
 echo
 # Read-only: it asks GitHub for the same things the deployer asks for and
-# prints the real answer for each. It writes nothing and prints no token.
-python3 diagnose-preview-pull-deploy.py
+# prints the real answer for each. It prints no token. The one file it writes
+# is the validated candidate manifest, and only when the read succeeded; that
+# file is what the approval is given with, so nothing has to be retyped.
+python3 diagnose-preview-pull-deploy.py --write-manifest
