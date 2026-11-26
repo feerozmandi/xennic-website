@@ -89,6 +89,61 @@ class PublicStatusTest(unittest.TestCase):
         self.assertEqual(diagnose.public_status('http://127.0.0.1:1/'), 0)
 
 
+class StorageHostTest(unittest.TestCase):
+    """The artifact lives in GitHub's storage, where the signed URL carries its
+    own authorisation. The API token must not travel there."""
+
+    def test_only_github_storage_hosts_are_accepted(self):
+        self.assertEqual(diagnose.storage_host('https://productionresultssa7.blob.core.windows.net/x?sig=a'),
+                         'productionresultssa7.blob.core.windows.net')
+        self.assertEqual(diagnose.storage_host('https://pipelines.actions.githubusercontent.com/x'),
+                         'pipelines.actions.githubusercontent.com')
+
+    def test_any_other_host_is_refused(self):
+        for url in ('https://evil.example.com/x', 'https://blob.core.windows.net.evil.example/x',
+                    'https://notblob.core.windows.net/x', 'http://x.blob.core.windows.net/y',
+                    'https://user:pass@x.blob.core.windows.net/y',
+                    'https://x.blob.core.windows.net:8443/y'):
+            self.assertEqual(diagnose.storage_host(url), '')
+
+    def test_the_token_is_not_sent_to_the_storage_host(self):
+        import http.server
+        import threading
+
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get('Authorization')))
+                if self.path.endswith('/zip'):
+                    self.send_response(302)
+                    self.send_header('Location', 'http://127.0.0.1:%d/blob' % server.server_port)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'zip-bytes')
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        with mock.patch.object(diagnose, 'BASE', 'http://127.0.0.1:%d' % server.server_port), \
+                mock.patch.object(diagnose, 'storage_host',
+                                  lambda location: '127.0.0.1' if location.startswith('http://127.0.0.1') else ''):
+            hops, result = diagnose.download_artifact(7, b'secret-token')
+        self.assertEqual(len(hops), 1)
+        self.assertEqual(result, b'zip-bytes')
+        # The API call carries the token; the storage call must not.
+        self.assertEqual(seen[0][1], 'Bearer secret-token')
+        self.assertEqual(seen[1][1], None)
+
+
 class OutputTest(unittest.TestCase):
     """The token must never reach the output, and the output must say what failed."""
 

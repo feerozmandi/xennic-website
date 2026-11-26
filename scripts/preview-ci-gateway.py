@@ -25,6 +25,8 @@ refuses to write a row whose `previous_migrations` differ from the ledger that
 is actually in the database. A human still has to approve the workflow run that
 invokes it, and the repository variable `DEPLOY_AUTOMATION` has to be enabled.
 """
+import base64
+import binascii
 import importlib.util
 import json
 import os
@@ -76,11 +78,26 @@ def parse_command(argv):
 
 
 def parse_previous_migrations(raw):
-    """The list of migration names the reviewer believes is already applied."""
+    """The list of migration names the reviewer believes is already applied.
+
+    Two encodings are accepted, and they mean the same thing: the JSON array
+    itself, or that array in base64. The base64 form is what the SSH wrapper
+    and the diagnostic print, and it is the only form that survives a shell
+    argument without quoting. The JSON form is what the wrapper hands over
+    after it decodes, and it is what a person typing on the host writes.
+
+    The two are never ambiguous: a JSON array starts with a bracket, which is
+    not in the base64 alphabet, so a string that parses as JSON is never
+    mistaken for base64.
+    """
     try:
         names = json.loads(raw)
-    except (TypeError, ValueError) as exc:
-        raise Rejected('previous migrations must be a JSON array') from exc
+    except (TypeError, ValueError):
+        try:
+            decoded = base64.b64decode(raw, validate=True).decode('utf-8')
+            names = json.loads(decoded)
+        except (TypeError, ValueError, UnicodeError, binascii.Error) as exc:
+            raise Rejected('previous migrations must be a JSON array') from exc
     if (not isinstance(names, list) or not names or len(names) > 200 or
             any(not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', name) for name in names) or
             len(set(names)) != len(names)):

@@ -92,6 +92,22 @@ class Recorder(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def storage_host(location):
+    """The host of a storage URL, if it is one of GitHub's own.
+
+    The same rule the release verifier applies: HTTPS, no credentials in the
+    URL, no explicit port, and a host that belongs to GitHub's storage. The
+    signed URL carries its own authorisation, so nothing else may be sent.
+    """
+    parsed = urllib.parse.urlsplit(location)
+    host = (parsed.hostname or '').lower()
+    if parsed.scheme != 'https' or parsed.username or parsed.password or parsed.port not in (None, 443):
+        return ''
+    if host.endswith('.blob.core.windows.net') or host.endswith('.actions.githubusercontent.com'):
+        return host
+    return ''
+
+
 def read_token():
     info = os.lstat(TOKEN)
     if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
@@ -130,20 +146,42 @@ def github_message(body):
 
 
 def download_artifact(artifact_id, token):
-    """Fetch the evidence zip the way the deployer does, but say what happened."""
+    """Fetch the evidence zip the way the deployer does, but say what happened.
+
+    GitHub answers the artifact request with a redirect to its own storage,
+    where the signed URL carries its own authorisation. The API bearer token
+    must not travel with it: the storage host rejects a request that arrives
+    with an unexpected `Authorization` header, and the token has no business
+    leaving GitHub. The redirect is therefore followed once, to a storage host
+    only, without the token.
+    """
     url = f'{BASE}/actions/artifacts/{artifact_id}/zip'
     headers = {'User-Agent': 'xennic-preview-diagnose', 'Accept': 'application/vnd.github+json',
                'X-GitHub-Api-Version': '2022-11-28', 'Authorization': 'Bearer ' + token.decode('ascii')}
     request = urllib.request.Request(url, headers=headers, method='GET')
-    recorder = Recorder()
-    opener = urllib.request.build_opener(recorder)
+    opener = urllib.request.build_opener(NoRedirect)
+    hops = []
     try:
         with opener.open(request, timeout=30) as response:
-            return recorder.hops, response.read(MAX_ZIP + 1)
+            return hops, response.read(MAX_ZIP + 1)
     except urllib.error.HTTPError as exc:
-        return recorder.hops, exc
+        if exc.code not in (301, 302, 303, 307, 308):
+            return hops, exc
+        hops.append((exc.code, exc.headers.get('Location', '')))
     except (OSError, ValueError) as exc:
-        return recorder.hops, exc
+        return hops, exc
+    location = hops[-1][1]
+    host = storage_host(location)
+    if not host:
+        return hops, RuntimeError('the artifact storage host is not a GitHub host')
+    plain = urllib.request.Request(location, headers={'User-Agent': 'xennic-preview-diagnose'}, method='GET')
+    try:
+        with urllib.request.urlopen(plain, timeout=30) as response:
+            return hops, response.read(MAX_ZIP + 1)
+    except urllib.error.HTTPError as exc:
+        return hops, exc
+    except (OSError, ValueError) as exc:
+        return hops, exc
 
 
 def write_candidate(line):

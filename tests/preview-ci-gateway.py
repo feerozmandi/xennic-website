@@ -5,6 +5,7 @@ The docker/SSH-driving parts are deliberately not exercised here (CI has no
 production host); everything that decides whether a command or a transition row
 is acceptable is pure and is covered below.
 """
+import base64
 import importlib.util
 import json
 import re
@@ -55,8 +56,25 @@ class MigrationsTest(unittest.TestCase):
     def test_valid_list(self):
         self.assertEqual(gateway.parse_previous_migrations('["a","b_1"]'), ['a', 'b_1'])
 
+    def test_the_base64_form_means_the_same_thing(self):
+        # The SSH wrapper, the diagnostic and the reviewer all carry the list
+        # in base64; the gateway is also called directly with plain JSON. Both
+        # encodings must be accepted and must mean the same thing.
+        encoded = base64.b64encode(b'["20261030_163225_baseline"]').decode('ascii')
+        self.assertEqual(gateway.parse_previous_migrations(encoded), ['20261030_163225_baseline'])
+        self.assertEqual(gateway.parse_previous_migrations('["20261030_163225_baseline"]'),
+                         ['20261030_163225_baseline'])
+
     def test_invalid_lists(self):
         for raw in ('', '{}', '[]', '["a","a"]', '[1]', '["a b"]', '["' + 'x' * 201 + '"]'):
+            with self.assertRaises(gateway.Rejected):
+                gateway.parse_previous_migrations(raw)
+
+    def test_base64_that_is_not_a_json_array_is_rejected(self):
+        for raw in (base64.b64encode(b'{}').decode('ascii'),
+                    base64.b64encode(b'not json').decode('ascii'),
+                    base64.b64encode(b'[]').decode('ascii'),
+                    base64.b64encode(b'["a","a"]').decode('ascii')):
             with self.assertRaises(gateway.Rejected):
                 gateway.parse_previous_migrations(raw)
 
