@@ -201,6 +201,15 @@ push، artifact همان run، دانلود artifact (و میزبانی که red
    `*.blob.core.windows.net` می‌رود؛ اگر آن میزبان از میزبانِ شما در دسترس
    نباشد، دانلود شکست می‌خورد و هیچ استقراری رخ نمی‌دهد (این یک شکستِ امن است).
 
+هر دو پایهٔ تشخیص در یک دستور جمع شده‌اند: `scripts/refresh-preview-pull-deploy.sh`
+نسخهٔ درستِ deployer را از یک commit مشخص نصب می‌کند و بعد تشخیص را اجرا
+می‌کند:
+
+```
+REF=<commit-ish>
+curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/refresh-preview-pull-deploy.sh" | bash -s -- "$REF"
+```
+
 ## ۱۰) تشخیص شبکه‌ای که ناتمام ماند
 
 دستور جمع‌بندی روی میزبان (پیشنهاد برای وقتی دسترسی دارید):

@@ -92,6 +92,18 @@ gh run list --repo feerozmandi/xennic-website --workflow ci.yml --limit 3
 می‌گیریم تا `dev` (و در نتیجه commit ایمیج منتشرشده) دست‌نخورده بماند.
 
 ```bash
+# روی VPS (root): یک دستور — نسخهٔ درستِ deployer را نصب می‌کند و بعد تشخیص را می‌دهد
+REF=arena/cf13d19d-xennic-website
+curl -fsSL "https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/refresh-preview-pull-deploy.sh" | bash -s -- "$REF"
+```
+
+این اسکریپت چهار فایل را از همان commit می‌گیرد، با نصب‌کنندهٔ بازبینی‌شده نصب
+می‌کند (deployer، ماژول evidence، واحدهای systemd، timer) و بعد تشخیصِ
+فقط‌خواندنی را اجرا می‌کند. نه گذاری تأیید می‌کند و نه چیزی مستقر می‌کند.
+
+اگر ترجیح می‌دهید دستورها را جدا اجرا کنید:
+
+```bash
 # روی VPS (root):
 mkdir -p /root/xennic-preview-pull-deploy
 cd /root/xennic-preview-pull-deploy
@@ -99,6 +111,7 @@ REF=arena/cf13d19d-xennic-website
 curl -fsSL -o preview-pull-deploy.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/preview-pull-deploy.py
 curl -fsSL -o preview-ci-evidence.py    https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/preview-ci-evidence.py
 curl -fsSL -o install-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/install-preview-pull-deploy.py
+curl -fsSL -o diagnose-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/diagnose-preview-pull-deploy.py
 python3 install-preview-pull-deploy.py
 ```
 
@@ -106,8 +119,7 @@ python3 install-preview-pull-deploy.py
 
 ```bash
 # چرا deployer قبلاً فقط می‌گفت «Unverified»؟ این برنامه می‌گوید کدام درخواست و چرا.
-curl -fsSL -o diagnose-preview-pull-deploy.py https://raw.githubusercontent.com/feerozmandi/xennic-website/$REF/scripts/diagnose-preview-pull-deploy.py
-python3 diagnose-preview-pull-deploy.py
+python3 /root/xennic-preview-pull-deploy/diagnose-preview-pull-deploy.py
 
 /usr/local/libexec/xennic-preview/ci-pull-deploy --dry-run   # انتظار: waiting-approval
 systemctl list-timers xennic-pull-deploy.timer

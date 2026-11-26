@@ -115,5 +115,29 @@ class OutputTest(unittest.TestCase):
         self.assertNotIn(FAKE_TOKEN, output)
 
 
+class RefreshScriptTest(unittest.TestCase):
+    """The one-line host refresh must install and diagnose, and nothing else."""
+
+    def setUp(self):
+        path = Path(__file__).resolve().parents[1] / 'scripts/refresh-preview-pull-deploy.sh'
+        self.source = path.read_text(encoding='utf-8')
+        # Only the commands matter here; the comments say what it does not do.
+        self.commands = '\n'.join(line for line in self.source.splitlines()
+                                  if not line.lstrip().startswith('#'))
+
+    def test_it_needs_root_and_fails_early(self):
+        self.assertIn('set -euo pipefail', self.source)
+        self.assertIn('id -u', self.source)
+
+    def test_it_never_approves_or_starts_a_deployment(self):
+        for forbidden in ('ci-gateway', 'approve', 'compatible-transitions',
+                          'systemctl start', 'ci-pull-deploy --dry-run'):
+            self.assertNotIn(forbidden, self.commands)
+
+    def test_it_installs_and_then_diagnoses(self):
+        self.assertIn('install-preview-pull-deploy.py', self.source)
+        self.assertIn('diagnose-preview-pull-deploy.py', self.source)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
