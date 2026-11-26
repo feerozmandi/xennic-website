@@ -470,10 +470,17 @@ migrate و seed، تأییدِ restore)، و همهٔ فازها یک بودجه
 ### ۱۶-ب) نشانگرِ ماندگارِ فاز
 
 backend پیش از شروعِ هر helper، فازِ در حال اجرا را در یک نشانگرِ
-root-owned زیر `/srv/xennic-preview/state/deploy-phase.json` می‌نویسد. اگر
+root-owned زیر `/run/xennic-preview/deploy-phase.json` می‌نویسد. اگر
 helperی کشته شود، یا خودِ backend کشته شود، میزبان هنوز می‌گوید کجا ایستاد.
 نوشتنِ نشانگر هرگز نباید استقرار را متوقف کند، پس خطای آن عمداً نادیده
 گرفته می‌شود. deployer همین فاز را در رکوردِ ناموفقی می‌نویسد.
+
+نشانگر عمداً **داخلِ ریشهٔ preview نیست**. پوشهٔ `state` زیر
+`/srv/xennic-preview` باید جزِ ژورنال چیزی نداشته باشد: بررسیِ
+`assert_initial_pristine` هر فایلِ اضافه‌ای را در آن می‌بیند و استقرارِ
+نخست را رد می‌کند. نشانگری که خودِ ما آنجا می‌گذاشتیم، همان استقرارِ نخست را
+می‌شکست — و همین در CIِ `installed-sftp` دیده شد. پس نشانگر به `/run` منتقل
+شد؛ همان tmpfs‌ای که helperِ pull از پیش برای همین کار استفاده می‌کند.
 
 ### ۱۶-ج) backend هم باید روی میزبان تازه شود
 
@@ -489,8 +496,8 @@ backend را هم با deployer نصب می‌کند — همچنان به‌ص�
 
 | فایل | SHA-256 |
 |---|---|
-| `scripts/preview-pull-deploy.py` | `f92ed074d439fe83ba2e9190ba88067989a285f2237ce07f288b53b51d40757c` |
-| `scripts/preview-deploy-backend.py` | `e2be10989d81ad4ef5c26ba7055597b5675d1f0e7bdab350734dff4ad1f92a49` |
+| `scripts/preview-pull-deploy.py` | `4873929f647579eeb57a049c2188f023facbe96de36250fe23979b6323eb62a4` |
+| `scripts/preview-deploy-backend.py` | `fe9d892d10a75caaca56345a4fb1e5a4744bc1ac710cb4088e399a9bf6fe21ab` |
 | `scripts/preview-ci-evidence.py` | `f8936e63baf27debe36c6b16d0a189465271fc8a08ff7ccecb6f7242e3113a2b` |
 | `scripts/preview-ci-gateway.py` | `d7c9c4c95dc937ea8e73fba858fd5ba8775208f2f99bbc574fc98e95aea61be1` |
 | `scripts/preview-ci-gateway-ssh` | `d058fc3786cf1467bea602608b88c473a5a04aaa855375d54a67d551cc4a63cc` |
@@ -505,6 +512,66 @@ backend را هم با deployer نصب می‌کند — همچنان به‌ص�
 
 بازتابِ آزمون: با برگرداندنِ قفلِ استقرار به deployer، آزمون‌های deployer
 دقیقاً همان شکست را می‌دهند.
+
+## ۱۷- نشانگرِ فاز، استقرارِ نخست
+
+پس از اصلاحِ بن‌بست، jobِ `installed-sftp` در CI شکست خورد:
+
+```
+preview operation failed: release-check
+```
+
+این خطا از منطقِ استقرار نبود؛ از **نشانگرِ ماندگارِ فاز** بود.
+
+### ۱۷-الف) چه چیزی شکست
+
+backend پیش از شروعِ هر helper فازِ در حال اجرا را در نشانگری می‌نوشت.
+آن نشانگر زیرِ `/srv/xennic-preview/state/` بود. ولی پوشهٔ `state` زیرِ
+ریشهٔ preview باید جزِ ژورنال چیزی نداشته باشد. بررسیِ
+`assert_initial_pristine` در `preview-fixed-operations.py` دقیقاً همین را
+می‌سنجد:
+
+```python
+expected = {'release-state.json'} if journal_exists else set()
+if {p.name for p in (ROOT / 'state').iterdir()} != expected or any((ROOT / 'work').iterdir()):
+    raise Rejected('initial state or work directory is not empty')
+```
+
+پس فازِ `release-check` — نخستین فازِ هر استقرار — فایلِ خودِ ما را در آن
+پوشه می‌دید و **استقرارِ نخست را رد می‌کرد**. نشانگرِ ما داشت همان چیزی را
+خراب می‌کرد که برای توضیحش ساخته شده بود.
+
+این در CI دیده شد، چون jobِ `installed-sftp` یک استقرارِ نخستِ واقعی
+اجرا می‌کند. خطاهای محلی آن را نگرفتند، چون آن‌ها Docker ندارند.
+
+### ۱۷-ب) اصلاح
+
+نشانگر به `/run/xennic-preview/deploy-phase.json` منتقل شد:
+
+* `/run` یک tmpfs است؛ همان چیزی که `preview-pull-image.py` از پیش برای
+  پوشهٔ کاریِ خودش استفاده می‌کند. یک نشانگر که با ریبوت از بین برود هم
+  پاسخِ درستی است: رکوردِ یک اجرای در حالِ happening را توصیف می‌کند.
+* پوشهٔ `state` و پوشهٔ `work` زیرِ ریشهٔ preview دست‌نخورده می‌مانند و
+  قراردادِ `assert_initial_pristine` برقرار می‌ماند.
+* backend و deployer باید دقیقاً یک مسیر را ببینند؛ یک آزمون تازه همین
+  را می‌سنجد.
+
+پوشهٔ نشانگر با `0700` ساخته می‌شود و `umask` تصمیم نمی‌گیرد؛ پوشهٔ
+پدر هم نباید نوشتنی برای دیگران باشد، مگر sticky باشد (مثل `/tmp`، که
+کسی نمی‌تواند ورودیِ خودِ دیگری را جابه‌جا کند).
+
+### ۱۷-ج) آزمون
+
+آزمونِ تازه خودِ `assert_initial_pristine` را — با بخشِ Docker-محورش
+شبیه‌سازی‌شده — اجرا می‌کند و دو چیز را می‌سنجد: با نشانگرِ نوشته‌شده
+پذیرفته می‌شود، و با یک فایلِ اضافه در `state` همچنان رد می‌شود. یعنی
+این محافظت واقعاً هست، نه اینکه حذف شده باشد.
+
+بازتابِ آزمون: با برگرداندنِ مسیرِ نشانگر به `/srv/xennic-preview/state/`
+آزمون‌ها دقیقاً همان شکست را می‌دهند.
+
+آزمون‌ها پس از این اصلاح: deployer ۴۶ → ۵۴، backend ۲۸ → ۳۲، و scope
+manifest هم‌راستا شد.
 
 ## پیگیری Vault
 

@@ -376,10 +376,11 @@ SCOPE_HELPERS = 'helpers'
 # The scope candidate is this repository's helper set: the pinned digest
 # moves whenever a helper in ACTIVATION_FILES changes, so that the reviewed
 # candidate is always the reviewed source and not a stale copy of it. The
-# backend gained bounded phase timeouts and a durable phase marker, so the
-# digest moves with it.
+# backend moved its durable phase marker out of the preview root and into
+# /run, because the root's state directory must hold nothing but the
+# journal, so the digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = '50fef81807b0f7313c8c679ee8cf83d397dc7dd8c3de19b594a5c877abb915a9'
+SCOPE_MANIFEST = '8268b94de9b1f1e479db7d47e48d3c6c02f38c634f6a0f985c378a65d1d33f13'
 
 
 def _toml_value(value):

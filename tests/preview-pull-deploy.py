@@ -565,6 +565,82 @@ class DeploymentLockTest(unittest.TestCase):
         self.assertIn('backend-reached-the-deployment-lock', result.stdout.decode('utf-8', 'replace'))
 
 
+class PhaseMarkerTest(unittest.TestCase):
+    """The phase marker must be where the operator will look, and nowhere else.
+
+    The backend writes the phase it is in before it starts a helper, so a
+    deployment that is killed still says where it stopped. The marker used to
+    live in the preview root's state directory, which broke the first
+    deployment: `assert_initial_pristine` requires that directory to hold
+    nothing but the journal, so the marker of ours made the release check
+    refuse a fresh install. The marker now lives under /run.
+    """
+
+    def test_the_marker_is_outside_the_preview_root(self):
+        # The pristine-install check refuses a first deployment when the
+        # state or work directory holds anything but the journal, so nothing
+        # of ours may ever be written into the preview root.
+        self.assertFalse(str(pull.PHASE_MARKER).startswith('/srv/xennic-preview/'))
+        self.assertEqual(str(pull.PHASE_MARKER), '/run/xennic-preview/deploy-phase.json')
+
+    def test_the_backend_writes_the_marker_to_the_same_path(self):
+        backend_path = Path(__file__).resolve().parents[1] / 'scripts/preview-deploy-backend.py'
+        spec = importlib.util.spec_from_file_location('marker_backend', backend_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(str(module.PHASE_MARKER), str(pull.PHASE_MARKER))
+
+    def test_a_written_marker_is_read_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            marker.write_text(json.dumps({'version': 1, 'phase': 'migrate', 'run_number': 260}))
+            marker.chmod(0o600)
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertEqual(pull.phase_marker(owner_uid=os.geteuid()), 'migrate')
+
+    def test_a_marker_owned_by_someone_else_is_ignored(self):
+        # The marker is written by the root-owned backend. A file of the same
+        # name owned by anyone else is not the marker we wrote.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            marker.write_text(json.dumps({'version': 1, 'phase': 'migrate'}))
+            marker.chmod(0o600)
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertIsNone(pull.phase_marker(owner_uid=os.geteuid() + 1))
+
+    def test_a_missing_marker_is_not_an_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertIsNone(pull.phase_marker())
+
+    def test_a_marker_that_is_not_private_is_ignored(self):
+        # A world-readable marker is not the marker we wrote; it is ignored
+        # rather than believed.
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            marker.write_text(json.dumps({'version': 1, 'phase': 'migrate'}))
+            marker.chmod(0o644)
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertIsNone(pull.phase_marker())
+
+    def test_a_marker_with_an_unknown_phase_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            marker.write_text(json.dumps({'version': 1, 'phase': 'not-a-phase'}))
+            marker.chmod(0o600)
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertIsNone(pull.phase_marker())
+
+    def test_a_marker_that_is_not_json_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'deploy-phase.json'
+            marker.write_bytes(b'not json at all')
+            marker.chmod(0o600)
+            with mock.patch.object(pull, 'PHASE_MARKER', marker):
+                self.assertIsNone(pull.phase_marker())
+
+
 def relaxed_private_file(path, maximum):
     """The production check minus the root ownership assertion."""
     try:

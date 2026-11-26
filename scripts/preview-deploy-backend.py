@@ -76,10 +76,67 @@ class BackendError(RuntimeError):
     pass
 
 
-PHASE_MARKER = Path("/srv/xennic-preview/state/deploy-phase.json")
+PHASE_MARKER = Path("/run/xennic-preview/deploy-phase.json")
 # The phase names are fixed constants. A marker that carries anything else is
 # ignored rather than trusted.
 KNOWN_PHASES = frozenset(PHASE_TIMEOUTS) | {"complete", "failed"}
+
+
+def ensure_marker_directory(path, owner_uid):
+    """Create the marker's directory if needed and prove it is safe to use.
+
+    The directory itself must be private to us outright: the marker says
+    which phase a deployment is in, and that is not information for anyone
+    else. Its ancestors must not be writable by anyone else, or they could
+    swap the directory for one of their own while the marker is written. A
+    sticky directory is the one exception: in a sticky directory nobody may
+    remove or rename an entry they do not own, so `/tmp` is safe to be
+    under, and the marker directory we create there is ours alone.
+    """
+    missing = []
+    current = Path(path)
+    while not current.exists():
+        missing.append(current)
+        if current.parent == current:
+            break
+        current = current.parent
+    for directory in reversed(missing):
+        try:
+            os.mkdir(directory, mode=0o700)
+        except FileExistsError:
+            pass
+        except OSError:
+            return False
+        # The umask must not decide how private this directory is: the
+        # directory holds the marker, and the marker is read by the deployer
+        # only when it is private to root.
+        try:
+            os.chmod(directory, 0o700)
+        except OSError:
+            return False
+    current = Path(path)
+    while True:
+        try:
+            info = os.lstat(current)
+        except OSError:
+            return False
+        if not stat.S_ISDIR(info.st_mode):
+            return False
+        if current == Path(path):
+            if info.st_uid != owner_uid:
+                return False
+            if info.st_mode & 0o077:
+                # We own it, so we may make it private. Refusing instead would
+                # leave the marker unwritten for no good reason.
+                try:
+                    os.chmod(current, 0o700)
+                except OSError:
+                    return False
+        elif info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
+            return False
+        if current.parent == current:
+            return True
+        current = current.parent
 
 
 def write_phase_marker(phase, run_number=None, marker=PHASE_MARKER, owner_uid=0):
@@ -91,6 +148,13 @@ def write_phase_marker(phase, run_number=None, marker=PHASE_MARKER, owner_uid=0)
     it is written before the helper is started, not after it returns. Failing
     to write it must never stop a deployment, so every failure here is
     ignored on purpose.
+
+    The marker lives under `/run`, not in the preview root: the state and work
+    directories there are required to hold nothing but the journal, and a
+    file of ours in either of them would make the pristine-install check
+    refuse a first deployment. `/run` is a tmpfs that the pull helper already
+    uses for the same purpose, and a marker that does not survive a reboot
+    is still the right answer: it describes the run that is happening now.
     """
     if phase not in KNOWN_PHASES:
         return
@@ -100,6 +164,8 @@ def write_phase_marker(phase, run_number=None, marker=PHASE_MARKER, owner_uid=0)
         payload["run_number"] = run_number
     try:
         raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode() + b"\n"
+        if not ensure_marker_directory(marker.parent, owner_uid):
+            return
         directory = os.open(marker.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
         try:
             info = os.fstat(directory)

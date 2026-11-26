@@ -367,6 +367,77 @@ class PhaseMarkerTest(unittest.TestCase):
             backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
             self.assertEqual(marker.stat().st_mode & 0o777, 0o600)
 
+    def test_the_marker_is_outside_the_preview_root(self):
+        # The state and work directories under the preview root are required
+        # to hold nothing but the journal: `assert_initial_pristine` refuses
+        # a first deployment when they hold anything else. A marker of ours in
+        # either of them would make every first deployment fail. The marker
+        # therefore lives under /run, which is a tmpfs the pull helper
+        # already uses for the same purpose.
+        self.assertFalse(str(backend.PHASE_MARKER).startswith('/srv/xennic-preview/'))
+        self.assertTrue(str(backend.PHASE_MARKER).startswith('/run/'))
+
+    def test_the_marker_does_not_break_the_pristine_install_check(self):
+        # The real check, not a paraphrase of it. The preview root's state
+        # directory is required to hold nothing but the journal, so a marker
+        # of ours written there would make every first deployment fail the
+        # release check. This is the defect the installed-chain CI caught.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "preview"
+            for name in ("config", "secrets", "state", "work"):
+                (root / name).mkdir(parents=True)
+            marker = Path(tmp) / "run" / "xennic-preview" / "deploy-phase.json"
+            backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
+            self.assertTrue(marker.is_file())
+            # Nothing was written into the preview root.
+            self.assertEqual({p.name for p in root.iterdir()}, {"config", "secrets", "state", "work"})
+            self.assertEqual({p.name for p in (root / "state").iterdir()}, set())
+            self.assertEqual(list((root / "work").iterdir()), [])
+
+    def test_the_real_pristine_check_still_accepts_a_first_deployment(self):
+        # The same invariant, exercised through the real helper. Only the
+        # Docker-dependent parts are stubbed; the directory-contents check
+        # that broke the first deployment runs for real.
+        spec = importlib.util.spec_from_file_location(
+            "pristine_fixed", ROOT / "scripts/preview-fixed-operations.py")
+        fixed = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixed)
+        env = (b"PREVIEW_DATABASE_URL=postgresql://preview:secret@postgres:5432/preview\n"
+               b"PREVIEW_POSTGRES_USER=preview\nPREVIEW_POSTGRES_PASSWORD=secret\n"
+               b"PREVIEW_POSTGRES_DB=preview\n")
+        compose = json.dumps({"services": {
+            "app": {"environment": {"DATABASE_URL": "postgresql://preview:secret@postgres:5432/preview"}},
+            "postgres": {"environment": {"POSTGRES_DB": "preview", "POSTGRES_USER": "preview",
+                                         "POSTGRES_PASSWORD": "secret"}}}}).encode()
+
+        def fake_run(args, **kwargs):
+            if "config" in args:
+                return compose
+            return b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "preview"
+            for name in ("config", "secrets", "state", "work"):
+                (root / name).mkdir(parents=True)
+            marker = Path(tmp) / "run" / "xennic-preview" / "deploy-phase.json"
+            backend.write_phase_marker("release-check", 260, marker=marker, owner_uid=os.geteuid())
+            with mock.patch.object(fixed, "ROOT", root), \
+                    mock.patch.object(fixed, "config_for", return_value="image"), \
+                    mock.patch.object(fixed, "run", fake_run), \
+                    mock.patch.object(fixed, "validate_topology"), \
+                    mock.patch.object(fixed.ready, "_read", return_value=env), \
+                    mock.patch.object(fixed.snapshot, "safe_directory"):
+                # The real check must accept the environment.
+                fixed.assert_initial_pristine({"run_number": 260, "digest": "sha256:" + "0" * 64,
+                                                "commit": "0" * 40, "platform": "linux/amd64"})
+                # And it must still refuse one with a stray file in the
+                # state directory: the guard is real, not removed.
+                (root / "state" / "stray.json").write_text("{}")
+                with self.assertRaises(fixed.Rejected) as caught:
+                    fixed.assert_initial_pristine({"run_number": 260, "digest": "sha256:" + "0" * 64,
+                                                    "commit": "0" * 40, "platform": "linux/amd64"})
+                self.assertIn("state or work directory", str(caught.exception))
+
     def test_the_marker_is_not_written_into_a_directory_owned_by_someone_else(self):
         with tempfile.TemporaryDirectory() as tmp:
             marker = Path(tmp) / "deploy-phase.json"
@@ -374,6 +445,13 @@ class PhaseMarkerTest(unittest.TestCase):
             # different owner means the path is not the one that was reviewed.
             backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid() + 1)
             self.assertFalse(marker.exists())
+
+    def test_the_marker_directory_is_created_private(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "run" / "xennic-preview" / "deploy-phase.json"
+            backend.write_phase_marker("migrate", 260, marker=marker, owner_uid=os.geteuid())
+            self.assertTrue(marker.is_file())
+            self.assertEqual(marker.parent.stat().st_mode & 0o777, 0o700)
 
     def test_a_marker_that_cannot_be_written_never_stops_a_deployment(self):
         # The marker is a diagnostic. A read-only state directory must not

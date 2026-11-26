@@ -74,7 +74,7 @@ MAX_NOTIFY = 4096
 RESULTS = ('up-to-date', 'waiting-approval', 'deployed', 'failed', 'in-flight', 'no-journal', 'dry-run')
 # The phase marker the backend writes on the host. These names are fixed
 # constants, so a marker carrying anything else is ignored rather than shown.
-PHASE_MARKER = ROOT / 'state/deploy-phase.json'
+PHASE_MARKER = Path('/run/xennic-preview/deploy-phase.json')
 KNOWN_PHASES = ('release-check', 'current-check', 'backup-verify', 'pull-image', 'migrate',
                 'activate', 'health', 'rollback', 'complete', 'failed')
 # A reason that reaches a log and a chat message has to be safe to print: only
@@ -317,15 +317,19 @@ def public_check():
         return 0
 
 
-def phase_marker():
+def phase_marker(owner_uid=0):
     """The phase the backend recorded on the host, if it recorded one.
 
     The backend writes this before it starts a helper, so a phase that hung
     or was killed still leaves the host saying where it stopped. The file is
-    root-owned and holds a fixed phase name; anything else is ignored.
+    root-owned and holds a fixed phase name; anything else is ignored, and a
+    missing file simply means no phase was recorded.
     """
     try:
-        data = json.loads(private_file(PHASE_MARKER, 4096))
+        info = os.lstat(PHASE_MARKER)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
+            return None
+        data = json.loads(PHASE_MARKER.read_bytes())
     except (OSError, ValueError, UnicodeError):
         return None
     if not isinstance(data, dict) or data.get('phase') not in KNOWN_PHASES:
