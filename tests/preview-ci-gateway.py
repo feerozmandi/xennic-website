@@ -11,6 +11,7 @@ import json
 import re
 from pathlib import Path
 import unittest
+from unittest import mock
 
 p = Path(__file__).resolve().parents[1] / 'scripts/preview-ci-gateway.py'
 spec = importlib.util.spec_from_file_location('preview_ci_gateway', p)
@@ -130,6 +131,35 @@ class ManifestTest(unittest.TestCase):
         self.assertTrue(line.endswith(b'\n'))
         self.assertEqual(json.loads(line), release)
         self.assertEqual(line.count(b'\n'), 1)
+
+
+class LoadTest(unittest.TestCase):
+    """The phase-named helpers are installed without a file extension, and
+    `spec_from_file_location` cannot pick a loader for a name it does not
+    recognise: it returns None, and the caller then fails on a None loader."""
+
+    def test_an_extensionless_helper_loads(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / 'release-check').write_text(
+                "VALUE = 7\n"
+                "def migration_tree_hash(release):\n"
+                "    return 'hash-' + release['commit'][:7]\n", encoding='utf-8')
+            with mock.patch.object(gateway, 'HELPERS', directory):
+                module = gateway.load('ci_gateway_ops_hash', 'release-check')
+            self.assertEqual(module.VALUE, 7)
+            self.assertEqual(module.migration_tree_hash({'commit': 'c0196235'}), 'hash-c019623')
+
+    def test_a_helper_with_a_py_extension_still_loads(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / 'preview-deploy-manifest.py').write_text(
+                "VALUE = 9\n", encoding='utf-8')
+            with mock.patch.object(gateway, 'HELPERS', directory):
+                module = gateway.load('ci_gateway_manifest', 'preview-deploy-manifest.py')
+            self.assertEqual(module.VALUE, 9)
 
 
 class HelperProtocolTest(unittest.TestCase):

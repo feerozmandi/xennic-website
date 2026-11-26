@@ -288,7 +288,57 @@ FileNotFoundError: [Errno 2] No such file or directory:
    یک پوشه شکست خورد، به پوشهٔ بعدی می‌رود و در پایان خطای خودش را
    می‌دهد — به‌جای اینکه با traceback تمام شود.
 
-## ۱۳) تشخیص شبکه‌ای که ناتمام ماند
+## ۱۳) ایراد چهارم در خودِ gateway: بارگذاری helper بدون پسوند
+
+پس از ساخته‌شدن کاندیدا روی میزبان، نخستین تلاش برای تأیید ایستاد:
+
+```
+AttributeError: 'NoneType' object has no attribute 'loader'
+```
+
+و این خطا پیش از نوشتنِ هیچ گذاری رخ داد — یعنی هیچ ردیفی در ژورنال
+ساخته نشد و هیچ تغییری در وضعیت رخ نداد.
+
+علت در تابع `load()` خودِ gateway بود. این تابع helperها را با
+`importlib.util.spec_from_file_location(name, path)` بار می‌کرد. ولی
+helperهای فاز — `release-check`، `pull-image`، `migrate`، `activate`،
+`health`، `rollback` — **بدون پسوند** نصب می‌شوند، چون نصب‌کنندهٔ helperها
+فایل `preview-fixed-operations.py` را با نام فازها کپی می‌کند. پایتون برای
+نامی که پسوند آن را نمی‌شناسد loader انتخاب نمی‌کند، پس
+`spec_from_file_location` مقدار `None` برمی‌گرداند، و
+`module_from_spec(None)` همان `AttributeError` را می‌دهد.
+
+نکتهٔ مهم: این ایراد **در هیچ آزمونی دیده نشده بود**، چون آزمون‌های قبلی
+gateway فقط متنِ فراخوانی‌ها را می‌خواندند و ماژول واقعاً بارگذاری
+نمی‌کردند. ضمناً deployer و تشخیص فقط فایل‌های `.py` را بار می‌کنند و
+سالم‌اند؛ تنها gateway بود که یک helper بدون پسوند را به‌عنوان ماژول
+وارد می‌کرد.
+
+اصلاح: loader صریح شد.
+
+```python
+path = HELPERS / filename
+loader = importlib.machinery.SourceFileLoader(name, str(path))
+spec = importlib.util.spec_from_loader(name, loader)
+module = importlib.util.module_from_spec(spec)
+loader.exec_module(module)
+```
+
+`SourceFileLoader` صریح است، پس هم فایل `.py` و هم فایل بدون پسوند یکسان
+بارگذاری می‌شوند.
+
+دو آزمون تازه اضافه شد: یکی helper بدون پسوند را در یک پوشهٔ موقت
+می‌سازد و `load()` را روی آن می‌زند (این آزمون با بازگرداندن کدِ قدیمی
+دقیقاً همان `AttributeError` را بازتولید می‌کند)، و دیگری مطمئن می‌شود
+فایل `.py` همچنان درست بارگذاری می‌شود. آزمون‌های gateway از ۲۰ به ۲۲
+رسیدند.
+
+همچنین با شبیه‌سازیِ چیدمانِ واقعیِ میزبان (کپیِ `preview-fixed-operations.py`
+با نام `release-check` کنار هم‌نیاهایش) بررسی شد که ماژول کامل بالا می‌آید و
+`migration_tree_hash` در دسترس است — همان چیزی که `command_approve` برای
+تطبیق هش لازم دارد.
+
+## ۱۴) تشخیص شبکه‌ای که ناتمام ماند
 
 دستور جمع‌بندی روی میزبان (پیشنهاد برای وقتی دسترسی دارید):
 

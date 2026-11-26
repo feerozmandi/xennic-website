@@ -27,6 +27,7 @@ invokes it, and the repository variable `DEPLOY_AUTOMATION` has to be enabled.
 """
 import base64
 import binascii
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -55,9 +56,19 @@ class Rejected(RuntimeError):
 
 
 def load(name, filename):
-    spec = importlib.util.spec_from_file_location(name, HELPERS / filename)
+    """Load a helper module by its installed path.
+
+    The phase-named helpers (`release-check`, `pull-image`, `migrate`, ...) are
+    installed without a file extension, and `spec_from_file_location` cannot
+    pick a loader for a name it does not recognise: it returns None, and the
+    caller then fails on a None loader. The source loader is named explicitly,
+    so an extensionless helper loads exactly like a `.py` one.
+    """
+    path = HELPERS / filename
+    loader = importlib.machinery.SourceFileLoader(name, str(path))
+    spec = importlib.util.spec_from_loader(name, loader)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    loader.exec_module(module)
     return module
 
 
