@@ -600,8 +600,10 @@ jobs:
           python3 scripts/preview-release-version.py --check "$VERSION"
           # The name is looked up as the commit it points at, so a name that
           # another commit already carries is refused instead of being moved.
+          # Only a commit is an answer: an error page, or an empty answer,
+          # means the name is free.
           existing=$(gh api "repos/$GITHUB_REPOSITORY/commits/$VERSION" --jq '.sha' 2>/dev/null || true)
-          if [ -n "$existing" ]; then
+          if printf '%s' "$existing" | grep -qE '^[0-9a-f]{40}$'; then
             if [ "$existing" != "$COMMIT" ]; then
               echo "::error::The release name $VERSION already names $existing."
               exit 1
