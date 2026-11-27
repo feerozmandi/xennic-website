@@ -25,6 +25,8 @@
     "test:preview-config": "node --import=tsx --test tests/preview-config.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",
+    "declare:verify": "bash scripts/declare-verify.sh",
+    "test:layout": "node --test tests/layout-measure.mjs",
     "verify": "npm run typecheck && npm run lint && npm run check:boundaries && npm run check:bundle"
   },
   "dependencies": {

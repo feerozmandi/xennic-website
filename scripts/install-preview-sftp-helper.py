@@ -380,7 +380,7 @@ SCOPE_HELPERS = 'helpers'
 # /run, because the root's state directory must hold nothing but the
 # journal, so the digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = '8268b94de9b1f1e479db7d47e48d3c6c02f38c634f6a0f985c378a65d1d33f13'
+SCOPE_MANIFEST = '28a1cc6a4181c12033d0f9e936222120058547d28ef40836e6ec07027109eb46'
 
 
 def _toml_value(value):

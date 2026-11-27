@@ -37,14 +37,14 @@ GATEWAY_IMAGES = {
 }
 # The reviewed public route list gained the English edition and the files the
 # pages load (`/_next/image`, `/brand/*`, `/images/*`, `robots.txt`,
-# `sitemap.xml`). Replacing an installed edge file is an operational step, so a
-# bounded two-version window is pinned here: the file that is on the live edge
-# today and the reviewed replacement. Any third version aborts, exactly as
-# before, and the old hash must be deleted from ROUTES_HASHES once the live edge
-# is confirmed on the replacement.
-ROUTES_INSTALLED = 'a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029'
+# `sitemap.xml`). Replacing an installed edge file is an operational step, so
+# a bounded two-version window was pinned here while the replacement was
+# carried out: the file that was on the live edge that day, and the reviewed
+# replacement. The replacement is installed and confirmed — the file on the
+# edge hashes to the reviewed value — so the window is CLOSED: one reviewed
+# version is accepted, and any other aborts, exactly as before the window
+# existed.
 ROUTES_REVIEWED = 'd903ae491de2e291b713046d7485793a3249143d518de63be5f5f1fa57fd5348'
-ROUTES_HASHES = (ROUTES_INSTALLED, ROUTES_REVIEWED)
 
 # Two reviewed edge identities only. The installed Caddyfile hash selects one;
 # a caller can never choose the authority, and any other file aborts.
@@ -52,14 +52,14 @@ GATEWAY_FILES = {
     'preview.xennic.ir': {
         'config/gateway.yml': 'a6a84eb7d5c0be188d301ecf9ec38c2b5e9e6189dd66d3ac12d2f1966a0e363b',
         'config/Caddyfile': 'c52da3f16ff668cd3ad068c6f059cb8cfbad4e8eecbeec9d6bf39fd3fe2bc0d7',
-        'config/routes.caddy': ROUTES_HASHES,
+        'config/routes.caddy': ROUTES_REVIEWED,
         'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
         'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
     },
     'xennic.ir': {
         'config/gateway.yml': '1444baea48b7aedf2747b7e596872d8b7828bba7544be8dbe05e7720503833ed',
         'config/Caddyfile': '462370b17bf40923bb92d05e39a522acd34ccc08694f2f3b660e273e18d062f2',
-        'config/routes.caddy': ROUTES_HASHES,
+        'config/routes.caddy': ROUTES_REVIEWED,
         'config/oauth-gateway.caddy': '34220eb12245d54b8f4231527daad495a11bb559436148a0317e0b9837eaa195',
         'config/upstream.caddy': '59bdf04300141b80d114a96621165c5cf3a7e4f673554de2204cf70c928e40a8',
     },
