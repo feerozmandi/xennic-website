@@ -445,5 +445,69 @@ class LiveVersionTest(unittest.TestCase):
         self.assertNotIn(FAKE_TOKEN, output)
 
 
+class NoCandidateTest(unittest.TestCase):
+    """The proof about the live release does not depend on the candidate.
+
+    When the current head of `dev` has no successful run there is nothing to
+    deploy, and the diagnosis says so. But the release that is already live
+    can still be proved, and the operator still has to be told: the question
+    "is the live version the name the repository gives it?" does not depend
+    on there being a new release to put on the host.
+    """
+
+    COMMIT = 'a' * 40
+
+    def run_main(self, journal, name='v1.0.1'):
+        states = mock.Mock()
+        states.Journal.return_value.read.return_value = journal
+        sha = 'a' * 40
+
+        def fake_api(path, token):
+            if path.startswith('/commits/'):
+                return 200, json.dumps({'sha': sha}).encode()
+            if '/actions/workflows/' in path:
+                # A run that is not a success: the candidate does not exist.
+                run = {'id': 46010745224, 'run_number': 299, 'run_attempt': 1,
+                       'head_sha': sha, 'head_branch': 'dev', 'event': 'push',
+                       'status': 'completed', 'conclusion': 'failure'}
+                return 200, json.dumps({'workflow_runs': [run]}).encode()
+            return 404, b'{}'
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            with mock.patch.object(diagnose, 'read_token', lambda: FAKE_TOKEN.encode()), \
+                    mock.patch.object(diagnose, 'api', side_effect=fake_api), \
+                    mock.patch.object(diagnose, 'public_status', return_value=200), \
+                    mock.patch.object(diagnose, 'load', return_value=states), \
+                    mock.patch.object(diagnose, 'release_name_for', return_value=name):
+                diagnose.failures.clear()
+                diagnose.anomalies.clear()
+                status = diagnose.main()
+        return status, buffer.getvalue()
+
+    def journal(self, version):
+        return {'version': 1, 'last_run': 300, 'blocked': False,
+                'current': {'repository': 'feerozmandi/xennic-website', 'commit': self.COMMIT,
+                            'run_number': 299, 'digest': 'sha256:' + '0' * 64,
+                            'platform': 'linux/amd64'},
+                'previous': [], 'pending': None,
+                'release_version': version}
+
+    def test_the_live_release_is_still_proved_without_a_candidate(self):
+        status, output = self.run_main(self.journal('v1.0.1'))
+        self.assertEqual(status, 1)  # there is nothing to deploy
+        self.assertIn('FAILED', output)
+        self.assertIn('no successful push run', output)
+        self.assertIn('the same', output)
+        self.assertIn('The live release is v1.0.1', output)
+
+    def test_the_mismatch_is_still_reported_without_a_candidate(self):
+        status, output = self.run_main(self.journal('v9.9.9'))
+        self.assertEqual(status, 1)
+        self.assertIn('ANOMALY', output)
+        self.assertIn('The live release is v9.9.9', output)
+        self.assertIn('the repository does not give it that name', output)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
