@@ -116,7 +116,19 @@ jobs:
       # page never grows a scrollbar and the defect is invisible until it is
       # measured. Every published page, at every width, in both themes.
       - name: Measure every published page in a real browser
+        env:
+          LAYOUT_CHECK_REPORT: ${{ runner.temp }}/layout-overflow.json
         run: node scripts/check-layout-overflow.mjs http://127.0.0.1:3000
+      # The measurement is kept with the run: which box stuck out, at which
+      # width, on which page is the whole finding.
+      - name: Preserve the layout measurement
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: layout-overflow-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/layout-overflow.json
+          if-no-files-found: ignore
+          retention-days: 90
       - name: Show server log on failure
         if: failure()
         run: test ! -f "$RUNNER_TEMP/xennic-next.log" || cat "$RUNNER_TEMP/xennic-next.log"

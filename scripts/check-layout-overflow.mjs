@@ -139,7 +139,34 @@ try {
   await browser.close()
 }
 
+/**
+ * The report, written whether the check passed or failed: a clean run says
+ * which pages and widths were measured, and a failing one says which box
+ * stuck out. Either way it travels with the run.
+ */
+function writeReport() {
+  const target = process.env.LAYOUT_CHECK_REPORT
+  if (!target) return
+  const summary = {
+    baseUrl: BASE,
+    widths: WIDTHS,
+    themes: THEMES,
+    checked,
+    failures: failures.map((f) => ({
+      path: f.path,
+      locale: f.locale,
+      width: f.width,
+      theme: f.theme,
+      reason: f.reason ?? null,
+      offenders: f.offenders ?? [],
+    })),
+  }
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, `${JSON.stringify(summary, null, 1)}\n`, 'utf8')
+}
+
 if (failures.length === 0) {
+  writeReport()
   console.log(`layout: ${checked} page/theme/width combinations, no content outside the window.`)
   process.exit(0)
 }
@@ -157,19 +184,5 @@ for (const failure of failures) {
   }
 }
 
-// A machine-readable copy, so a failing run's annotation says what stuck out
-// without anyone reading the whole log.
-const summary = failures.map((f) => ({
-  path: f.path,
-  locale: f.locale,
-  width: f.width,
-  theme: f.theme,
-  reason: f.reason ?? null,
-  offenders: f.offenders ?? [],
-}))
-const target = process.env.LAYOUT_CHECK_REPORT
-if (target) {
-  mkdirSync(dirname(target), { recursive: true })
-  writeFileSync(target, `${JSON.stringify(summary, null, 1)}\n`, 'utf8')
-}
+writeReport()
 process.exit(1)
