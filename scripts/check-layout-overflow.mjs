@@ -1,0 +1,175 @@
+/**
+ * check-layout-overflow.mjs — does any published page put content outside the
+ * window it is shown in?
+ *
+ *   node scripts/check-layout-overflow.mjs [base-url]
+ *
+ * WHAT IT LOOKS FOR. The site hides horizontal overflow on purpose (`body {
+ * overflow-x: hidden }`), so the page never grows a scrollbar — the content
+ * that would have overflowed is simply cut off at the edge. That is why the
+ * overflow recorded in the reports was never visible as a scrollbar: it was
+ * measured, not seen. This check measures it the same way and names the
+ * element that sticks out.
+ *
+ * A box that reaches past the window's right edge (or before its left edge)
+ * is reported, and so is a box wider than the window. The outermost such box
+ * is named, because that is the one to fix: a child of a box that already
+ * sticks out is only sticking out because its parent does.
+ *
+ * THE MATRIX. Every published page, at every width in the list, in both
+ * themes. The widths are the ones the reports measured by hand, plus the
+ * 880–930 px band where `.platform__art` was found to overflow.
+ *
+ * THE BROWSER. The runner's own Chrome. A browser driver is installed for
+ * this check alone (`npm install --no-save puppeteer-core`) and is NOT a
+ * dependency of the website: the site never drives a browser, so `npm ci`
+ * must not fetch one.
+ */
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { measureOverflow } from './layout-measure.mjs'
+
+const BASE = (process.argv[2] ?? process.env.LAYOUT_CHECK_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
+const WIDTHS = [360, 390, 768, 880, 900, 930, 1024, 1280, 1440]
+const THEMES = ['dark', 'light']
+const HEIGHT = 900
+
+/** Where Chrome is, when nobody says. The GitHub runner has one installed. */
+function findChrome() {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ].filter(Boolean)
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  throw new Error('no Chrome found — set PUPPETEER_EXECUTABLE_PATH')
+}
+
+/** The published paths, read from the sitemap the site itself serves. */
+async function publishedPaths() {
+  const fallback = ['/', '/company', '/company/team', '/services', '/track-record', '/platform', '/contact']
+  try {
+    const response = await fetch(`${BASE}/sitemap.xml`)
+    if (!response.ok) return fallback.map((p) => ({ path: p, locale: 'fa' }))
+    const xml = await response.text()
+    const paths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => {
+      const url = new URL(m[1])
+      return { path: url.pathname, locale: url.pathname.startsWith('/en') ? 'en' : 'fa' }
+    })
+    return paths.length > 0 ? paths : fallback.map((p) => ({ path: p, locale: 'fa' }))
+  } catch {
+    return fallback.map((p) => ({ path: p, locale: 'fa' }))
+  }
+}
+
+/**
+ * The measurement, run inside the page. It lives in `layout-measure.mjs` so
+ * that what counts as "outside the window" can be tested without a browser.
+ */
+const MEASURE = () => measureOverflow(document)
+
+// The pages are read before the browser is looked for: a server that is not
+// up is the first thing that can be wrong, and it is worth saying so.
+const pages = await publishedPaths()
+console.log(`layout: ${pages.length} published pages, ${WIDTHS.length} widths, ${THEMES.length} themes.`)
+
+let puppeteer
+try {
+  puppeteer = (await import('puppeteer-core')).default
+} catch {
+  console.error(
+    'layout: the browser driver is not installed. It is not a dependency of the\n' +
+      '  website on purpose — the site never drives a browser — so it is installed\n' +
+      '  for this check alone:  npm install --no-save puppeteer-core@24',
+  )
+  process.exit(2)
+}
+
+let executablePath
+try {
+  executablePath = findChrome()
+} catch (error) {
+  console.error(`layout: ${error.message}. The runner's own Chrome is used when it is there.`)
+  process.exit(2)
+}
+
+const browser = await puppeteer.launch({
+  executablePath,
+  headless: true,
+  args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars'],
+})
+
+const failures = []
+let checked = 0
+
+try {
+  const page = await browser.newPage()
+  for (const { path, locale } of pages) {
+    for (const width of WIDTHS) {
+      await page.setViewport({ width, height: HEIGHT, deviceScaleFactor: 1 })
+      const response = await page.goto(`${BASE}${path}`, { waitUntil: 'load', timeout: 45000 })
+      if (!response || !response.ok()) {
+        failures.push({ path, locale, width, theme: '-', reason: `the page answered ${response ? response.status() : 'nothing'}` })
+        continue
+      }
+      // The text's width decides where it breaks, and a webfont that has not
+      // arrived yet is measured with a fallback: the boxes read here would
+      // not be the boxes the reader gets. So the fonts are waited for.
+      await page.evaluate(() => document.fonts.ready)
+      for (const theme of THEMES) {
+        await page.evaluate((t) => {
+          document.documentElement.setAttribute('data-theme', t)
+        }, theme)
+        // The theme changes colours only, but the page settles a frame after
+        // the change; measuring in the same frame would read the old boxes.
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        const result = await page.evaluate(MEASURE)
+        checked++
+        if (result.offenders.length > 0) {
+          failures.push({ path, locale, width, theme, offenders: result.offenders, scrollWidth: result.scrollWidth })
+        }
+      }
+    }
+  }
+} finally {
+  await browser.close()
+}
+
+if (failures.length === 0) {
+  console.log(`layout: ${checked} page/theme/width combinations, no content outside the window.`)
+  process.exit(0)
+}
+
+console.error(`layout: ${failures.length} of ${checked} combinations put content outside the window.`)
+for (const failure of failures) {
+  const where = `${failure.path} (${failure.locale}) at ${failure.width}px, theme ${failure.theme}`
+  if (failure.reason) {
+    console.error(`  ${where}: ${failure.reason}`)
+    continue
+  }
+  console.error(`  ${where}:`)
+  for (const offender of failure.offenders) {
+    console.error(`    ${offender.selector} — left ${offender.left}, right ${offender.right}, width ${offender.width} (window ${failure.scrollWidth})`)
+  }
+}
+
+// A machine-readable copy, so a failing run's annotation says what stuck out
+// without anyone reading the whole log.
+const summary = failures.map((f) => ({
+  path: f.path,
+  locale: f.locale,
+  width: f.width,
+  theme: f.theme,
+  reason: f.reason ?? null,
+  offenders: f.offenders ?? [],
+}))
+const target = process.env.LAYOUT_CHECK_REPORT
+if (target) {
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, `${JSON.stringify(summary, null, 1)}\n`, 'utf8')
+}
+process.exit(1)

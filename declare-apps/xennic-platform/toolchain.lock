@@ -1,0 +1,19 @@
+# The Declare toolchain this program's published bundle was built with.
+#
+# WHY A PIN. The bundle the site publishes is named after a hash of the
+# program's content (`app.<hash>.js`), and the page asks for exactly that
+# name. A rebuild with a different compiler could produce the same program
+# and a different file name — or a different program under the same name —
+# and nothing in the repository would say so. Pinning the toolchain by commit
+# makes the build reproducible: the same source, with this compiler, gives
+# the same bytes, which is what `scripts/declare-verify.sh` checks.
+#
+# The commit below is the one the committed `dist/` bundle was built with:
+# rebuilding with it reproduces `app.d01d2eda.js` byte for byte.
+#
+# HOW TO MOVE IT. Build the toolchain at a newer commit, rebuild the program
+# (`declarec … --kernel=js`, then `node tools/manifest.mjs`), and commit the
+# new bundle together with the new commit below — the two travel together,
+# because a bundle and the compiler that made it are one fact.
+commit = 6b3607c9cc8bbf52e4bf047bc3bd8cba129fe8bf
+repo = https://github.com/davidtemkin/declarelang.git

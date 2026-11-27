@@ -37,6 +37,8 @@ jobs:
         run: npm run test:compat
       - name: Preview configuration tests
         run: npm run test:preview-config
+      - name: Layout measurement tests
+        run: npm run test:layout
       - name: Age backup format tests
         run: python3 tests/preview-age-backup.py
       - name: Deployment protocol tests
@@ -104,6 +106,17 @@ jobs:
           node scripts/wait-for-server.mjs
       - name: Run smoke tests
         run: npm run test:smoke
+      # The browser driver is installed for this check alone and is NOT a
+      # dependency of the website: the site never drives a browser, so `npm
+      # ci` must not fetch one. Chrome itself is the runner's own.
+      - name: Install the browser driver for this check
+        run: npm install --no-save --no-audit --no-fund puppeteer-core@24
+      # Content that reaches past the window it is shown in is cut off, not
+      # scrolled to: the site hides horizontal overflow on purpose, so the
+      # page never grows a scrollbar and the defect is invisible until it is
+      # measured. Every published page, at every width, in both themes.
+      - name: Measure every published page in a real browser
+        run: node scripts/check-layout-overflow.mjs http://127.0.0.1:3000
       - name: Show server log on failure
         if: failure()
         run: test ! -f "$RUNNER_TEMP/xennic-next.log" || cat "$RUNNER_TEMP/xennic-next.log"
@@ -137,6 +150,26 @@ jobs:
           fetch-depth: 0
       - name: Exercise bounded installer upgrade and rollback on disposable runner
         run: bash tests/preview-installer-upgrade-ci.sh
+
+  declare-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      # The Declare program is compiled ahead of time and the bundle is
+      # published with the image, so a broken program or a bundle that no
+      # longer matches its source must not reach an image. The ladder needs a
+      # browser for its layout verdict: headless, the runtime measures text
+      # with a stand-in and binds no backend, and the geometry it then reports
+      # is not the geometry a reader gets. The runner's Chrome is that browser.
+      - name: Verify the Declare program and the published bundle
+        env:
+          DECLARE_VERIFY_REQUIRE_BROWSER: '1'
+        run: npm run declare:verify
 
   production-preview:
     runs-on: ubuntu-latest
@@ -400,7 +433,7 @@ jobs:
   publish-preview-image:
     # No package write permission or registry login is given to PR runs.
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: [checks, compose-smoke, production-preview, installed-sftp, installer-upgrade]
+    needs: [checks, compose-smoke, production-preview, installed-sftp, installer-upgrade, declare-verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
