@@ -14,6 +14,11 @@ API the release verifier reads.
 
 Nothing here reads a secret or talks to the network. The repository is read
 with git, and the answer is one line of text.
+
+The host keeps the same rule as a fallback, for the case where the tag
+cannot be read: it is a separate copy on purpose, because this file is not
+part of the reviewed helper set that a deployed host installs, and the
+helper set a host already runs is pinned to the release that defined it.
 """
 import argparse
 import re

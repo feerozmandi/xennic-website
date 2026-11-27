@@ -117,7 +117,9 @@ chmod 700 refresh-preview-pull-deploy.sh
 ### ۶.۲) تازه‌سازیِ همه‌چیز از یک کامیت
 
 ```bash
-/root/refresh-preview-pull-deploy.sh dev
+# بهتر است کامیتِ دقیقِ همان merge باشد، نه نامِ شاخه: helperها از همان
+# کامیتی گرفته می‌شوند که CI آزموده و منتشر کرده است.
+/root/refresh-preview-pull-deploy.sh <commit-sha-of-the-merge>
 ```
 
 این یک دستور چهار کار می‌کند و هیچ‌کدام استقرار نمی‌کند:
@@ -155,9 +157,15 @@ sudo cat /srv/xennic-preview/state/release-state.json
 # ۳) اجرای یک‌بارهٔ واقعی (timer همین کار را می‌کند)
 systemctl start xennic-pull-deploy.service
 journalctl -u xennic-pull-deploy.service -n 40 --no-pager
+
+# ۴) نامِ انتشار باید در ژورنال و در مخزن یکی باشد
+sudo grep release_version /srv/xennic-preview/state/release-state.json
+gh api repos/feerozmandi/xennic-website/tags --jq '.[].name'
 ```
 
 اگر `dry-run` چیزی جز `dry-run: would deploy` نداد، یعنی یا گذارِ reviewed برای جفت commitها نیست یا کلید خودکار خاموش است. اگر کلید خودکار روشن باشد و گذار امن باشد، `dry-run: would deploy` می‌دهد.
+
+در بند ۴، مقدار `release_version` در ژورنال باید **همان** نامی باشد که در مخزن تگ شده است؛ اگر نبود، یعنی خواندنِ تگ روی این میزبان ممکن نبوده و نسخه از پیامِ commitها حساب شده است (که کار می‌کند، ولی نامِ مخزن را نشان نمی‌دهد).
 
 ### ۶.۵) خاموش‌کردن دوباره (هر وقت خواستی)
 

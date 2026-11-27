@@ -431,13 +431,13 @@ SCOPE_HELPERS = 'helpers'
 # /run, because the root's state directory must hold nothing but the
 # journal, so the digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = 'be4d11e5f9f0bb4fcdd9ef4700a3d26b6d0b7fb831208cc570b056157ee0bd89'
+SCOPE_MANIFEST = '71a14b49a4598cbb5e1007b5ec0cb1f0503907ba1a3653cc9028e52d0f4a4fc4'
 # The reviewed helper set this release installs on a host that is already
 # deployed. The digest is over ACTIVATION_FILES, because that is what a
 # deployed host has: the receiver is part of it. It moves whenever a helper
 # moves, so what lands on the host is the reviewed source of this release and
 # not a stale copy of it.
-REFRESH_MANIFEST = 'be4d11e5f9f0bb4fcdd9ef4700a3d26b6d0b7fb831208cc570b056157ee0bd89'
+REFRESH_MANIFEST = '71a14b49a4598cbb5e1007b5ec0cb1f0503907ba1a3653cc9028e52d0f4a4fc4'
 
 
 def _toml_value(value):

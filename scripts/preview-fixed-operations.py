@@ -354,7 +354,12 @@ def tagged_version(release, live, token):
 
 
 def commit_kind(messages):
-    """major, minor or patch, from the conventional commits in the range."""
+    """major, minor or patch, from the conventional commits in the range.
+
+    This is the fallback rule, used only when the release name cannot be
+    read from the repository. The name itself is computed in CI, by
+    `preview-release-version.py`, and the two rules are the same.
+    """
     kind = 'patch'
     for message in messages:
         header, _, body = message.partition('\n')

@@ -37,6 +37,11 @@ class Handler(BaseHTTPRequestHandler):
             with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr('xennic-preview-release.json', json.dumps(evidence))
             return self.reply(200, output.getvalue(), 'application/zip')
+        # A release is named by exactly one tag on the commit it releases, and
+        # the name moves forward with every release of this fixture.
+        if self.path.startswith(BASE + '/tags'):
+            tag = {'name': f'v1.0.{release["run_number"]}', 'commit': {'sha': release['commit']}}
+            return self.reply(200, json.dumps([tag]).encode())
         self.reply(404, b'{}')
 
 
