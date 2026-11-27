@@ -132,6 +132,39 @@ if [ "$use_cached" = "0" ]; then
   fi
   fi
 
+  # ── the browser ─────────────────────────────────────────────────────────────
+  # The toolchain launches the browser itself, and the flags it passes are
+  # the ones a developer's own machine needs. On a CI runner the browser
+  # runs in a container: it needs to be told not to use the sandbox (which
+  # the runner's user may not) and not to use /dev/shm (which the runner
+  # keeps small), or it dies mid-run and takes the process driving it with
+  # it.
+  #
+  # So the browser is put behind a wrapper that adds those flags, and the
+  # toolchain is pointed at the wrapper. Nothing else changes: every other
+  # flag the toolchain passes is handed over untouched.
+  CHROME_WRAPPER="$WORK/chrome-with-ci-flags.sh"
+  cp "$ROOT/scripts/chrome-with-ci-flags.sh" "$CHROME_WRAPPER"
+  chmod +x "$CHROME_WRAPPER"
+  REAL_CHROME="${CHROME_PATH:-${PUPPETEER_EXECUTABLE_PATH:-}}"
+  if [ -z "$REAL_CHROME" ] || [ ! -x "$REAL_CHROME" ]; then
+    # No browser was named: the toolchain looks in the usual places and
+    # finds the runner's own Chrome, which needs the same flags.
+    for candidate in /usr/bin/google-chrome /usr/bin/google-chrome-stable /usr/bin/chromium /usr/bin/chromium-browser; do
+      if [ -x "$candidate" ]; then
+        REAL_CHROME="$candidate"
+        break
+      fi
+    done
+  fi
+  if [ -n "$REAL_CHROME" ] && [ -x "$REAL_CHROME" ]; then
+    export DECLARE_REAL_CHROME="$REAL_CHROME"
+    export CHROME_PATH="$CHROME_WRAPPER"
+    echo "declare-verify: the browser is $REAL_CHROME, behind a wrapper that adds the flags a runner needs"
+  else
+    echo "declare-verify: no browser was found; the ladder will boot in Node." >&2
+  fi
+
   # ── 1. the ladder ───────────────────────────────────────────────────────────
   LOG="$WORK/verify.log"
   # The log is kept where the caller asked for it, so a failing run's
