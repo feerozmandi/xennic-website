@@ -27,7 +27,7 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { measureOverflow } from './layout-measure.mjs'
+import { pageMeasurementSource } from './layout-measure.mjs'
 
 const BASE = (process.argv[2] ?? process.env.LAYOUT_CHECK_URL ?? 'http://127.0.0.1:3000').replace(/\/+$/, '')
 const WIDTHS = [360, 390, 768, 880, 900, 930, 1024, 1280, 1440]
@@ -69,8 +69,14 @@ async function publishedPaths() {
 /**
  * The measurement, run inside the page. It lives in `layout-measure.mjs` so
  * that what counts as "outside the window" can be tested without a browser.
+ *
+ * It is sent as source, not as a function: a browser receives what a
+ * function's text says, and a function that reaches outside its own body
+ * arrives with those names missing. `pageMeasurementSource` writes the whole
+ * measurement into one expression, so what the page runs is the same
+ * measurement the tests cover.
  */
-const MEASURE = () => measureOverflow(document)
+const MEASURE = `(${pageMeasurementSource()})(document)`
 
 // The pages are read before the browser is looked for: a server that is not
 // up is the first thing that can be wrong, and it is worth saying so.
@@ -97,52 +103,14 @@ try {
   process.exit(2)
 }
 
-const browser = await puppeteer.launch({
-  executablePath,
-  headless: true,
-  args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars'],
-})
-
 const failures = []
 let checked = 0
 
-try {
-  const page = await browser.newPage()
-  for (const { path, locale } of pages) {
-    for (const width of WIDTHS) {
-      await page.setViewport({ width, height: HEIGHT, deviceScaleFactor: 1 })
-      const response = await page.goto(`${BASE}${path}`, { waitUntil: 'load', timeout: 45000 })
-      if (!response || !response.ok()) {
-        failures.push({ path, locale, width, theme: '-', reason: `the page answered ${response ? response.status() : 'nothing'}` })
-        continue
-      }
-      // The text's width decides where it breaks, and a webfont that has not
-      // arrived yet is measured with a fallback: the boxes read here would
-      // not be the boxes the reader gets. So the fonts are waited for.
-      await page.evaluate(() => document.fonts.ready)
-      for (const theme of THEMES) {
-        await page.evaluate((t) => {
-          document.documentElement.setAttribute('data-theme', t)
-        }, theme)
-        // The theme changes colours only, but the page settles a frame after
-        // the change; measuring in the same frame would read the old boxes.
-        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-        const result = await page.evaluate(MEASURE)
-        checked++
-        if (result.offenders.length > 0) {
-          failures.push({ path, locale, width, theme, offenders: result.offenders, scrollWidth: result.scrollWidth })
-        }
-      }
-    }
-  }
-} finally {
-  await browser.close()
-}
-
 /**
- * The report, written whether the check passed or failed: a clean run says
- * which pages and widths were measured, and a failing one says which box
- * stuck out. Either way it travels with the run.
+ * The report, written whether the check passed, failed or stopped: a clean
+ * run says which pages and widths were measured, and a failing one says
+ * which box stuck out. Either way it travels with the run — a measurement
+ * that is not written down is not a measurement.
  */
 function writeReport() {
   const target = process.env.LAYOUT_CHECK_REPORT
@@ -165,8 +133,74 @@ function writeReport() {
   writeFileSync(target, `${JSON.stringify(summary, null, 1)}\n`, 'utf8')
 }
 
-if (failures.length === 0) {
+let browser
+try {
+  browser = await puppeteer.launch({
+    executablePath,
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--hide-scrollbars'],
+  })
+} catch (error) {
+  failures.push({ path: '-', locale: '-', width: 0, theme: '-', reason: `the browser did not start: ${error?.message ?? error}` })
   writeReport()
+  console.error(`layout: the browser did not start: ${error?.message ?? error}`)
+  process.exit(1)
+}
+
+try {
+  const page = await browser.newPage()
+  for (const { path, locale } of pages) {
+    for (const width of WIDTHS) {
+      await page.setViewport({ width, height: HEIGHT, deviceScaleFactor: 1 })
+      // A page that will not load, or a browser that will not answer, is a
+      // finding of its own: the measurement did not happen, and saying so is
+      // better than letting the run end without a word.
+      let response
+      try {
+        response = await page.goto(`${BASE}${path}`, { waitUntil: 'load', timeout: 45000 })
+      } catch (error) {
+        failures.push({ path, locale, width, theme: '-', reason: `the page did not load: ${error?.message ?? error}` })
+        continue
+      }
+      if (!response || !response.ok()) {
+        // 304 is the browser's own cache answering: the page is there, and
+        // it is the same page. Only a status that is not a success and not
+        // a revalidation means the page did not arrive.
+        const status = response ? response.status() : 0
+        if (status !== 304) {
+          failures.push({ path, locale, width, theme: '-', reason: `the page answered ${response ? status : 'nothing'}` })
+          continue
+        }
+      }
+      // The text's width decides where it breaks, and a webfont that has not
+      // arrived yet is measured with a fallback: the boxes read here would
+      // not be the boxes the reader gets. So the fonts are waited for.
+      await page.evaluate(() => document.fonts.ready)
+      for (const theme of THEMES) {
+        await page.evaluate((t) => {
+          document.documentElement.setAttribute('data-theme', t)
+        }, theme)
+        // The theme changes colours only, but the page settles a frame after
+        // the change; measuring in the same frame would read the old boxes.
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        const result = await page.evaluate(MEASURE)
+        checked++
+        if (result.offenders.length > 0) {
+          failures.push({ path, locale, width, theme, offenders: result.offenders, scrollWidth: result.scrollWidth })
+        }
+      }
+    }
+  }
+} catch (error) {
+  // The run ends with the report written: what was measured, and what was
+  // not, is the whole of what is known.
+  failures.push({ path: '-', locale: '-', width: 0, theme: '-', reason: `the measurement stopped: ${error?.message ?? error}` })
+} finally {
+  await browser.close()
+  writeReport()
+}
+
+if (failures.length === 0) {
   console.log(`layout: ${checked} page/theme/width combinations, no content outside the window.`)
   process.exit(0)
 }
@@ -184,5 +218,4 @@ for (const failure of failures) {
   }
 }
 
-writeReport()
 process.exit(1)

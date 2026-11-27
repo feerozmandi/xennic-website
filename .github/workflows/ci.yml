@@ -127,7 +127,7 @@ jobs:
         with:
           name: layout-overflow-${{ github.run_attempt }}
           path: ${{ runner.temp }}/layout-overflow.json
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 90
       - name: Show server log on failure
         if: failure()
