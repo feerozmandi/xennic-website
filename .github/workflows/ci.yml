@@ -9,6 +9,13 @@ on:
 permissions:
   contents: read
 
+# One run per ref at a time. Two runs of the same branch would race for the
+# same release name, and a run that is still going on would publish a name
+# that the next run has already passed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   checks:
     runs-on: ubuntu-latest
@@ -45,6 +52,7 @@ jobs:
         run: |
           python3 tests/preview-deploy-manifest.py
           python3 tests/preview-release-evidence.py
+          python3 tests/preview-release-version.py
           python3 tests/preview-release-verifier.py
           python3 tests/preview-pull-image.py
           python3 tests/preview-deploy-client.py
@@ -54,11 +62,13 @@ jobs:
           python3 tests/preview-deploy-readiness.py
           python3 tests/preview-deploy-transaction.py
           python3 tests/preview-deploy-backend.py
+          python3 tests/preview-fixed-operations.py
           python3 tests/preview-compose-operations.py
           python3 tests/preview-internal-health.py
           python3 tests/preview-network-topology.py
           python3 tests/preview-installer-apex.py
           python3 tests/preview-installer-scope.py
+          python3 tests/preview-installer-refresh.py
           python3 tests/preview-ci-gateway.py
           python3 tests/preview-ci-evidence.py
           python3 tests/preview-pull-deploy.py
@@ -507,17 +517,31 @@ jobs:
     needs: [checks, compose-smoke, production-preview, installed-sftp, installer-upgrade, declare-verify]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # The release is named by a tag on the commit it releases, and that tag
+      # is written here. Nothing else in this workflow writes to the
+      # repository.
+      contents: write
       packages: write
     steps:
       - name: Check out the tested commit
         uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
+          # The release name is computed from the repository's own release
+          # tags, so the whole history and every tag has to be here.
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
       - name: Compute image name
         id: image
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Name this release
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(python3 scripts/preview-release-version.py --repository .)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "- Release: \`$version\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Log in to GHCR
@@ -534,7 +558,9 @@ jobs:
           file: ./Dockerfile.preview
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          tags: |
+            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+            ${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }}
       - name: Set up Node.js for the published-image test
         uses: actions/setup-node@v6
         with:
@@ -561,6 +587,32 @@ jobs:
           IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash tests/preview-ghcr-pull-published-ci.sh
+      # The release is named only after the published image has passed its own
+      # tests: a name on a commit means "this image was tested", so a run that
+      # fails leaves the repository without a name for that commit.
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/preview-release-version.py --check "$VERSION"
+          # The name is looked up as the commit it points at, so a name that
+          # another commit already carries is refused instead of being moved.
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/commits/$VERSION" --jq '.sha' 2>/dev/null || true)
+          if [ -n "$existing" ]; then
+            if [ "$existing" != "$COMMIT" ]; then
+              echo "::error::The release name $VERSION already names $existing."
+              exit 1
+            fi
+            echo "$VERSION already names this commit."
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$VERSION" -f sha="$COMMIT" > /dev/null
+            echo "Tagged $VERSION."
+          fi
+          echo "- Release tag: \`$VERSION\` → \`${COMMIT:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
       - name: Prepare same-run release evidence
         env:
           IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
@@ -577,10 +629,12 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.publish.outputs.digest }}
           COMMIT: ${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           {
             echo '### Preview image published and tested by digest (not deployed)'
             echo "- Commit: \`$COMMIT\`"
+            echo "- Release: \`$VERSION\`"
             echo "- Tag: \`$IMAGE:sha-$COMMIT\`"
             echo "- Immutable reference: \`$IMAGE@$DIGEST\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -47,7 +47,8 @@ class Operations:
         self.step("preflight")
         if self.rollback_safe is None:
             return None
-        return {"initial": not self.rollback_safe, "rollback_safe": self.rollback_safe}
+        return {"initial": not self.rollback_safe, "rollback_safe": self.rollback_safe,
+                "release_version": "v1.0.1"}
 
     def pull_image(self, r): self.step("pull")
     def backup_and_verify(self, r): self.step("backup")
@@ -59,9 +60,10 @@ class Operations:
     def migrate(self, r): self.step("migrate")
     def activate(self, r): self.step("activate")
     def verify_health(self, r): self.step("health")
-    def mark_healthy(self, r):
+    def mark_healthy(self, r, version="v1.0.1"):
         self.step("mark_healthy")
         self.state["blocked"] = False
+        self.state["release_version"] = version
     def ensure_blocked(self, r):
         self.step("ensure_blocked")
         self.state["blocked"] = True
@@ -76,7 +78,19 @@ class TransactionTest(unittest.TestCase):
         tx.deploy(release(), ops)
         self.assertEqual(ops.events, ["lock", "read_state", "preflight", "assert_current", "pull", "assert_current", "mark_inflight", "backup",
                                       "assert_current", "migrate", "assert_current", "activate", "health", "mark_healthy", "unlock"])
-        self.assertEqual(ops.state, {"blocked": False, "last_run": 6})
+        self.assertEqual(ops.state, {"blocked": False, "last_run": 6, "release_version": "v1.0.1"})
+
+    def test_the_release_version_comes_from_the_backend_and_not_the_request(self):
+        ops = Operations()
+        tx.deploy(release(), ops)
+        self.assertEqual(ops.state["release_version"], "v1.0.1")
+        for bad in ("nonsense", "1.0.1", None, 3):
+            ops = Operations()
+            ops.preflight = lambda _, bad=bad: {"initial": False, "rollback_safe": True,
+                                                "release_version": bad}
+            with self.assertRaises(tx.DeploymentRejected):
+                tx.deploy(release(), ops)
+            self.assertNotIn("mark_healthy", ops.events)
 
     def test_initial_snapshots_after_health_and_closes_on_failure(self):
         ops = Operations(rollback_safe=False)
@@ -132,7 +146,7 @@ class TransactionTest(unittest.TestCase):
         with self.assertRaises(tx.DeploymentRejected): tx.deploy(release(), ops)
         self.assertNotIn("backup", ops.events)
         ops = Operations()
-        ops.preflight = lambda _: {"initial": False, "rollback_safe": False}
+        ops.preflight = lambda _: {"initial": False, "rollback_safe": False, "release_version": "v1.0.1"}
         with self.assertRaises(tx.DeploymentRejected): tx.deploy(release(), ops)
         self.assertNotIn("backup", ops.events)
 

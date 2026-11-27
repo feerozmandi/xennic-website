@@ -7,6 +7,7 @@ Never wire this module into an SSH receiver until that backend is reviewed.
 """
 import importlib.util
 from pathlib import Path
+import re
 import sys
 
 sys.dont_write_bytecode = True
@@ -32,9 +33,11 @@ def deploy(raw_manifest, ops):
     pull_image(manifest), backup_and_verify(manifest), assert_current(manifest), mark_inflight(manifest),
     migrate(manifest), activate(manifest), verify_health(manifest), mark_healthy(manifest),
     ensure_blocked(manifest), rollback_previous(), verify_previous_health(). preflight returns a dict with
-    boolean initial and rollback_safe fields, based on trusted server state.
+    boolean initial and rollback_safe fields and the automatic release version,
+    all based on trusted server state.
     mark_inflight must durably block later releases before migration begins;
-    mark_healthy must atomically record success and clear that block. A backend
+    mark_healthy must atomically record success and clear that block, together
+    with the version that was established for it. A backend
     must never use values supplied by the request to decide rollback safety.
     """
     try:
@@ -50,8 +53,10 @@ def deploy(raw_manifest, ops):
             raise DeploymentRejected("release blocked or superseded")
         # These are trusted backend checks, not claims from the incoming manifest.
         readiness = ops.preflight(release)
-        if (not isinstance(readiness, dict) or set(readiness) != {"initial", "rollback_safe"} or
+        if (not isinstance(readiness, dict) or set(readiness) != {"initial", "rollback_safe", "release_version"} or
                 type(readiness["initial"]) is not bool or type(readiness["rollback_safe"]) is not bool or
+                not isinstance(readiness["release_version"], str) or
+                not re.fullmatch(r"v\d{1,6}\.\d{1,6}\.\d{1,6}", readiness["release_version"]) or
                 (not readiness["initial"] and not readiness["rollback_safe"]) or
                 (readiness["initial"] and readiness["rollback_safe"])):
             raise DeploymentRejected("release or rollback compatibility not established")
@@ -84,7 +89,7 @@ def deploy(raw_manifest, ops):
                 ops.assert_current(release)
                 ops.activate(release)
                 ops.verify_health(release)
-            ops.mark_healthy(release)
+            ops.mark_healthy(release, readiness["release_version"])
         except Exception:
             # Attempt to close the initial app even if the journal update fails.
             state_ok = True

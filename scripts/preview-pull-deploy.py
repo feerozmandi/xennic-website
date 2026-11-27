@@ -55,6 +55,12 @@ BACKEND = HELPERS / 'preview-deploy-backend.py'
 PULL_LOCK = Path('/run/lock/xennic-preview-pull-deploy.lock')
 DEPLOY_LOCK = Path('/run/lock/xennic-preview-deploy.lock')
 TRANSITIONS = ROOT / 'config/compatible-transitions.json'
+# The operator's switch for automatic approval. The reviewed transition file
+# is the only door into a schema change, and this file says whether a
+# transition that cannot change the schema may be approved on its own. It is
+# read here only to decide whether to knock on that door at all: the backend
+# makes the decision, and it reads the same file.
+AUTO_APPROVAL = ROOT / 'config/auto-approval.json'
 RECORD = ROOT / 'state/pull-deploy.json'
 NOTIFY = ROOT / 'secrets/notify.json'
 # The public site is behind the gate for every path that is not in the route
@@ -210,6 +216,44 @@ def reviewed(current_commit, candidate_commit):
         raise PullFailed('reviewed transition file is malformed')
     return any(isinstance(item, dict) and item.get('from_commit') == current_commit
                and item.get('to_commit') == candidate_commit for item in data['transitions'])
+
+
+def auto_approval_enabled(owner_uid=0):
+    """Has the operator allowed a transition that cannot change the schema?
+
+    That file is the operator's switch and the only way in. A missing file, a
+    file anybody else can write, or any other shape means "off", because the
+    migration gate has to fail closed.
+    """
+    try:
+        info = os.lstat(AUTO_APPROVAL)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
+            return False
+        fd = os.open(AUTO_APPROVAL, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            with os.fdopen(fd, 'rb', closefd=False) as handle:
+                raw = handle.read(4097)
+        finally:
+            os.close(fd)
+    except OSError:
+        return False
+    if len(raw) > 4096:
+        return False
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeError):
+        return False
+    if not isinstance(data, dict) or set(data) != {'version', 'enabled'}:
+        return False
+    return data['version'] == 1 and data['enabled'] is True
+
+
+def transition_reviewed(current_commit, candidate_commit):
+    """Is the transition reviewed? An unreadable file means it is not."""
+    try:
+        return reviewed(current_commit, candidate_commit)
+    except PullFailed:
+        return False
 
 
 def write_record(record):
@@ -423,7 +467,12 @@ def run(dry_run=False):
             return 0
 
         current_commit = journal['current']['commit']
-        if not reviewed(current_commit, release['commit']):
+        # The reviewed transition file is the only door into a schema change.
+        # When the operator has allowed the automatic rule, this program does
+        # not decide whether the move is safe: the backend does, with the
+        # candidate image in front of it, and it stops before anything on this
+        # host has changed when the move is not safe.
+        if not reviewed(current_commit, release['commit']) and not auto_approval_enabled():
             record = {'version': 1, 'at': stamp, 'result': 'waiting-approval',
                       'from_commit': current_commit, 'to_commit': release['commit'],
                       'run_number': release['run_number']}
@@ -450,6 +499,20 @@ def run(dry_run=False):
             # starts, so it names the phase that stopped even when the backend
             # itself was killed and could not report anything.
             phase = phase_marker()
+            if not transition_reviewed(current_commit, release['commit']):
+                # Nobody approved this transition, not a person and not the
+                # automatic rule, so the backend stopped before it changed
+                # anything on this host. The release is waiting for a review,
+                # which is what it is, and not a failure.
+                record = {'version': 1, 'at': stamp, 'result': 'waiting-approval',
+                          'from_commit': current_commit, 'to_commit': release['commit'],
+                          'run_number': release['run_number']}
+                write_record(record)
+                notify(f'Xennic: run {release["run_number"]} is ready but the migration transition '
+                       f'{current_commit[:7]} -> {release["commit"][:7]} is not approved yet. '
+                       'Nothing was deployed.')
+                print('waiting-approval')
+                return 0
             record = {'version': 1, 'at': stamp, 'result': 'failed', 'stage': 'backend',
                       'run_number': release['run_number'], 'to_commit': release['commit']}
             if phase is not None:
@@ -459,6 +522,13 @@ def run(dry_run=False):
                    'The host journal and release-state.json hold the exact phase.')
             raise
         status = public_check()
+        # The journal is the record of what is live, and it carries the version
+        # the automatic rule gave this release.
+        version = ''
+        try:
+            version = states.Journal().read().get('release_version') or ''
+        except (OSError, ValueError, RuntimeError):
+            version = ''
         # The deployment itself is finished and the journal says so: the
         # backend already proved the new image is healthy inside the host. The
         # public check is an observation of the edge, not part of the
@@ -468,14 +538,17 @@ def run(dry_run=False):
                   'run_number': release['run_number'], 'to_commit': release['commit'],
                   'public_status': status, 'public_url': PUBLIC_CHECK_URL,
                   'backend': output.splitlines()[-1][:200] if output else ''}
+        if version:
+            record['release_version'] = version
         write_record(record)
+        label = f' {version}' if version else ''
         if status != 200:
-            notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}) is deployed '
+            notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}){label} is deployed '
                    f'and healthy inside the host, but the public check {PUBLIC_CHECK_URL} '
                    f'returned {status}. Look at the edge now.')
             print('deployed')
             return 1
-        notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}) is live; '
+        notify(f'Xennic: run {release["run_number"]} ({release["commit"][:7]}){label} is live; '
                f'{PUBLIC_CHECK_URL} returned 200.')
         print('deployed')
         return 0

@@ -285,3 +285,34 @@ PY
 if sudo /usr/bin/python3 "$activation" --upgrade; then echo 'Repeated activation upgrade accepted' >&2; exit 1; fi
 after_config=$(sudo sha256sum /srv/xennic-preview/config/compose.yml /srv/xennic-preview/config/gateway.yml /srv/xennic-preview/config/Caddyfile /srv/xennic-preview/config/oauth-gateway.caddy /srv/xennic-preview/config/upstream.caddy /srv/xennic-preview/secrets/ci-private /srv/xennic-preview/config/ci-config | sha256sum)
 [[ "$before_config" == "$after_config" ]] || { echo 'Protected configuration changed' >&2; exit 1; }
+
+# The refresh path is the one that runs on a host that is already deployed:
+# it replaces the helper files and nothing else, and it keeps the set it
+# replaced. A host with a journal is exactly the host the first-install
+# paths refuse, so this scenario is the one that proves the refresh works
+# there and touches nothing but the helper directory.
+sudo install -d -o root -g root -m 0700 /root/xennic-preview-refresh
+for f in "${files[@]}" preview-deploy-receiver.py; do
+  sudo install -o root -g root -m 0600 "scripts/$f" "/root/xennic-preview-refresh/$f"
+done
+printf 'synthetic journal\n' | sudo tee /srv/xennic-preview/state/release-state.json >/dev/null
+sudo chmod 0600 /srv/xennic-preview/state/release-state.json
+before_state=$(sudo sha256sum /srv/xennic-preview/state/release-state.json /srv/xennic-preview/config/compose.yml | sha256sum)
+if sudo /usr/bin/python3 "$PWD/scripts/install-preview-sftp-helper.py" --upgrade; then
+  echo 'First-install path accepted a host with a journal' >&2; exit 1
+fi
+sudo /usr/bin/python3 "$PWD/scripts/install-preview-sftp-helper.py" --refresh
+after_state=$(sudo sha256sum /srv/xennic-preview/state/release-state.json /srv/xennic-preview/config/compose.yml | sha256sum)
+[[ "$before_state" == "$after_state" ]] || { echo 'Refresh changed the preview data' >&2; exit 1; }
+sudo /usr/bin/python3 - "$PWD/scripts/install-preview-sftp-helper.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('ci_installer_refresh', sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.installed_matches(m.TARGET, m.verified_sources(m.REFRESH_SOURCE, m.REFRESH_MANIFEST, m.ACTIVATION_FILES))
+m.verify_backend()
+print('PASS: helper refresh installed the reviewed set and preserved the previous one')
+PY
+if sudo /usr/bin/python3 "$PWD/scripts/install-preview-sftp-helper.py" --refresh; then
+  echo 'Repeated refresh unexpectedly succeeded' >&2; exit 1
+fi
+echo 'PASS: refresh replaced only the helpers and refused to run twice'

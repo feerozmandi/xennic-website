@@ -21,21 +21,49 @@ class VerifierTests(unittest.TestCase):
         self.run = {'id': 11, 'run_attempt': 1, 'run_number': 4, 'head_sha': 'a' * 40, 'head_branch': 'dev', 'event': 'push', 'status': 'completed', 'conclusion': 'success'}
         self.artifact = {'id': 22, 'name': 'xennic-preview-release-1', 'expired': False}
         self.evidence = {'version': 1, 'run_id': 11, 'run_attempt': 1, 'release': self.release}
+        self.tags = [{'name': 'v1.2.3', 'commit': {'sha': 'a' * 40}}]
 
     def zip(self, evidence, filename='xennic-preview-release.json'):
         result = io.BytesIO()
         with zipfile.ZipFile(result, 'w') as z: z.writestr(filename, json.dumps(evidence))
         return result.getvalue()
 
+    def api(self, path, actual):
+        self.assertEqual(actual, b'synthetic-token')
+        if '/workflows/' in path:
+            return {'workflow_runs': [self.run]}
+        if path.startswith('/tags'):
+            return list(self.tags)
+        return {'artifacts': [self.artifact]}
+
     def verify(self, token=b'synthetic-token'):
-        def api(path, actual):
-            self.assertEqual(actual, token)
-            return {'workflow_runs': [self.run]} if '/workflows/' in path else {'artifacts': [self.artifact]}
-        with mock.patch.object(v, 'get_json', side_effect=api), mock.patch.object(v, 'request', return_value=self.zip(self.evidence)):
+        with mock.patch.object(v, 'get_json', side_effect=self.api), mock.patch.object(v, 'request', return_value=self.zip(self.evidence)):
             return v.verify(self.release, token)
 
     def test_successful_matching_evidence(self):
         self.assertEqual(self.verify(), 11)
+
+    def test_a_release_without_a_name_is_refused(self):
+        self.tags = []
+        with self.assertRaises(v.Unverified):
+            self.verify()
+
+    def test_a_release_with_two_names_is_refused(self):
+        self.tags = [{'name': 'v1.2.3', 'commit': {'sha': 'a' * 40}},
+                     {'name': 'v1.2.4', 'commit': {'sha': 'a' * 40}}]
+        with self.assertRaises(v.Unverified):
+            self.verify()
+
+    def test_a_name_that_is_not_a_version_does_not_name_a_release(self):
+        self.tags = [{'name': 'release-1', 'commit': {'sha': 'a' * 40}}]
+        with self.assertRaises(v.Unverified):
+            self.verify()
+
+    def test_the_name_of_a_release_is_the_tag_that_carries_its_commit(self):
+        with mock.patch.object(v, 'get_json', side_effect=self.api):
+            self.assertEqual(v.release_version('a' * 40, b'synthetic-token'), 'v1.2.3')
+            with self.assertRaises(v.Unverified):
+                v.release_version('c' * 40, b'synthetic-token')
 
     def test_request_never_leaks_credentials(self):
         response = mock.MagicMock()

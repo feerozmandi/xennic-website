@@ -49,6 +49,11 @@ NEW_MANIFEST = 'ec0ea6d51210c23b85e94a7f4aac902d39a86f247f1eb80c618265f4b5fd55fa
 INCOMING = SOURCE / 'incoming'
 NEW_DIR = PARENT / '.xennic-preview-update'
 BACKUP = PARENT / '.xennic-preview-previous'
+# The refresh path is the one that runs on a host that is already deployed.
+# It stages its own copy of the reviewed set, because the first-install
+# staging directory belongs to the first-install transition.
+REFRESH_SOURCE = Path('/root/xennic-preview-refresh')
+REFRESH_BACKUP = PARENT / '.xennic-preview-before-refresh'
 ROOT = Path('/srv/xennic-preview')
 # Reviewed pre-first-deployment transition from the installed f18b helpers and
 # exact loopback Compose file to this release's isolated-network topology.
@@ -240,6 +245,52 @@ def sync_dir(path):
     finally: os.close(fd)
 
 
+def refresh():
+    """Install the reviewed helper set on a host that is already deployed.
+
+    The first-deployment paths refuse a host that holds a journal or any
+    running preview resource, because there the preview data must not be
+    touched at all. This path is the opposite: it replaces the helper files
+    and nothing else. The preview root, its journal, the Compose file, the
+    gateway and the running containers are neither read nor written, the
+    previous helper directory is kept, and the deployment lock is held for
+    the whole swap, so a deployment that is in flight is never interrupted.
+
+    The staged set is checked against the same pinned digest the first
+    installation uses, so what lands on the host is the reviewed source of
+    this release and not a stale copy of it.
+    """
+    for path in (Path('/root'), REFRESH_SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
+        check_dir(path)
+    private_dir(REFRESH_SOURCE)
+    if {p.name for p in REFRESH_SOURCE.iterdir()} != set(ACTIVATION_FILES):
+        raise RuntimeError('unexpected refresh staging contents')
+    if os.path.lexists(NEW_DIR) or os.path.lexists(REFRESH_BACKUP):
+        raise RuntimeError('previous or incomplete helper refresh exists')
+    candidate = verified_sources(REFRESH_SOURCE, REFRESH_MANIFEST, ACTIVATION_FILES)
+    locks = module(TARGET / 'preview-deploy-lock.py', 'installer_refresh_lock')
+    with locks.acquire_lock(nonblocking=True):
+        NEW_DIR.mkdir(mode=0o700)
+        for name in ACTIVATION_FILES:
+            for installed in EXECUTABLES.get(name, (name,)):
+                mode = 0o700 if name in EXECUTABLES else 0o600
+                write_exclusive(NEW_DIR / installed, candidate[name], mode)
+        sync_dir(NEW_DIR)
+        installed_matches(NEW_DIR, candidate)
+        renamed_old = renamed_new = False
+        try:
+            os.rename(TARGET, REFRESH_BACKUP); renamed_old = True; sync_parent()
+            os.rename(NEW_DIR, TARGET); renamed_new = True; sync_parent()
+            installed_matches(TARGET, candidate)
+            verify_backend()
+        except BaseException:
+            if renamed_new: os.rename(TARGET, NEW_DIR)
+            if renamed_old: os.rename(REFRESH_BACKUP, TARGET)
+            sync_parent()
+            raise
+    print('Fixed preview helpers refreshed; the previous set is preserved; no deployment started.')
+
+
 def upgrade_network():
     """Upgrade only the known pre-deployment installation, preserving both backups."""
     for path in (Path('/root'), SOURCE, Path('/usr'), Path('/usr/local'), PARENT):
@@ -380,7 +431,13 @@ SCOPE_HELPERS = 'helpers'
 # /run, because the root's state directory must hold nothing but the
 # journal, so the digest moves with it.
 CURRENT_MANIFEST = 'c141100bd456b0f2ade106c4814ecf88dbc89b86257a2167e0a94e9637f68170'
-SCOPE_MANIFEST = '28a1cc6a4181c12033d0f9e936222120058547d28ef40836e6ec07027109eb46'
+SCOPE_MANIFEST = 'be4d11e5f9f0bb4fcdd9ef4700a3d26b6d0b7fb831208cc570b056157ee0bd89'
+# The reviewed helper set this release installs on a host that is already
+# deployed. The digest is over ACTIVATION_FILES, because that is what a
+# deployed host has: the receiver is part of it. It moves whenever a helper
+# moves, so what lands on the host is the reviewed source of this release and
+# not a stale copy of it.
+REFRESH_MANIFEST = 'be4d11e5f9f0bb4fcdd9ef4700a3d26b6d0b7fb831208cc570b056157ee0bd89'
 
 
 def _toml_value(value):
@@ -799,6 +856,8 @@ def main():
         return upgrade_scope()
     if sys.argv[1:] == ['--rollback-scope']:
         return rollback_scope()
+    if sys.argv[1:] == ['--refresh']:
+        return refresh()
     if sys.argv[1:] == ['--upgrade']:
         if os.path.lexists(INCOMING_ACTIVATION): return upgrade_activation()
         return upgrade_network() if os.path.lexists(INCOMING_NETWORK) else upgrade()

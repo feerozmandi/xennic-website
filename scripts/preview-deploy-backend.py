@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 import sys
@@ -55,7 +56,12 @@ SAFE_ENV = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "LANG": "C"}
 # leaves the host in maintenance; they exist to stop an unbounded wait, not to
 # hurry a healthy deployment.
 PHASE_TIMEOUTS = MappingProxyType({
-    "release-check": 900,
+    # The release check may have to bring the candidate image here: the
+    # automatic approval looks inside the candidate to decide whether the
+    # migration transition is safe, and an image cannot be looked inside
+    # before it is local. The bound covers that pull and everything else the
+    # check does, so a slow registry cannot eat the whole transaction.
+    "release-check": 1800,
     "current-check": 300,
     "backup-verify": 1800,
     "pull-image": 900,
@@ -306,10 +312,13 @@ class FixedRunner:
                 result_data = json.loads(result.stdout)
             except (ValueError, UnicodeError, TypeError) as exc:
                 raise BackendError("preview release verification failed") from exc
-            fields = {"initial", "rollback_safe", "verified_commit", "verified_digest", "verified_run_number"}
+            fields = {"initial", "rollback_safe", "verified_commit", "verified_digest", "verified_run_number",
+                      "release_version"}
             if (not isinstance(result_data, dict) or set(result_data) != fields or
                     type(result_data["initial"]) is not bool or type(result_data["rollback_safe"]) is not bool or
                     type(result_data["verified_run_number"]) is not int or
+                    not isinstance(result_data["release_version"], str) or
+                    not re.fullmatch(r"v\d{1,6}\.\d{1,6}\.\d{1,6}", result_data["release_version"]) or
                     result_data["verified_commit"] != release["commit"] or
                     result_data["verified_digest"] != release["digest"] or
                     result_data["verified_run_number"] != release["run_number"]):
@@ -327,6 +336,7 @@ class Backend:
         self.previous = None
         self.active_release = None
         self.initial = False
+        self.version = None
 
     def lock(self):
         return locks.acquire_lock()
@@ -353,7 +363,9 @@ class Backend:
                 decision["verified_digest"] != release["digest"] or
                 decision["verified_run_number"] != release["run_number"]):
             raise BackendError("release verification does not match local state")
-        return {"initial": decision["initial"], "rollback_safe": decision["rollback_safe"]}
+        self.version = decision["release_version"]
+        return {"initial": decision["initial"], "rollback_safe": decision["rollback_safe"],
+                "release_version": self.version}
 
     # The current package is public. The independently scoped API credential is
     # never assumed to grant registry access. If public pull fails, stop; do
@@ -381,7 +393,14 @@ class Backend:
 
     def activate(self, release): self.runner.call("activate", release)
     def verify_health(self, release): self.runner.call("health", release)
-    def mark_healthy(self, release): self.journal.mark_healthy(release)
+    def mark_healthy(self, release, version=None):
+        # The version was established by the release check, not by the request,
+        # so a release that never had one cannot be recorded as healthy.
+        if version is None:
+            version = self.version
+        if version is None:
+            raise BackendError("release version was not established")
+        self.journal.mark_healthy(release, version)
 
     def rollback_previous(self):
         if self.previous is None:

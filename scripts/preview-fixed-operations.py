@@ -66,6 +66,22 @@ GATEWAY_FILES = {
 }
 PHASES = frozenset({'release-check', 'current-check', 'migrate', 'activate', 'health', 'rollback'})
 
+# The operator's switch for automatic approval. It is one small root-owned
+# file, and its absence means "off": the gate has to fail closed, so a
+# missing, unreadable or foreign file never widens it.
+AUTO_APPROVAL = ROOT / 'config/auto-approval.json'
+# The reviewed image pull helper lives next to this file on the host. The
+# automatic approval has to look inside the candidate image, and the image has
+# to be local before it can be looked inside, so the same reviewed helper
+# that the transaction uses is the one that brings it here.
+PULL_HELPER = Path(__file__).with_name('pull-image')
+# The shape of one automatic release version: a major, a minor and a patch
+# number, in that order, with a `v` in front.
+VERSION = re.compile(r'v(\d{1,6})\.(\d{1,6})\.(\d{1,6})')
+# A conventional commit header: a type, an optional scope, an optional `!`
+# for a breaking change, and a subject.
+CONVENTIONAL = re.compile(r'^(?P<type>[A-Za-z]+)(?:\([^()]{1,100}\))?(?P<breaking>!)?: ')
+
 # Probe from the trusted host helper, not from a candidate app image. The
 # address is taken only from the independently verified Caddy container.
 INGRESS_CASES = (('GET', '/', 302), ('GET', '/admin', 302),
@@ -126,19 +142,32 @@ def state():
     return states.Journal().read()
 
 
-def approval(previous, candidate):
+def transition_rows():
+    """Every reviewed transition, exactly as the reviewed file holds them."""
     try:
         obj = json.loads(ready._read(ROOT, 'config/compatible-transitions.json', 0), object_pairs_hook=ready._object_pairs)
     except (ValueError, UnicodeError, ready.NotReady) as exc:
         raise Rejected('reviewed migration transition missing') from exc
     if not isinstance(obj, dict) or set(obj) != {'version', 'transitions'} or obj['version'] != 1 or not isinstance(obj['transitions'], list):
         raise Rejected('reviewed migration transition invalid')
-    matches = [item for item in obj['transitions'] if isinstance(item, dict) and
+    if len(obj['transitions']) > 500:
+        raise Rejected('reviewed migration transition invalid')
+    return obj['transitions']
+
+
+def transition_row(previous, candidate):
+    """The reviewed row for this exact move, or None when there is none."""
+    matches = [item for item in transition_rows() if isinstance(item, dict) and
                item.get('from_commit') == previous['commit'] and item.get('to_commit') == candidate['commit']]
-    if len(matches) != 1:
-        raise Rejected('migration transition not reviewed')
-    item = matches[0]
-    if (set(item) != {'from_commit', 'to_commit', 'migration_sha256', 'previous_migrations', 'rollback_safe'} or
+    if len(matches) > 1:
+        raise Rejected('migration transition is duplicated')
+    return matches[0] if matches else None
+
+
+def validate_transition(item):
+    """A reviewed row has to say exactly what a rollback-safe review says."""
+    if (not isinstance(item, dict) or
+            set(item) != {'from_commit', 'to_commit', 'migration_sha256', 'previous_migrations', 'rollback_safe'} or
             item['rollback_safe'] is not True or not isinstance(item['migration_sha256'], str) or
             not re.fullmatch('[0-9a-f]{64}', item['migration_sha256']) or
             not isinstance(item['previous_migrations'], list) or not item['previous_migrations'] or
@@ -146,6 +175,230 @@ def approval(previous, candidate):
             len(set(item['previous_migrations'])) != len(item['previous_migrations'])):
         raise Rejected('migration transition not approved for rollback')
     return item
+
+
+def approval(previous, candidate):
+    """The reviewed transition for this move, or nothing."""
+    item = transition_row(previous, candidate)
+    if item is None:
+        raise Rejected('migration transition not reviewed')
+    return validate_transition(item)
+
+
+def auto_approval_enabled(owner_uid=0):
+    """Is the operator's automatic approval switched on?
+
+    That file is the operator's switch, and it is deliberately the only way
+    in. A missing file, a file anybody else can write, or any other shape
+    means "off", because the migration gate has to fail closed.
+    """
+    try:
+        info = os.lstat(AUTO_APPROVAL)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o077:
+            return False
+        fd = os.open(AUTO_APPROVAL, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            with os.fdopen(fd, 'rb', closefd=False) as handle:
+                raw = handle.read(4097)
+        finally:
+            os.close(fd)
+    except OSError:
+        return False
+    if len(raw) > 4096:
+        return False
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (ValueError, UnicodeError):
+        return False
+    if not isinstance(data, dict) or set(data) != {'version', 'enabled'}:
+        return False
+    return data['version'] == 1 and data['enabled'] is True
+
+
+def pull_candidate(release):
+    """Bring the candidate image here, with the reviewed pull helper.
+
+    The automatic approval has to look inside the candidate image, and an
+    image cannot be looked inside before it is local. The helper that brings
+    it is the same reviewed helper the transaction uses, and it is run with
+    the same fixed payload and the same clean environment.
+    """
+    try:
+        info = os.lstat(PULL_HELPER)
+    except OSError as exc:
+        raise Rejected('the image pull helper is missing') from exc
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022
+            or not info.st_mode & stat.S_IXUSR):
+        raise Rejected('the image pull helper is unsafe')
+    payload = json.dumps(release, separators=(',', ':'), sort_keys=True).encode('ascii') + b'\npublic-read\n'
+    try:
+        result = subprocess.run([str(PULL_HELPER)], input=payload, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=SAFE, timeout=1200, check=False, cwd='/')
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise Rejected('the candidate image could not be pulled') from exc
+    if result.returncode != 0:
+        raise Rejected('the candidate image could not be pulled')
+
+
+def write_transitions(rows, run_number):
+    """Back up the reviewed file to /root and replace it atomically."""
+    if type(run_number) is not int or run_number < 1:
+        raise Rejected('invalid run number for the backup name')
+    payload = (json.dumps({'version': 1, 'transitions': rows}, separators=(',', ':'), sort_keys=True) + '\n').encode()
+    original = ready._read(ROOT, 'config/compatible-transitions.json', 0)
+    backup = Path(f'/root/compatible-transitions.auto-before-{run_number}.json')
+    staged = ROOT / 'config/.compatible-transitions.staged'
+    if os.path.lexists(staged):
+        raise Rejected('a staged transition file already exists')
+    fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        with os.fdopen(fd, 'wb', closefd=False) as handle:
+            handle.write(original)
+            handle.flush()
+            os.fsync(handle.fileno())
+    finally:
+        os.close(fd)
+    fd = os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        with os.fdopen(fd, 'wb', closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staged, ROOT / 'config/compatible-transitions.json')
+    finally:
+        if os.path.lexists(staged):
+            os.unlink(staged)
+    os.chmod(ROOT / 'config/compatible-transitions.json', 0o600)
+    directory = os.open(ROOT / 'config', os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def auto_approve(previous, release):
+    """Approve a transition that provably cannot change the database.
+
+    The reviewed file is the only door into a schema change, and a person
+    opens it. This is the narrow exception the operator can switch on: a
+    candidate that carries byte-identical migration files, and whose
+    declared migrations are exactly the ones the live ledger already records,
+    cannot change the schema, so rolling back to the running image stays
+    safe.
+
+    The row goes into the same reviewed file, in the same shape, with a
+    backup of its own, so the record of what was approved stays complete.
+    """
+    if not auto_approval_enabled():
+        raise Rejected('automatic approval is not enabled')
+    pull_candidate(release)
+    candidate = image_migration_entries(release)
+    running = running_migration_entries(running_app_id(previous))
+    digest = migration_digest(candidate)
+    if digest != migration_digest(running):
+        raise Rejected('the candidate changes the migration files')
+    ledger = migration_ledger(release)
+    names = migration_names(candidate)
+    if not names or names != ledger:
+        raise Rejected('the candidate adds migrations to the live ledger')
+    rows = transition_rows()
+    if any(isinstance(item, dict) and item.get('to_commit') == release['commit'] for item in rows):
+        raise Rejected('another transition already targets this commit')
+    row = {'from_commit': previous['commit'], 'to_commit': release['commit'],
+           'migration_sha256': digest, 'previous_migrations': list(ledger), 'rollback_safe': True}
+    write_transitions(rows + [row], release['run_number'])
+    return row
+
+
+def authorize_transition(previous, release):
+    """The transition that lets this release through, reviewed or automatic.
+
+    A reviewed row is used as it is. When there is none, the operator's
+    automatic-approval policy decides whether the move is safe enough to
+    approve on its own; when it is not, the deployment stops here, before
+    anything on this host has changed.
+    """
+    item = transition_row(previous, release)
+    if item is not None:
+        return validate_transition(item)
+    return auto_approve(previous, release)
+
+
+def parse_version(value):
+    """One automatic version, as its three numbers."""
+    if not isinstance(value, str):
+        raise Rejected('the release version is not a string')
+    match = VERSION.fullmatch(value)
+    if not match:
+        raise Rejected('the release version is not a semantic version')
+    return tuple(int(part) for part in match.groups())
+
+
+def tagged_version(release, live, token):
+    """The version the repository gives this release, or None.
+
+    The name of a release is the tag that carries its commit, and the
+    repository is the only place that name is written down. It is used only
+    when it moves the version forward from the version that is live now: a
+    name that does not move forward would make the journal go backwards, and
+    a name that cannot be read leaves the computed version in charge.
+    """
+    try:
+        version = verifier.release_version(release['commit'], token)
+        candidate = parse_version(version)
+        if live is None:
+            return version
+        return version if candidate > parse_version(live) else None
+    except (RuntimeError, ValueError, TypeError, KeyError, Rejected):
+        return None
+
+
+def commit_kind(messages):
+    """major, minor or patch, from the conventional commits in the range."""
+    kind = 'patch'
+    for message in messages:
+        header, _, body = message.partition('\n')
+        match = CONVENTIONAL.match(header)
+        breaking = bool(match and match.group('breaking'))
+        if 'BREAKING CHANGE:' in body:
+            breaking = True
+        if breaking:
+            return 'major'
+        if match and match.group('type').lower() == 'feat':
+            kind = 'minor'
+    return kind
+
+
+def next_version(current, previous_commit, candidate_commit, token):
+    """The automatic version of this release.
+
+    The version is semantic, and it is derived from the commits between the
+    live release and this one: a breaking change moves the major number, a
+    feature moves the minor number, and everything else moves the patch
+    number. The base is the version of the release that is live now, so the
+    number only ever moves forward.
+
+    Reading the commit messages must never stop a deployment, so a failure
+    here falls back to a patch bump of the version that is live.
+    """
+    base = (1, 0, 0) if current is None else parse_version(current)
+    kind = 'patch'
+    try:
+        data = verifier.get_json(f'/compare/{previous_commit}...{candidate_commit}', token)
+        if isinstance(data, dict) and isinstance(data.get('commits'), list):
+            commits = [item['commit']['message'] for item in data['commits']
+                       if isinstance(item, dict) and isinstance(item.get('commit'), dict)
+                       and isinstance(item['commit'].get('message'), str)]
+            if (data.get('status') == 'ahead' and type(data.get('ahead_by')) is int and
+                    data['ahead_by'] == len(data['commits']) == len(commits) and commits):
+                kind = commit_kind(commits)
+    except (RuntimeError, ValueError, TypeError, KeyError, UnicodeError, OSError, AttributeError):
+        kind = 'patch'
+    if kind == 'major':
+        return f'v{base[0] + 1}.0.0'
+    if kind == 'minor':
+        return f'v{base[0]}.{base[1] + 1}.0'
+    return f'v{base[0]}.{base[1]}.{base[2] + 1}'
 
 
 def validate_gateway_oauth(raw, caddy_ip, *, authority='preview.xennic.ir'):
@@ -386,14 +639,8 @@ def assert_current_host(previous):
         raise Rejected('unknown database client')
 
 
-def migration_tree_hash(release):
-    image = reference(release)
-    created = run([DOCKER, 'create', '--network', 'none', '--entrypoint', '/bin/true', image], output=True).decode('ascii').strip()
-    if not re.fullmatch('[0-9a-f]{12,64}', created): raise Rejected('migration inspection container invalid')
-    try:
-        data = run([DOCKER, 'cp', f'{created}:/app/migrations/.', '-'], output=True)
-    finally:
-        run([DOCKER, 'rm', '-f', created])
+def migration_entries(data):
+    """The migration files of one image or container, as (name, bytes) pairs."""
     result = []
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
@@ -412,10 +659,83 @@ def migration_tree_hash(release):
     except (tarfile.TarError, OSError, AttributeError) as exc:
         raise Rejected('migration inspection failed') from exc
     if not result: raise Rejected('migration files missing')
+    return result
+
+
+def migration_digest(entries):
+    """The content hash of a migration tree; identical trees hash identically."""
     digest = hashlib.sha256()
-    for name, contents in sorted(result):
+    for name, contents in sorted(entries):
         digest.update(name.encode('utf-8') + b'\0' + str(len(contents)).encode('ascii') + b'\0' + contents)
     return digest.hexdigest()
+
+
+def migration_tree_hash(release):
+    image = reference(release)
+    created = run([DOCKER, 'create', '--network', 'none', '--entrypoint', '/bin/true', image], output=True).decode('ascii').strip()
+    if not re.fullmatch('[0-9a-f]{12,64}', created): raise Rejected('migration inspection container invalid')
+    try:
+        data = run([DOCKER, 'cp', f'{created}:/app/migrations/.', '-'], output=True)
+    finally:
+        run([DOCKER, 'rm', '-f', created])
+    return migration_digest(migration_entries(data))
+
+
+def image_migration_entries(release):
+    """The migration files of the candidate image, which has to be local."""
+    image = reference(release)
+    created = run([DOCKER, 'create', '--network', 'none', '--entrypoint', '/bin/true', image], output=True).decode('ascii').strip()
+    if not re.fullmatch('[0-9a-f]{12,64}', created): raise Rejected('migration inspection container invalid')
+    try:
+        data = run([DOCKER, 'cp', f'{created}:/app/migrations/.', '-'], output=True)
+    finally:
+        run([DOCKER, 'rm', '-f', created])
+    return migration_entries(data)
+
+
+def running_migration_entries(container_id):
+    """The migration files of the running application container."""
+    if not re.fullmatch('[0-9a-f]{12,64}', container_id):
+        raise Rejected('running container identity is invalid')
+    data = run([DOCKER, 'cp', f'{container_id}:/app/migrations/.', '-'], output=True)
+    return migration_entries(data)
+
+
+def migration_names(entries):
+    """The migration names one image declares.
+
+    Payload's migration manifest names every migration, and the file it lives
+    in is `<name>.ts`. The declared names are therefore the stems of the
+    TypeScript migration files, without the manifest itself. A tree that does
+    not have that shape yields nothing, and the caller then approves nothing.
+    """
+    names = set()
+    for name, _contents in entries:
+        base = PurePosixPath(name).name
+        if not base.endswith('.ts'):
+            continue
+        stem = base[:-3]
+        if not stem or stem == 'index':
+            continue
+        if not re.fullmatch(r'[A-Za-z0-9_-]{1,200}', stem):
+            raise Rejected('migration file name is not a migration name')
+        names.add(stem)
+    return sorted(names)
+
+
+def migration_ledger(release):
+    """The migration names the live database has recorded, read-only."""
+    image = config_for(release)
+    snapshot.ENV = dict(SAFE, PREVIEW_IMAGE=image)
+    _app, database, _volume = snapshot.single_app_and_database()
+    user, database_name = snapshot.pg_settings(database)
+    rows = json.loads(snapshot.sql(
+        database, user, database_name,
+        "SELECT COALESCE(json_agg(json_build_object('name',name,'batch',batch) ORDER BY name),'[]'::json)::text "
+        "FROM website.payload_migrations"))
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or set(row) != {'name', 'batch'} for row in rows):
+        raise Rejected('database migration ledger is unreadable')
+    return sorted(row['name'] for row in rows)
 
 
 def pending(release):
@@ -687,18 +1007,30 @@ def execute(phase, release, token):
         gateway_image_ids()
         journal = states.Journal()
         initial = journal.absent()
-        previous = None if initial else journal.read()['current']
+        recorded = None if initial else journal.read()
+        previous = None if initial else recorded['current']
         if not initial and previous is None:
             raise Rejected('existing journal has no healthy release')
         verifier.verify(release, token)
+        # The name of the release is the tag that carries this commit. The
+        # version of the release that is live now is the base it has to move
+        # away from, so the journal never goes backwards.
+        live = None if initial else recorded.get('release_version')
+        version = tagged_version(release, live, token)
         if initial:
             assert_initial_pristine(release)
+            if version is None:
+                # The first release on this host is the first version of the line.
+                version = 'v1.0.0'
         else:
             assert_current_host(previous)
             check_health(previous)
-            approval(previous, release)
+            authorize_transition(previous, release)
+            if version is None:
+                version = next_version(live, previous['commit'], release['commit'], token)
         return {'initial': initial, 'rollback_safe': not initial, 'verified_commit': release['commit'],
-                'verified_digest': release['digest'], 'verified_run_number': release['run_number']}
+                'verified_digest': release['digest'], 'verified_run_number': release['run_number'],
+                'release_version': version}
     if phase == 'current-check':
         verifier.assert_current(release, token)
         return None

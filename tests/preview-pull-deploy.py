@@ -86,6 +86,46 @@ class ReviewedTest(unittest.TestCase):
                 pull.reviewed(A, B)
 
 
+class AutoApprovalSwitchTest(unittest.TestCase):
+    """The operator's switch for automatic approval, and nothing else."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / 'auto-approval.json'
+
+    def write(self, data, mode=0o600):
+        self.path.write_text(json.dumps(data))
+        self.path.chmod(mode)
+
+    def test_a_missing_file_means_off(self):
+        with mock.patch.object(pull, 'AUTO_APPROVAL', self.path):
+            self.assertFalse(pull.auto_approval_enabled(os.geteuid()))
+
+    def test_the_switch_is_on_only_when_it_says_so(self):
+        with mock.patch.object(pull, 'AUTO_APPROVAL', self.path):
+            self.write({'version': 1, 'enabled': True})
+            self.assertTrue(pull.auto_approval_enabled(os.geteuid()))
+            self.write({'version': 1, 'enabled': False})
+            self.assertFalse(pull.auto_approval_enabled(os.geteuid()))
+
+    def test_any_other_shape_means_off(self):
+        for data in ({'version': 1}, {'version': 2, 'enabled': True}, {'enabled': True},
+                     {'version': 1, 'enabled': True, 'extra': 1}, []):
+            with mock.patch.object(pull, 'AUTO_APPROVAL', self.path):
+                self.write(data)
+                self.assertFalse(pull.auto_approval_enabled(os.geteuid()), data)
+
+    def test_a_file_anybody_else_can_write_means_off(self):
+        with mock.patch.object(pull, 'AUTO_APPROVAL', self.path):
+            self.write({'version': 1, 'enabled': True}, mode=0o644)
+            self.assertFalse(pull.auto_approval_enabled(os.geteuid()))
+
+    def test_an_unreadable_reviewed_file_means_not_reviewed(self):
+        with mock.patch.object(pull, 'private_file', side_effect=pull.PullFailed('unreadable')):
+            self.assertFalse(pull.transition_reviewed(A, B))
+
+
 class RecordTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
