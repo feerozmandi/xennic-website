@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 import sys
@@ -31,11 +32,15 @@ def _release(value):
 
 def _validate(data):
     fields = {"version", "last_run", "blocked", "current", "previous", "pending"}
-    if (not isinstance(data, dict) or set(data) not in (fields, fields | {"failure"}) or
+    optional = {"failure", "release_version"}
+    if (not isinstance(data, dict) or not fields <= set(data) or not set(data) <= fields | optional or
             type(data["version"]) is not int or data["version"] != 1):
         raise UnsafeState("invalid release state")
     if "failure" in data and data["failure"] != "initial-deployment-failed":
         raise UnsafeState("invalid failure record")
+    if "release_version" in data and (not isinstance(data["release_version"], str) or
+                                      not re.fullmatch(r"v\d{1,6}\.\d{1,6}\.\d{1,6}", data["release_version"])):
+        raise UnsafeState("invalid release version")
     if type(data["blocked"]) is not bool or type(data["last_run"]) is not int or data["last_run"] < 0:
         raise UnsafeState("invalid release state")
     if not isinstance(data["previous"], list) or len(data["previous"]) > 2:
@@ -191,11 +196,14 @@ class Journal:
         state.update(blocked=True, current=None, pending=release, failure="initial-deployment-failed")
         self._write(state)
 
-    def mark_healthy(self, release):
+    def mark_healthy(self, release, version):
         release = _release(release)
         state = self.read()
         if not state["blocked"] or state["pending"] != release or "failure" in state:
             raise UnsafeState("release is not pending or requires failure review")
+        if not isinstance(version, str) or not re.fullmatch(r"v\d{1,6}\.\d{1,6}\.\d{1,6}", version):
+            raise UnsafeState("invalid release version")
         previous = ([state["current"]] if state["current"] is not None else []) + state["previous"]
-        state.update(blocked=False, current=release, previous=previous[:2], pending=None)
+        state.update(blocked=False, current=release, previous=previous[:2], pending=None,
+                     release_version=version)
         self._write(state)

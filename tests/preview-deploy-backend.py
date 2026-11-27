@@ -49,7 +49,8 @@ class SyntheticRunner:
             raise backend.BackendError("synthetic failure")
         if phase == "release-check":
             return {"initial": False, "rollback_safe": True, "verified_commit": item["commit"],
-                    "verified_digest": item["digest"], "verified_run_number": item["run_number"]}
+                    "verified_digest": item["digest"], "verified_run_number": item["run_number"],
+                    "release_version": "v1.2.3"}
         if phase == "backup-verify":
             # A synthetic remote and restore drill, not real encryption/SFTP.
             self.backups[self.destination] = dict(self.data)
@@ -101,6 +102,11 @@ class BackendTest(unittest.TestCase):
         self.assertLess(phases.index("pull-image"), phases.index("backup-verify"))
         self.assertLess(phases.index("backup-verify"), phases.index("migrate"))
         self.assertLess(phases.index("migrate"), phases.index("activate"))
+
+    def test_the_healthy_release_records_the_version_the_release_check_established(self):
+        with mock.patch.object(backend.readiness, "check", side_effect=self.ready):
+            backend.run_checked(raw(2), b"synthetic-token", self.ops)
+        self.assertEqual(self.journal.read()["release_version"], "v1.2.3")
 
     def test_health_failure_rolls_back_but_stays_blocked(self):
         self.runner.fail = "health"
@@ -190,7 +196,8 @@ class BackendTest(unittest.TestCase):
         def incompatible(phase, item, token=None):
             if phase == "release-check":
                 return {"initial": False, "rollback_safe": False, "verified_commit": item["commit"],
-                        "verified_digest": item["digest"], "verified_run_number": item["run_number"]}
+                        "verified_digest": item["digest"], "verified_run_number": item["run_number"],
+                        "release_version": "v1.2.3"}
             return original(phase, item, token)
         self.runner.call = incompatible
         with mock.patch.object(backend.readiness, "check", side_effect=self.ready):
@@ -204,7 +211,8 @@ class BackendTest(unittest.TestCase):
         def wrong_evidence(phase, item, token=None):
             if phase == "release-check":
                 return {"initial": False, "rollback_safe": True, "verified_commit": item["commit"],
-                        "verified_digest": "sha256:" + "f" * 64, "verified_run_number": item["run_number"]}
+                        "verified_digest": "sha256:" + "f" * 64, "verified_run_number": item["run_number"],
+                        "release_version": "v1.2.3"}
             return original(phase, item, token)
         self.runner.call = wrong_evidence
         with mock.patch.object(backend.readiness, "check", side_effect=self.ready):

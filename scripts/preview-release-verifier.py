@@ -3,6 +3,9 @@
 
 Only api.github.com and GitHub's signed artifact storage are contacted. No
 metadata inside an image is treated as evidence of a successful publication.
+
+A release also has to be named: the commit it releases carries exactly one
+release tag, and that tag is the version the host records.
 """
 import io
 import json
@@ -15,6 +18,12 @@ import zipfile
 BASE = 'https://api.github.com/repos/feerozmandi/xennic-website'
 MAX_JSON = 2 * 1024 * 1024
 MAX_ZIP = 1024 * 1024
+# The shape of one release name: a major, a minor and a patch number, in that
+# order, with a `v` in front.
+VERSION = re.compile(r'v\d{1,6}\.\d{1,6}\.\d{1,6}')
+# How many pages of release tags are read. A thousand names is far more than
+# this repository has, and the walk stops at the first empty page.
+MAX_TAG_PAGES = 10
 
 
 class Unverified(RuntimeError):
@@ -73,6 +82,43 @@ def assert_current(release, token):
         raise Unverified('dev no longer points to this commit')
 
 
+def release_tags(token):
+    """Every release tag in the repository, read from the same API."""
+    tags = []
+    for page in range(1, MAX_TAG_PAGES + 1):
+        data = get_json(f'/tags?per_page=100&page={page}', token)
+        if not isinstance(data, list):
+            raise Unverified('invalid release tags')
+        if not data:
+            break
+        tags.extend(item for item in data if isinstance(item, dict))
+        if len(data) < 100:
+            break
+    return tags
+
+
+def release_version(commit, token):
+    """The one release name that belongs to this commit.
+
+    A release is named by a Git tag on the commit it releases, and a commit
+    that carries no name of its own, or more than one, cannot be told apart
+    from another commit later. The name is therefore part of what makes a
+    release a release, not a decoration of it.
+    """
+    if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise Unverified('invalid release commit')
+    found = []
+    for tag in release_tags(token):
+        name = tag.get('name')
+        target = tag.get('commit')
+        sha = target.get('sha') if isinstance(target, dict) else None
+        if isinstance(name, str) and VERSION.fullmatch(name) and sha == commit:
+            found.append(name)
+    if len(found) != 1:
+        raise Unverified('release is not named')
+    return found[0]
+
+
 def verify(release, token):
     if not isinstance(token, bytes) or not re.fullmatch(rb'[!-~]{1,4096}', token):
         raise Unverified('missing GitHub token')
@@ -108,4 +154,5 @@ def verify(release, token):
         raise Unverified('invalid release artifact') from exc
     if evidence != {'version': 1, 'run_id': run_id, 'run_attempt': attempt, 'release': release}:
         raise Unverified('release artifact does not match')
+    release_version(release['commit'], token)
     return run_id

@@ -66,7 +66,8 @@ with tempfile.TemporaryDirectory(prefix='xennic-rollback-', dir=os.environ['RUNN
         # before this test; these adapters are not privileged operational helpers.
         def lock(self): return lock.acquire_lock(directory / 'lock', owner_uid=os.geteuid())
         def read_state(self): return journal.read()
-        def preflight(self, item): return {'initial': False, 'rollback_safe': True}
+        def preflight(self, item):
+            return {'initial': False, 'rollback_safe': True, 'release_version': 'v1.0.1'}
         def pull_image(self, item):
             # Local fixture only, not a registry pull or release verifier.
             subprocess.run(['/usr/bin/docker', 'image', 'inspect', f'{project}-bad'],
@@ -80,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix='xennic-rollback-', dir=os.environ['RUNN
                            env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         def activate(self, item): compose.replace_app(item)
         def verify_health(self, item): raise AssertionError('broken image must not become healthy')
-        def mark_healthy(self, item): journal.mark_healthy(item)
+        def mark_healthy(self, item, version='v1.0.1'): journal.mark_healthy(item, version)
         def ensure_blocked(self, item): journal.ensure_blocked(item)
         def rollback_previous(self): compose.replace_app(release(1))
         def verify_previous_health(self):

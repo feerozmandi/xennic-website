@@ -44,13 +44,13 @@ class StateTest(unittest.TestCase):
         self.assertTrue(result['blocked'])
         with self.assertRaises(FileExistsError): self.journal.begin_initial(release(2))
         self.assertEqual(self.journal.read(), result)
-        self.journal.mark_healthy(release(1))
+        self.journal.mark_healthy(release(1), 'v1.0.0')
         self.assertEqual(self.journal.read()['current'], release(1))
         self.journal.ensure_initial_blocked(release(1))
         self.assertIsNone(self.journal.read()['current'])
         self.assertTrue(self.journal.read()['blocked'])
         self.assertEqual(self.journal.read()['failure'], 'initial-deployment-failed')
-        with self.assertRaises(state.UnsafeState): self.journal.mark_healthy(release(1))
+        with self.assertRaises(state.UnsafeState): self.journal.mark_healthy(release(1), 'v1.0.0')
 
     def test_block_before_change_and_keep_two_previous(self):
         for run in (1, 2, 3, 4):
@@ -58,18 +58,30 @@ class StateTest(unittest.TestCase):
             pending = self.journal.read()
             self.assertTrue(pending["blocked"])
             self.assertEqual(pending["pending"], release(run))
-            self.journal.mark_healthy(release(run))
+            self.journal.mark_healthy(release(run), f'v1.0.{run}')
         result = self.journal.read()
         self.assertEqual(result["current"], release(4))
         self.assertEqual(result["previous"], [release(3), release(2)])
         self.assertFalse(result["blocked"])
         self.assertIsNone(result["pending"])
 
+    def test_the_healthy_release_carries_its_version(self):
+        self.journal.mark_inflight(release(1))
+        self.journal.mark_healthy(release(1), 'v1.2.3')
+        self.assertEqual(self.journal.read()['release_version'], 'v1.2.3')
+        self.journal.mark_inflight(release(2))
+        with self.assertRaises(state.UnsafeState):
+            self.journal.mark_healthy(release(2), 'not a version')
+        with self.assertRaises(state.UnsafeState):
+            self.journal.mark_healthy(release(2), '1.2.4')
+        self.journal.mark_healthy(release(2), 'v1.3.0')
+        self.assertEqual(self.journal.read()['release_version'], 'v1.3.0')
+
     def test_invalid_or_stale_state_fails_closed(self):
         self.journal.mark_inflight(release(2))
         with self.assertRaises(state.UnsafeState): self.journal.mark_inflight(release(3))
-        with self.assertRaises(state.UnsafeState): self.journal.mark_healthy(release(3))
-        self.journal.mark_healthy(release(2))
+        with self.assertRaises(state.UnsafeState): self.journal.mark_healthy(release(3), 'v1.0.3')
+        self.journal.mark_healthy(release(2), 'v1.0.2')
         with self.assertRaises(state.UnsafeState): self.journal.mark_inflight(release(2))
         bad = self.journal.read()
         bad["blocked"] = True
@@ -78,7 +90,7 @@ class StateTest(unittest.TestCase):
 
     def test_reblock_after_uncertain_success_write(self):
         self.journal.mark_inflight(release(1))
-        self.journal.mark_healthy(release(1))
+        self.journal.mark_healthy(release(1), 'v1.0.1')
         self.journal.ensure_blocked(release(1))
         self.assertTrue(self.journal.read()["blocked"])
         self.assertEqual(self.journal.read()["pending"], release(1))
