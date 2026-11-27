@@ -165,6 +165,30 @@ if [ "$use_cached" = "0" ]; then
     echo "declare-verify: no browser was found; the ladder will boot in Node." >&2
   fi
 
+  # ── the machine ─────────────────────────────────────────────────────────────
+  # A run that is killed leaves a log that stops in the middle of a line.
+  # Which machine it was killed on is the difference between a bug in the
+  # program and a runner that ran out of something, so what the machine had
+  # is written down next to the program's own words.
+  DIAG="$WORK/machine.txt"
+  {
+    echo "date            : $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "runner          : ${GITHUB_RUNNER_NAME:-${GITHUB_RUNNER_OS:-unknown}}"
+    echo "node            : $(node --version 2>/dev/null || echo unknown)"
+    echo "browser         : ${REAL_CHROME:-none}"
+    echo "browser wrapper : ${CHROME_PATH:-none}"
+    if [ -n "$REAL_CHROME" ] && [ -x "$REAL_CHROME" ]; then
+      echo "browser version : $("$REAL_CHROME" --version 2>/dev/null || echo 'could not be asked')"
+    fi
+    echo "memory          : $(free -m 2>/dev/null | awk '/^Mem:/ {print $2 " MiB total, " $7 " MiB free"}' || echo unknown)"
+    echo "shm             : $(df -h /dev/shm 2>/dev/null | awk 'NR==2 {print $2 " total, " $4 " free"}' || echo unknown)"
+    echo "disk            : $(df -h "$WORK" 2>/dev/null | awk 'NR==2 {print $2 " total, " $4 " free"}' || echo unknown)"
+    echo "cpus            : $(nproc 2>/dev/null || echo unknown)"
+    echo "cgroup memory   : $(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo unknown)"
+    echo "toolchain       : $(du -sh "$TOOLCHAIN" 2>/dev/null | cut -f1 || echo unknown)"
+    echo "kept toolchain  : $( [ -n "$CACHE_DIR" ] && du -sh "$CACHED_TOOLCHAIN" 2>/dev/null | cut -f1 || echo none)"
+  } > "$DIAG" 2>&1 || true
+
   # ── 1. the ladder ───────────────────────────────────────────────────────────
   LOG="$WORK/verify.log"
   # The log is kept where the caller asked for it, so a failing run's
@@ -175,9 +199,19 @@ if [ "$use_cached" = "0" ]; then
     [ -n "$KEPT_LOG" ] || return 0
     mkdir -p "$(dirname "$KEPT_LOG")"
     cp "$LOG" "$KEPT_LOG" 2>/dev/null || true
+    cp "$DIAG" "${KEPT_LOG%.log}-machine.txt" 2>/dev/null || true
   }
   ladder_status=0
   (cd "$TOOLCHAIN" && node tools/verify.mjs "$APP") 2>&1 | tee "$LOG" || ladder_status=$?
+  # How the ladder ended is part of what the run was given, so it is written
+  # with the machine's facts and not into the ladder's own words.
+  {
+    echo "ladder status   : $ladder_status"
+    if [ "$ladder_status" -gt 128 ]; then
+      echo "ladder killed by: signal $((ladder_status - 128))"
+    fi
+    echo "log ends with    : $( [ -s "$LOG" ] && tail -c 1 "$LOG" | od -c | head -n 1 | sed 's/^ *//' || echo empty)"
+  } >> "$DIAG" 2>&1 || true
   keep_log
   if [ "$ladder_status" != "0" ]; then
     # A process that was killed leaves a log that stops in the middle of a
