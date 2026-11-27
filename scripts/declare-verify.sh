@@ -160,7 +160,32 @@ if [ "$use_cached" = "0" ]; then
   if [ -n "$REAL_CHROME" ] && [ -x "$REAL_CHROME" ]; then
     export DECLARE_REAL_CHROME="$REAL_CHROME"
     export CHROME_PATH="$CHROME_WRAPPER"
+    # What the browser itself says is kept: the toolchain starts the browser
+    # with its output thrown away, so a browser that refuses to start says
+    # nothing at all, and the run reports only that the browser did not
+    # start. With the words kept, the reason is in the run.
+    export DECLARE_CHROME_LOG="$WORK/chrome.log"
     echo "declare-verify: the browser is $REAL_CHROME, behind a wrapper that adds the flags a runner needs"
+
+    # THE WRAPPER IS CHECKED BEFORE IT IS BELIEVED. A wrapper that bash
+    # cannot parse never runs: the browser is never started, and the
+    # toolchain says only that a kept Chrome did not start, which names the
+    # symptom and not the cause. That is what happened here once, and it
+    # cost a run to find out. So the wrapper is asked to start the browser
+    # before the ladder runs, and a wrapper that cannot is named as such.
+    if ! bash -n "$CHROME_WRAPPER" 2>"$WORK/wrapper-syntax.log"; then
+      echo "declare-verify: the wrapper is not valid bash, so the browser would" >&2
+      echo "  never start. What bash says:" >&2
+      sed 's/^/  /' "$WORK/wrapper-syntax.log" >&2
+      exit 1
+    fi
+    if ! "$CHROME_WRAPPER" --version >/dev/null 2>"$WORK/wrapper-run.log"; then
+      echo "declare-verify: the wrapper could not start the browser at $REAL_CHROME." >&2
+      echo "  What it says:" >&2
+      sed 's/^/  /' "$WORK/wrapper-run.log" >&2
+      exit 1
+    fi
+    echo "declare-verify: the wrapper starts the browser and says: $("$CHROME_WRAPPER" --version 2>/dev/null || echo unknown)"
   else
     echo "declare-verify: no browser was found; the ladder will boot in Node." >&2
   fi
@@ -200,6 +225,10 @@ if [ "$use_cached" = "0" ]; then
     mkdir -p "$(dirname "$KEPT_LOG")"
     cp "$LOG" "$KEPT_LOG" 2>/dev/null || true
     cp "$DIAG" "${KEPT_LOG%.log}-machine.txt" 2>/dev/null || true
+    # The browser's own words travel with the run: a browser that refused
+    # to start said why here, and that is the whole finding.
+    [ -f "$WORK/chrome.log" ] && cp "$WORK/chrome.log" "${KEPT_LOG%.log}-chrome.log" 2>/dev/null || true
+    return 0
   }
   ladder_status=0
   (cd "$TOOLCHAIN" && node tools/verify.mjs "$APP") 2>&1 | tee "$LOG" || ladder_status=$?

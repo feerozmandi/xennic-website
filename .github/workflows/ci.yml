@@ -227,6 +227,7 @@ jobs:
           path: |
             ${{ runner.temp }}/declare-verify.log
             ${{ runner.temp }}/declare-verify-machine.txt
+            ${{ runner.temp }}/declare-verify-chrome.log
           if-no-files-found: ignore
           retention-days: 90
       # The log is also said, in the run, not only kept as an artefact. A
@@ -238,7 +239,8 @@ jobs:
         run: |
           python3 scripts/report-declare-failure.py \
             "${{ runner.temp }}/declare-verify.log" \
-            "${{ runner.temp }}/declare-verify-machine.txt"
+            "${{ runner.temp }}/declare-verify-machine.txt" \
+            "${{ runner.temp }}/declare-verify-chrome.log"
 
   production-preview:
     runs-on: ubuntu-latest
