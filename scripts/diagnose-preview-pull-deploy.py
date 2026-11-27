@@ -318,47 +318,56 @@ def main():
     matching = [r for r in runs if r.get('head_sha') == sha and r.get('head_branch') == 'dev'
                 and r.get('event') == 'push' and r.get('status') == 'completed'
                 and r.get('conclusion') == 'success' and type(r.get('run_number')) is int]
-    if not matching:
+    run = max(matching, key=lambda r: r['run_number']) if matching else None
+    if run is None:
+        # There is nothing to deploy, but the release that is already live
+        # can still be proved: that question does not depend on the
+        # candidate, so the diagnosis does not stop here.
         fail('no successful push run for the current dev head')
-        print('\nRESULT: failed — there is nothing to deploy yet.')
-        return 1
-    run = max(matching, key=lambda r: r['run_number'])
-    note(f"newest successful dev run: number {run['run_number']}, id {run['id']}, "
-         f"attempt {run['run_attempt']}")
+        note('the release that is live is still proved below.')
+    else:
+        note(f"newest successful dev run: number {run['run_number']}, id {run['id']}, "
+             f"attempt {run['run_attempt']}")
 
     heading('release evidence artifact')
-    status, body = api(f"/actions/runs/{run['id']}/artifacts?per_page=100", token)
-    note(f'GET /actions/runs/{run["id"]}/artifacts -> {status}')
-    if status != 200:
-        fail(f'GitHub refused the artifact list: {github_message(body) or body[:200]!r}')
-        print('\nRESULT: failed — the token cannot list run artifacts.')
-        return 1
-    wanted = f"xennic-preview-release-{run['run_attempt']}"
-    matches = [a for a in json.loads(body).get('artifacts', [])
-               if a.get('name') == wanted and a.get('expired') is False]
-    if len(matches) != 1:
-        fail(f'expected exactly one artifact named {wanted}, found {len(matches)}')
-        print('\nRESULT: failed — the release evidence artifact is missing.')
-        return 1
-    artifact = matches[0]
-    note(f"{artifact['name']}: id {artifact['id']}, {artifact['size_in_bytes']} bytes")
-
-    heading('artifact download')
-    hops, result = download_artifact(artifact['id'], token)
-    for code, target in hops:
-        host = urllib.parse.urlsplit(target).hostname or ''
-        note(f'redirect {code} -> {host}')
-    if isinstance(result, urllib.error.HTTPError):
-        fail(f'the artifact download was refused with HTTP {result.code}: '
-             f'{github_message(result.read(64 * 1024))}')
-    elif isinstance(result, BaseException):
-        fail(f'the artifact download failed: {type(result).__name__}: {result}')
+    release = None
+    if run is None:
+        note('there is no run to read an artifact from.')
     else:
-        note(f'downloaded {len(result)} bytes')
+        status, body = api(f"/actions/runs/{run['id']}/artifacts?per_page=100", token)
+        note(f'GET /actions/runs/{run["id"]}/artifacts -> {status}')
+        if status != 200:
+            fail(f'GitHub refused the artifact list: {github_message(body) or body[:200]!r}')
+            print('\nRESULT: failed — the token cannot list run artifacts.')
+            return 1
+        wanted = f"xennic-preview-release-{run['run_attempt']}"
+        matches = [a for a in json.loads(body).get('artifacts', [])
+                   if a.get('name') == wanted and a.get('expired') is False]
+        if len(matches) != 1:
+            fail(f'expected exactly one artifact named {wanted}, found {len(matches)}')
+            print('\nRESULT: failed — the release evidence artifact is missing.')
+            return 1
+        artifact = matches[0]
+        note(f"{artifact['name']}: id {artifact['id']}, {artifact['size_in_bytes']} bytes")
 
-    if not failures:
+    if run is None:
+        result = None
+    else:
+        heading('artifact download')
+        hops, result = download_artifact(artifact['id'], token)
+        for code, target in hops:
+            host = urllib.parse.urlsplit(target).hostname or ''
+            note(f'redirect {code} -> {host}')
+        if isinstance(result, urllib.error.HTTPError):
+            fail(f'the artifact download was refused with HTTP {result.code}: '
+                 f'{github_message(result.read(64 * 1024))}')
+        elif isinstance(result, BaseException):
+            fail(f'the artifact download failed: {type(result).__name__}: {result}')
+        else:
+            note(f'downloaded {len(result)} bytes')
+
+    if run is not None and not failures:
         heading('evidence envelope')
-        release = None
         try:
             with zipfile.ZipFile(io.BytesIO(result)) as archive:
                 names = archive.namelist()
@@ -371,8 +380,6 @@ def main():
                  f"digest {release['digest']}")
         except (KeyError, ValueError, UnicodeError, zipfile.BadZipFile, RuntimeError) as exc:
             fail(f'the evidence envelope is not usable: {type(exc).__name__}: {exc}')
-    else:
-        release = None
 
     heading('live release journal')
     journal = None
@@ -394,6 +401,7 @@ def main():
     heading('the name of the live release')
     live_commit = None
     live_version = None
+    live_agrees = None
     if isinstance(journal, dict):
         current = journal.get('current')
         if isinstance(current, dict):
@@ -415,8 +423,10 @@ def main():
                 note(f'the repository names the live commit {name}')
                 note('the journal records no version: this release was deployed before naming')
             elif live_version == name:
+                live_agrees = True
                 note(f'the live version is {name}, and the repository names the live commit the same')
             else:
+                live_agrees = False
                 anomaly(f'the journal says the live version is {live_version}, '
                         f'but the repository names the live commit {name}')
     else:
@@ -459,16 +469,25 @@ def main():
                  '--migrations \'["20261030_163225_baseline"]\'')
 
     print('\n== result')
+    # The verdict about the live release comes first and on its own: it is
+    # the answer this program exists for, and it does not depend on whether
+    # there is a candidate to deploy.
+    if live_agrees is True:
+        print(f'   The live release is {live_version}, and that is the name the repository gives it.')
+    elif live_agrees is False:
+        print(f'   The live release is {live_version}, and the repository does not give it that name.')
+    if anomalies:
+        print('   The live release does not match what the repository says about it.')
     if failures:
         for item in failures:
             print(f'   FAILED: {item}')
         print('   The deployer stops at the first of these. Nothing was changed.')
         return 1
-    if live_version:
-        print(f'   The live release is {live_version}, and that is the name the repository gives it.')
     print('   Every step of the release read works from this host.')
     if anomalies:
-        print('   The live release does not match what the repository says about it.')
+        # A difference between the live version and the name the repository
+        # gives it is not a note: it is the one answer this program exists
+        # for, and it is a wrong one.
         return 1
     return 0
 
