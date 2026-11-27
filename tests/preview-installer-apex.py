@@ -134,9 +134,11 @@ class ReviewedFileHashTest(unittest.TestCase):
         self.assertIn(installer.ACTIVATION_ROUTE_HASH, accepted)
         self.assertEqual(hashlib.sha256((REPO / 'config/routes.caddy').read_bytes()).hexdigest(),
                          installer.ACTIVATION_ROUTE_HASH)
-        # The live edge still runs the previous routes file, so the window keeps
-        # accepting it until the replacement is installed and confirmed.
-        self.assertEqual(accepted, (fixed.ROUTES_INSTALLED, installer.ACTIVATION_ROUTE_HASH))
+        # The replacement is installed on the live edge and confirmed, so the
+        # transition window is closed: one reviewed version is accepted, and
+        # the version the window used to carry is gone.
+        self.assertEqual(accepted, (fixed.ROUTES_REVIEWED,))
+        self.assertNotIn('a4d844df988812c4cd1922e7ca9a18c34281518bad27f5621be4d57bb8124029', accepted)
         self.assertEqual(installer.APEX_MANIFEST, installer.ACTIVATION_MANIFEST)
 
 

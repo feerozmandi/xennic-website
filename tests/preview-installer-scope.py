@@ -165,6 +165,20 @@ class PrecheckManifestTest(unittest.TestCase):
         with self.assertRaises(OSError):
             precheck.helper_manifest(staged, aliases=True)
 
+    def test_the_precheck_and_the_installer_pin_the_same_candidate(self):
+        # The pre-check runs on the host before the scope update and asks
+        # whether the staged helpers are the reviewed candidate. It compares
+        # them with its OWN constant, so if that constant drifts from the
+        # installer's, a correctly staged candidate is refused and the update
+        # can never run. They read the same files in the same order, so they
+        # must name the same candidate.
+        spec = importlib.util.spec_from_file_location(
+            'scope_precheck_manifest_test', REPO / 'scripts/preview-scope-precheck.py')
+        precheck = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(precheck)
+        self.assertEqual(tuple(precheck.FILES), tuple(installer.ACTIVATION_FILES))
+        self.assertEqual(precheck.SCOPE_MANIFEST, installer.SCOPE_MANIFEST)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
