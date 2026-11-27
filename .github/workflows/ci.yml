@@ -112,7 +112,12 @@ jobs:
       # than taken from the runner's image, and the action is pinned to a
       # commit, so what the measurement is made with cannot change unnoticed.
       - name: Install the browser for this check
+        id: browser
         uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+      # The action reports where it put the browser as an output, not as an
+      # environment variable, so it is passed on by hand.
+      - name: Point the measurement at the browser
+        run: echo "CHROME_PATH=${{ steps.browser.outputs.chrome-path }}" >> "$GITHUB_ENV"
       - name: Install the browser driver for this check
         run: npm install --no-save --no-audit --no-fund puppeteer-core@24
       # Content that reaches past the window it is shown in is cut off, not
@@ -188,11 +193,29 @@ jobs:
       # it has changed before. The action is pinned to a commit, so what the
       # ladder measures with cannot change under it unnoticed.
       - name: Install the browser the ladder measures with
+        id: browser
         uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
+      # The action reports where it put the browser as an output, not as an
+      # environment variable, so it is passed on by hand: without this the
+      # ladder looks for a browser in the usual places, finds none, and
+      # reports a headless boot it was told not to accept.
+      - name: Point the ladder at the browser
+        run: echo "CHROME_PATH=${{ steps.browser.outputs.chrome-path }}" >> "$GITHUB_ENV"
+      # The toolchain is fetched, installed and built on every run: the
+      # slowest part of this check, and the part that fails when the network
+      # misbehaves. It is cached under the commit it was built from, so a
+      # run with a cache hit spends its time on the program instead.
+      - name: Restore the built toolchain
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/declare-toolchain
+          key: declare-toolchain-${{ hashFiles('declare-apps/xennic-platform/toolchain.lock') }}
       - name: Verify the Declare program and the published bundle
         env:
           DECLARE_VERIFY_REQUIRE_BROWSER: '1'
           DECLARE_VERIFY_LOG: ${{ runner.temp }}/declare-verify.log
+          DECLARE_VERIFY_CACHE: ${{ runner.temp }}/declare-toolchain
         run: npm run declare:verify
       # The ladder's own log: which rung failed, and what it said. A failure
       # here is otherwise a number and nothing else.
@@ -201,9 +224,23 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: declare-verify-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/declare-verify.log
+          path: |
+            ${{ runner.temp }}/declare-verify.log
+            ${{ runner.temp }}/declare-verify-machine.txt
+            ${{ runner.temp }}/declare-verify-chrome.log
           if-no-files-found: ignore
           retention-days: 90
+      # The log is also said, in the run, not only kept as an artefact. A
+      # failure that has to be fetched before it can be read is a failure
+      # that is read later, or not at all; the reason is put where the
+      # failure is.
+      - name: Say what the verification stopped on
+        if: failure()
+        run: |
+          python3 scripts/report-declare-failure.py \
+            "${{ runner.temp }}/declare-verify.log" \
+            "${{ runner.temp }}/declare-verify-machine.txt" \
+            "${{ runner.temp }}/declare-verify-chrome.log"
 
   production-preview:
     runs-on: ubuntu-latest
