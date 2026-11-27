@@ -41,6 +41,12 @@ CANDIDATE = Path('/root/xennic-preview-candidate.json')
 GATEWAY = Path('/usr/local/libexec/xennic-preview/ci-gateway')
 BASE = 'https://api.github.com/repos/feerozmandi/xennic-website'
 MAX_ZIP = 1024 * 1024
+# The shape of one release name, and how many pages of release tags are
+# read. Both are the same the release verifier uses: the name of a release is
+# a tag on the commit it releases, and this host has to read the same rule
+# the deployer read when it deployed.
+RELEASE_NAME = re.compile(r'v\d{1,6}\.\d{1,6}\.\d{1,6}')
+MAX_TAG_PAGES = 10
 PUBLIC_ROUTES = ('https://xennic.ir/robots.txt', 'https://xennic.ir/sitemap.xml',
                  'https://xennic.ir/platform', 'https://xennic.ir/health')
 # The live migration ledger the owner confirmed; the host compares it with the
@@ -48,6 +54,7 @@ PUBLIC_ROUTES = ('https://xennic.ir/robots.txt', 'https://xennic.ir/sitemap.xml'
 PREVIOUS_MIGRATIONS = 'WyIyMDI2MTAzMF8xNjMyMjVfYmFzZWxpbmUiXQ=='
 
 failures = []
+anomalies = []
 
 
 def load(name, filename):
@@ -85,6 +92,18 @@ def note(text):
 def fail(text):
     failures.append(text)
     print(f'   FAILED: {text}')
+
+
+def anomaly(text):
+    """Something that is wrong about what is live, without stopping anything.
+
+    The deployer does not check this, and it must not: the deployment is
+    finished and healthy. What is wrong here is the proof, and the operator
+    has to see it. It is reported separately, and it makes this program exit
+    non-zero, so the proof is one command with one answer.
+    """
+    anomalies.append(text)
+    print(f'   ANOMALY: {text}')
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -145,6 +164,37 @@ def api(path, token):
         return exc.code, exc.read(64 * 1024)
     except (OSError, ValueError) as exc:
         raise RuntimeError(f'{type(exc).__name__}: {exc}') from exc
+
+
+def release_name_for(commit, token):
+    """The one release name the repository gives this commit, or None.
+
+    This is the verifier's rule, read the same way: a release is named by a
+    `vX.Y.Z` tag on the commit it releases, and a commit that carries no name
+    or carries two of them has no single name. Every page is read, because a
+    repository with more tags than one page holds them all, and the name is
+    only given when exactly one tag names this commit.
+    """
+    found = []
+    for page in range(1, MAX_TAG_PAGES + 1):
+        status, body = api(f'/tags?per_page=100&page={page}', token)
+        if status != 200:
+            raise RuntimeError(f'GitHub refused the release tags: {github_message(body)}')
+        try:
+            data = json.loads(body)
+        except (ValueError, UnicodeError) as exc:
+            raise RuntimeError('the release tag list is not readable') from exc
+        if not isinstance(data, list):
+            raise RuntimeError('the release tag list is not readable')
+        for item in data:
+            if (isinstance(item, dict) and isinstance(item.get('name'), str)
+                    and RELEASE_NAME.fullmatch(item['name'])
+                    and isinstance(item.get('commit'), dict)
+                    and item['commit'].get('sha') == commit):
+                found.append(item['name'])
+        if len(data) < 100:
+            break
+    return found[0] if len(found) == 1 else None
 
 
 def github_message(body):
@@ -325,6 +375,7 @@ def main():
         release = None
 
     heading('live release journal')
+    journal = None
     try:
         states = load('diagnose_state', 'preview-deploy-state.py')
         journal = states.Journal().read()
@@ -334,6 +385,42 @@ def main():
         note(f"blocked: {journal.get('blocked')}")
     except Exception as exc:  # noqa: BLE001 - a diagnosis must not stop here
         note(f'the journal could not be read: {type(exc).__name__}: {exc}')
+
+    # The name of the live release is the last thing that has to agree: the
+    # journal says what version is running, the repository says what that
+    # commit is called, and the two are the same string or the host computed
+    # the version itself. This is the proof that the release that is live is
+    # the release the repository named.
+    heading('the name of the live release')
+    live_commit = None
+    live_version = None
+    if isinstance(journal, dict):
+        current = journal.get('current')
+        if isinstance(current, dict):
+            live_commit = current.get('commit')
+        live_version = journal.get('release_version')
+        if live_commit is None:
+            note('no release is live on this host yet')
+        else:
+            name = None
+            try:
+                name = release_name_for(live_commit, token)
+            except RuntimeError as exc:
+                note(f'the repository name could not be read: {exc}')
+            if name is None:
+                note(f'the repository names no release for the live commit {live_commit[:7]}')
+                if live_version:
+                    note(f'the journal says {live_version}: the host computed that version itself')
+            elif live_version is None:
+                note(f'the repository names the live commit {name}')
+                note('the journal records no version: this release was deployed before naming')
+            elif live_version == name:
+                note(f'the live version is {name}, and the repository names the live commit the same')
+            else:
+                anomaly(f'the journal says the live version is {live_version}, '
+                        f'but the repository names the live commit {name}')
+    else:
+        note('the journal could not be read, so the live version cannot be checked')
 
     heading('reviewed transitions')
     try:
@@ -377,7 +464,12 @@ def main():
             print(f'   FAILED: {item}')
         print('   The deployer stops at the first of these. Nothing was changed.')
         return 1
+    if live_version:
+        print(f'   The live release is {live_version}, and that is the name the repository gives it.')
     print('   Every step of the release read works from this host.')
+    if anomalies:
+        print('   The live release does not match what the repository says about it.')
+        return 1
     return 0
 
 

@@ -15,6 +15,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 SOURCE = Path(__file__).resolve().parents[1] / 'scripts/diagnose-preview-pull-deploy.py'
 spec = importlib.util.spec_from_file_location('pull_diagnose', SOURCE)
@@ -22,6 +23,15 @@ diagnose = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(diagnose)
 
 FAKE_TOKEN = 'github_pat_fake_token_for_tests_only'
+
+
+def evidence_zip(release, run_id=46010745224, attempt=1):
+    """The release artifact as the publishing job leaves it."""
+    buffer = io.BytesIO()
+    envelope = {'version': 1, 'run_id': run_id, 'run_attempt': attempt, 'release': release}
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('xennic-preview-release.json', json.dumps(envelope))
+    return buffer.getvalue()
 
 
 class SourceTest(unittest.TestCase):
@@ -191,6 +201,7 @@ class OutputTest(unittest.TestCase):
                     mock.patch.object(diagnose, 'public_status', return_value=200), \
                     mock.patch.object(diagnose, 'load', return_value=mock.Mock()):
                 diagnose.failures.clear()
+                diagnose.anomalies.clear()
                 status = diagnose.main()
         return status, buffer.getvalue()
 
@@ -204,6 +215,7 @@ class OutputTest(unittest.TestCase):
         with mock.patch.object(diagnose, 'read_token', lambda: FAKE_TOKEN.encode()), \
                 mock.patch.object(diagnose, 'api', return_value=(403, b'{"message":"Resource not accessible by integration"}')):
             diagnose.failures.clear()
+            diagnose.anomalies.clear()
             buffer = io.StringIO()
             with contextlib.redirect_stdout(buffer):
                 status = diagnose.main()
@@ -285,6 +297,152 @@ class ArgumentTest(unittest.TestCase):
                                    side_effect=RuntimeError('no token here')):
                 with contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(diagnose.main(), 1)
+
+
+class ReleaseNameTest(unittest.TestCase):
+    """The name of a release is a tag on the commit it releases, and exactly
+    one such tag. The diagnosis has to read the same rule the deployer read."""
+
+    COMMIT = 'a' * 40
+    OTHER = 'b' * 40
+
+    def tags(self, *items):
+        return json.dumps(list(items)).encode()
+
+    def tag(self, name, commit):
+        return {'name': name, 'commit': {'sha': commit}}
+
+    def read(self, body):
+        with mock.patch.object(diagnose, 'api', return_value=(200, body)):
+            return diagnose.release_name_for(self.COMMIT, b'token')
+
+    def test_the_one_tag_on_the_commit_is_the_name(self):
+        body = self.tags(self.tag('v1.0.1', self.COMMIT))
+        self.assertEqual(self.read(body), 'v1.0.1')
+
+    def test_a_tag_on_another_commit_is_not_the_name(self):
+        body = self.tags(self.tag('v1.0.1', self.OTHER))
+        self.assertIsNone(self.read(body))
+
+    def test_a_commit_with_two_names_has_no_single_name(self):
+        body = self.tags(self.tag('v1.0.1', self.COMMIT), self.tag('v1.0.2', self.COMMIT))
+        self.assertIsNone(self.read(body))
+
+    def test_a_name_that_is_not_a_release_name_is_ignored(self):
+        body = self.tags(self.tag('nightly', self.COMMIT))
+        self.assertIsNone(self.read(body))
+
+    def test_every_page_is_read(self):
+        first = self.tags(*[self.tag('v0.0.%d' % index, self.OTHER) for index in range(100)])
+        second = self.tags(self.tag('v1.0.1', self.COMMIT))
+        pages = [(200, first), (200, second)]
+        with mock.patch.object(diagnose, 'api', side_effect=pages) as called:
+            name = diagnose.release_name_for(self.COMMIT, b'token')
+        self.assertEqual(name, 'v1.0.1')
+        self.assertEqual(called.call_count, 2)
+
+    def test_a_refused_read_is_an_error_and_not_a_name(self):
+        with mock.patch.object(diagnose, 'api', return_value=(403, b'{"message":"no"}')):
+            with self.assertRaises(RuntimeError):
+                diagnose.release_name_for(self.COMMIT, b'token')
+
+    def test_the_rule_is_the_same_one_the_verifier_applies(self):
+        # The verifier is the code that named the release in the first place:
+        # the diagnosis must not invent a second, weaker rule.
+        verifier = Path(__file__).resolve().parents[1] / 'scripts/preview-release-verifier.py'
+        spec = importlib.util.spec_from_file_location('diagnose_verifier', verifier)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        body = self.tags(self.tag('v1.0.1', self.COMMIT), self.tag('v1.0.2', self.COMMIT))
+        with mock.patch.object(module, 'get_json', return_value=json.loads(body)):
+            with self.assertRaises(module.Unverified):
+                module.release_version(self.COMMIT, b'token')
+        body = self.tags(self.tag('v1.0.1', self.COMMIT), self.tag('v2.0.0', self.OTHER))
+        with mock.patch.object(module, 'get_json', return_value=json.loads(body)):
+            self.assertEqual(module.release_version(self.COMMIT, b'token'), 'v1.0.1')
+
+
+class LiveVersionTest(unittest.TestCase):
+    """The last proof: the version that is live is the name the repository
+    gives the commit that is live. A difference is a failure, not a note."""
+
+    COMMIT = 'a' * 40
+
+    def run_main(self, journal, name='v1.0.1'):
+        states = mock.Mock()
+        states.Journal.return_value.read.return_value = journal
+        sha = 'a' * 40
+        release = {'repository': 'feerozmandi/xennic-website', 'commit': sha,
+                   'run_number': 299, 'digest': 'sha256:' + '0' * 64,
+                   'platform': 'linux/amd64'}
+        evidence_module = mock.Mock()
+        evidence_module.check.return_value = release
+
+        def fake_api(path, token):
+            if path.startswith('/commits/'):
+                return 200, json.dumps({'sha': sha}).encode()
+            if '/actions/workflows/' in path:
+                run = {'id': 46010745224, 'run_number': 299, 'run_attempt': 1,
+                       'head_sha': sha, 'head_branch': 'dev', 'event': 'push',
+                       'status': 'completed', 'conclusion': 'success'}
+                return 200, json.dumps({'workflow_runs': [run]}).encode()
+            if '/actions/runs/' in path and 'artifacts' in path:
+                artifact = {'id': 1, 'name': 'xennic-preview-release-1', 'expired': False,
+                            'size_in_bytes': 377}
+                return 200, json.dumps({'artifacts': [artifact]}).encode()
+            return 404, b'{}'
+
+        def fake_load(name, filename):
+            return evidence_module if 'evidence' in name else states
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            with mock.patch.object(diagnose, 'read_token', lambda: FAKE_TOKEN.encode()), \
+                    mock.patch.object(diagnose, 'api', side_effect=fake_api), \
+                    mock.patch.object(diagnose, 'download_artifact',
+                                      return_value=([], evidence_zip(evidence_module.check.return_value))), \
+                    mock.patch.object(diagnose, 'public_status', return_value=200), \
+                    mock.patch.object(diagnose, 'load', side_effect=fake_load), \
+                    mock.patch.object(diagnose, 'release_name_for', return_value=name):
+                diagnose.failures.clear()
+                diagnose.anomalies.clear()
+                status = diagnose.main()
+        return status, buffer.getvalue()
+
+    def journal(self, version=None):
+        data = {'version': 1, 'last_run': 300, 'blocked': False,
+                'current': {'repository': 'feerozmandi/xennic-website', 'commit': self.COMMIT,
+                            'run_number': 299, 'digest': 'sha256:' + '0' * 64,
+                            'platform': 'linux/amd64'},
+                'previous': [], 'pending': None}
+        if version is not None:
+            data['release_version'] = version
+        return data
+
+    def test_the_same_name_on_both_sides_is_the_proof(self):
+        status, output = self.run_main(self.journal('v1.0.1'), name='v1.0.1')
+        self.assertEqual(status, 0)
+        self.assertIn('v1.0.1', output)
+        self.assertIn('the same', output)
+
+    def test_a_different_name_is_an_anomaly(self):
+        status, output = self.run_main(self.journal('v1.0.2'), name='v1.0.1')
+        self.assertEqual(status, 1)
+        self.assertIn('ANOMALY', output)
+        self.assertIn('v1.0.1', output)
+        self.assertIn('v1.0.2', output)
+        # It is not a deployment failure: nothing stopped, and the release
+        # read itself worked.
+        self.assertNotIn('FAILED', output)
+
+    def test_a_release_without_a_name_is_not_a_failure(self):
+        status, output = self.run_main(self.journal(), name='v1.0.1')
+        self.assertEqual(status, 0)
+        self.assertIn('before naming', output)
+
+    def test_the_token_is_never_printed(self):
+        status, output = self.run_main(self.journal('v1.0.1'), name='v1.0.1')
+        self.assertNotIn(FAKE_TOKEN, output)
 
 
 if __name__ == '__main__':
