@@ -57,7 +57,12 @@ if [ -z "$COMMIT" ] || [ -z "$REPO" ]; then
 fi
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# The toolchain is fetched, installed and built on every run, which is the
+# slowest part of this check and the part that fails when the network
+# misbehaves. A caller that keeps a directory of its own can have the
+# built toolchain kept there and reused, which is what CI does.
+CACHE_DIR="${DECLARE_VERIFY_CACHE:-}"
+trap '[ -z "$CACHE_DIR" ] && rm -rf "$WORK" || rm -rf "$WORK"' EXIT
 
 echo "declare-verify: toolchain $COMMIT"
 
@@ -67,95 +72,141 @@ echo "declare-verify: toolchain $COMMIT"
 # examples, the reports and the bundles in the toolchain's own repository are
 # not, and they are most of its size.
 TOOLCHAIN="$WORK/declarelang"
-mkdir -p "$TOOLCHAIN"
-git -C "$TOOLCHAIN" init -q
-git -C "$TOOLCHAIN" remote add origin "$REPO"
-git -C "$TOOLCHAIN" config core.sparseCheckout true
-# shellcheck disable=SC2016
-printf 'compiler/\nruntime/\ntools/\nlibrary/\nbrowser/\npackage.json\npackage-lock.json\ntsconfig.json\n' \
-  > "$TOOLCHAIN/.git/info/sparse-checkout"
-git -C "$TOOLCHAIN" fetch -q --depth 1 --filter=blob:none origin "$COMMIT"
-git -C "$TOOLCHAIN" checkout -q FETCH_HEAD
-
-echo "declare-verify: installing the toolchain's own dependencies"
-if ! (cd "$TOOLCHAIN" && npm ci --no-audit --no-fund >/dev/null); then
-  echo "declare-verify: the toolchain's dependencies could not be installed." >&2
-  echo "  The toolchain is fetched at the pinned commit; a failure here is" >&2
-  echo "  usually the network, not the program." >&2
-  exit 1
+CACHED_TOOLCHAIN="$CACHE_DIR/toolchain"
+# A cached toolchain is the same commit, so it is the same compiler. It is
+# used when it is there, and fetched and built when it is not.
+use_cached=0
+if [ -n "$CACHE_DIR" ] && [ -d "$CACHED_TOOLCHAIN/.git" ] && [ -d "$CACHED_TOOLCHAIN/node_modules" ]; then
+  cp -a "$CACHED_TOOLCHAIN" "$TOOLCHAIN"
+  use_cached=1
+  echo "declare-verify: using the toolchain kept from an earlier run"
 fi
-# The toolchain ships its compiler and runtime compiled, but it rebuilds
-# them here so the ladder runs against what this commit's sources make.
-if ! (cd "$TOOLCHAIN" && npm run build >/dev/null); then
-  echo "declare-verify: the toolchain did not build at $COMMIT." >&2
-  exit 1
-fi
+if [ "$use_cached" = "0" ]; then
+  mkdir -p "$TOOLCHAIN"
+  git -C "$TOOLCHAIN" init -q
+  git -C "$TOOLCHAIN" remote add origin "$REPO"
+  git -C "$TOOLCHAIN" config core.sparseCheckout true
+  # shellcheck disable=SC2016
+  printf 'compiler/\nruntime/\ntools/\nlibrary/\nbrowser/\npackage.json\npackage-lock.json\ntsconfig.json\n' \
+    > "$TOOLCHAIN/.git/info/sparse-checkout"
+  # The toolchain is fetched over the network, and a network that drops a
+  # connection now and then is not a verdict on the program. So it is fetched
+  # again, a few times, before the run gives up.
+  fetched=0
+  for attempt in 1 2 3 4 5; do
+    if git -C "$TOOLCHAIN" fetch -q --depth 1 --filter=blob:none origin "$COMMIT" 2>/dev/null; then
+      fetched=1
+      break
+    fi
+    echo "declare-verify: fetching the toolchain failed (attempt $attempt), trying again" >&2
+    sleep $((attempt * 5))
+  done
+  if [ "$fetched" != "1" ]; then
+    echo "declare-verify: the toolchain at $COMMIT could not be fetched from $REPO." >&2
+    echo "  This is the network, not the program." >&2
+    exit 1
+  fi
+  git -C "$TOOLCHAIN" checkout -q FETCH_HEAD
 
-# ── 1. the ladder ───────────────────────────────────────────────────────────
-LOG="$WORK/verify.log"
-# The log is kept where the caller asked for it, so a failing run's
-# artefact says which rung failed and what it said. It is kept whether the
-# ladder passed or not: a failure is exactly when it is wanted.
-KEPT_LOG="${DECLARE_VERIFY_LOG:-}"
-keep_log() {
-  [ -n "$KEPT_LOG" ] || return 0
-  mkdir -p "$(dirname "$KEPT_LOG")"
-  cp "$LOG" "$KEPT_LOG" 2>/dev/null || true
-}
-if ! (cd "$TOOLCHAIN" && node tools/verify.mjs "$APP") 2>&1 | tee "$LOG"; then
+  echo "declare-verify: installing the toolchain's own dependencies"
+  if ! (cd "$TOOLCHAIN" && npm ci --no-audit --no-fund >/dev/null); then
+    echo "declare-verify: the toolchain's dependencies could not be installed." >&2
+    echo "  The toolchain is fetched at the pinned commit; a failure here is" >&2
+    echo "  usually the network, not the program." >&2
+    exit 1
+  fi
+  # The toolchain ships its compiler and runtime compiled, but it rebuilds
+  # them here so the ladder runs against what this commit's sources make.
+  if ! (cd "$TOOLCHAIN" && npm run build >/dev/null); then
+    echo "declare-verify: the toolchain did not build at $COMMIT." >&2
+    exit 1
+  fi
+  # A built toolchain is worth keeping: it is the same commit, so it is the
+  # same compiler, and the next run does not have to fetch, install and build
+  # it again.
+  if [ -n "$CACHE_DIR" ]; then
+    mkdir -p "$CACHE_DIR"
+    rm -rf "$CACHE_DIR/toolchain"
+    cp -a "$TOOLCHAIN" "$CACHE_DIR/toolchain"
+    echo "declare-verify: the built toolchain was kept at $CACHE_DIR/toolchain"
+  fi
+  fi
+
+  # ── 1. the ladder ───────────────────────────────────────────────────────────
+  LOG="$WORK/verify.log"
+  # The log is kept where the caller asked for it, so a failing run's
+  # artefact says which rung failed and what it said. It is kept whether the
+  # ladder passed or not: a failure is exactly when it is wanted.
+  KEPT_LOG="${DECLARE_VERIFY_LOG:-}"
+  keep_log() {
+    [ -n "$KEPT_LOG" ] || return 0
+    mkdir -p "$(dirname "$KEPT_LOG")"
+    cp "$LOG" "$KEPT_LOG" 2>/dev/null || true
+  }
+  ladder_status=0
+  (cd "$TOOLCHAIN" && node tools/verify.mjs "$APP") 2>&1 | tee "$LOG" || ladder_status=$?
   keep_log
-  echo "declare-verify: the ladder did not pass" >&2
-  exit 1
-fi
-keep_log
+  if [ "$ladder_status" != "0" ]; then
+    # A process that was killed leaves a log that stops in the middle of a
+    # line. That is not a verdict on the program, and saying so is the
+    # difference between a bug and a machine that ran out of room.
+    if [ "$(tail -c 1 "$LOG" | wc -l)" = "0" ] && [ -s "$LOG" ]; then
+      echo "declare-verify: the ladder stopped in the middle of a line, so it" >&2
+      echo "  was killed rather than finished. That is the machine, not the" >&2
+      echo "  program; the last line it reached is in the log." >&2
+    else
+      echo "declare-verify: the ladder did not pass" >&2
+    fi
+    exit 1
+  fi
 
-# A headless boot measures text with a stand-in and binds no backend, so the
-# layout it reports is not the layout a reader gets. When the caller asks for
-# an authoritative verdict, a headless boot is not one.
-if [ "${DECLARE_VERIFY_REQUIRE_BROWSER:-0}" = "1" ] && ! grep -q 'in Chrome, real text' "$LOG"; then
-  echo "declare-verify: no browser was found, so the boot was headless and its" >&2
-  echo "  layout verdict is not the one a reader gets. Install Chrome (or set" >&2
-  echo "  PUPPETEER_EXECUTABLE_PATH) and run this again." >&2
-  exit 1
-fi
+  # A headless boot measures text with a stand-in and binds no backend, so the
+  # layout it reports is not the layout a reader gets. When the caller asks for
+  # an authoritative verdict, a headless boot is not one.
+  if [ "${DECLARE_VERIFY_REQUIRE_BROWSER:-0}" = "1" ] && ! grep -q 'in Chrome, real text' "$LOG"; then
+    echo "declare-verify: no browser was found, so the boot was headless and its" >&2
+    echo "  layout verdict is not the one a reader gets. Install Chrome (or set" >&2
+    echo "  PUPPETEER_EXECUTABLE_PATH) and run this again." >&2
+    exit 1
+  fi
 
-# ── 2. the bundle ───────────────────────────────────────────────────────────
-# Rebuilt into a scratch directory: the committed `dist/` is never written to
-# by this script, so a failing check leaves the repository exactly as it was.
-BUILT="$WORK/built"
-mkdir -p "$BUILT"
-(cd "$TOOLCHAIN" && node tools/declarec.mjs "$APP" -o "$BUILT" --kernel=js >/dev/null)
+  # ── 2. the bundle ───────────────────────────────────────────────────────────
+  # Rebuilt into a scratch directory: the committed `dist/` is never written to
+  # by this script, so a failing check leaves the repository exactly as it was.
+  BUILT="$WORK/built"
+  mkdir -p "$BUILT"
+  (cd "$TOOLCHAIN" && node tools/declarec.mjs "$APP" -o "$BUILT" --kernel=js >/dev/null)
 
-ENTRY="$(node -e 'const m=require(process.argv[1]);process.stdout.write(m.entry??"")' "$DIST/manifest.json")"
-if [ -z "$ENTRY" ]; then
-  echo "declare-verify: $DIST/manifest.json names no bundle" >&2
-  exit 1
-fi
-if [ ! -f "$DIST/$ENTRY" ]; then
-  echo "declare-verify: the manifest names $ENTRY, which is not in $DIST" >&2
-  exit 1
-fi
+  ENTRY="$(node -e 'const m=require(process.argv[1]);process.stdout.write(m.entry??"")' "$DIST/manifest.json")"
+  if [ -z "$ENTRY" ]; then
+    echo "declare-verify: $DIST/manifest.json names no bundle" >&2
+    exit 1
+  fi
+  if [ ! -f "$DIST/$ENTRY" ]; then
+    echo "declare-verify: the manifest names $ENTRY, which is not in $DIST" >&2
+    exit 1
+  fi
 
-BUILT_ENTRY="$(node -e '
-const { readdirSync } = require("node:fs")
-const names = readdirSync(process.argv[1]).filter((n) => /^app\.[0-9a-f]+\.js$/.test(n))
-if (names.length !== 1) { console.error(`expected one app.<hash>.js, found ${names.length}`); process.exit(1) }
-process.stdout.write(names[0])
-' "$BUILT")"
+  BUILT_ENTRY="$(node -e '
+  const { readdirSync } = require("node:fs")
+  const names = readdirSync(process.argv[1]).filter((n) => /^app\.[0-9a-f]+\.js$/.test(n))
+  if (names.length !== 1) { console.error(`expected one app.<hash>.js, found ${names.length}`); process.exit(1) }
+  process.stdout.write(names[0])
+  ' "$BUILT")"
 
-if [ "$ENTRY" != "$BUILT_ENTRY" ]; then
-  echo "declare-verify: the committed bundle is $ENTRY, but a rebuild with the" >&2
-  echo "  pinned toolchain makes $BUILT_ENTRY. The page asks for the committed" >&2
-  echo "  name, so the rebuilt program would never be served." >&2
-  exit 1
-fi
+  if [ "$ENTRY" != "$BUILT_ENTRY" ]; then
+    echo "declare-verify: the committed bundle is $ENTRY, but a rebuild with the" >&2
+    echo "  pinned toolchain makes $BUILT_ENTRY. The page asks for the committed" >&2
+    echo "  name, so the rebuilt program would never be served." >&2
+    exit 1
+  fi
 
-if ! cmp -s "$DIST/$ENTRY" "$BUILT/$BUILT_ENTRY"; then
-  echo "declare-verify: $ENTRY differs from a rebuild with the pinned toolchain." >&2
-  echo "  The committed bundle is stale (or was changed by hand). Rebuild it" >&2
-  echo "  and commit the result together with the toolchain pin." >&2
-  exit 1
-fi
+  if ! cmp -s "$DIST/$ENTRY" "$BUILT/$BUILT_ENTRY"; then
+    echo "declare-verify: $ENTRY differs from a rebuild with the pinned toolchain." >&2
+    echo "  The committed bundle is stale (or was changed by hand). Rebuild it" >&2
+    echo "  and commit the result together with the toolchain pin." >&2
+    exit 1
+  fi
 
-echo "declare-verify: $ENTRY matches a rebuild with the pinned toolchain (sha256 $(sha256sum "$DIST/$ENTRY" | cut -c1-12)…)"
-echo "declare-verify: the ladder passed and the published bundle is the one the pin builds."
+  echo "declare-verify: $ENTRY matches a rebuild with the pinned toolchain (sha256 $(sha256sum "$DIST/$ENTRY" | cut -c1-12)…)"
+  echo "declare-verify: the ladder passed and the published bundle is the one the pin builds."
