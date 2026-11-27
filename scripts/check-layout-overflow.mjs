@@ -38,6 +38,7 @@ const HEIGHT = 900
 function findChrome() {
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_PATH,
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium',

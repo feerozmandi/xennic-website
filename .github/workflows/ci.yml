@@ -108,7 +108,11 @@ jobs:
         run: npm run test:smoke
       # The browser driver is installed for this check alone and is NOT a
       # dependency of the website: the site never drives a browser, so `npm
-      # ci` must not fetch one. Chrome itself is the runner's own.
+      # ci` must not fetch one. The browser itself is installed here rather
+      # than taken from the runner's image, and the action is pinned to a
+      # commit, so what the measurement is made with cannot change unnoticed.
+      - name: Install the browser for this check
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
       - name: Install the browser driver for this check
         run: npm install --no-save --no-audit --no-fund puppeteer-core@24
       # Content that reaches past the window it is shown in is cut off, not
@@ -177,11 +181,29 @@ jobs:
       # longer matches its source must not reach an image. The ladder needs a
       # browser for its layout verdict: headless, the runtime measures text
       # with a stand-in and binds no backend, and the geometry it then reports
-      # is not the geometry a reader gets. The runner's Chrome is that browser.
+      # is not the geometry a reader gets.
+      #
+      # The browser is installed here rather than taken from the runner's
+      # image: which browsers an image carries is the runner's business, and
+      # it has changed before. The action is pinned to a commit, so what the
+      # ladder measures with cannot change under it unnoticed.
+      - name: Install the browser the ladder measures with
+        uses: browser-actions/setup-chrome@48ad923757ca74d66703209fe939badbdf80f2f4 # v2.2.0
       - name: Verify the Declare program and the published bundle
         env:
           DECLARE_VERIFY_REQUIRE_BROWSER: '1'
+          DECLARE_VERIFY_LOG: ${{ runner.temp }}/declare-verify.log
         run: npm run declare:verify
+      # The ladder's own log: which rung failed, and what it said. A failure
+      # here is otherwise a number and nothing else.
+      - name: Preserve the Declare verification log
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: declare-verify-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/declare-verify.log
+          if-no-files-found: ignore
+          retention-days: 90
 
   production-preview:
     runs-on: ubuntu-latest

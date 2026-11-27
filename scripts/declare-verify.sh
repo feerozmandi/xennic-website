@@ -78,17 +78,36 @@ git -C "$TOOLCHAIN" fetch -q --depth 1 --filter=blob:none origin "$COMMIT"
 git -C "$TOOLCHAIN" checkout -q FETCH_HEAD
 
 echo "declare-verify: installing the toolchain's own dependencies"
-(cd "$TOOLCHAIN" && npm ci --no-audit --no-fund >/dev/null)
+if ! (cd "$TOOLCHAIN" && npm ci --no-audit --no-fund >/dev/null); then
+  echo "declare-verify: the toolchain's dependencies could not be installed." >&2
+  echo "  The toolchain is fetched at the pinned commit; a failure here is" >&2
+  echo "  usually the network, not the program." >&2
+  exit 1
+fi
 # The toolchain ships its compiler and runtime compiled, but it rebuilds
 # them here so the ladder runs against what this commit's sources make.
-(cd "$TOOLCHAIN" && npm run build >/dev/null)
+if ! (cd "$TOOLCHAIN" && npm run build >/dev/null); then
+  echo "declare-verify: the toolchain did not build at $COMMIT." >&2
+  exit 1
+fi
 
 # ── 1. the ladder ───────────────────────────────────────────────────────────
 LOG="$WORK/verify.log"
+# The log is kept where the caller asked for it, so a failing run's
+# artefact says which rung failed and what it said. It is kept whether the
+# ladder passed or not: a failure is exactly when it is wanted.
+KEPT_LOG="${DECLARE_VERIFY_LOG:-}"
+keep_log() {
+  [ -n "$KEPT_LOG" ] || return 0
+  mkdir -p "$(dirname "$KEPT_LOG")"
+  cp "$LOG" "$KEPT_LOG" 2>/dev/null || true
+}
 if ! (cd "$TOOLCHAIN" && node tools/verify.mjs "$APP") 2>&1 | tee "$LOG"; then
+  keep_log
   echo "declare-verify: the ladder did not pass" >&2
   exit 1
 fi
+keep_log
 
 # A headless boot measures text with a stand-in and binds no backend, so the
 # layout it reports is not the layout a reader gets. When the caller asks for
