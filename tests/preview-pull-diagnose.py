@@ -263,6 +263,43 @@ class RefreshScriptTest(unittest.TestCase):
             self.assertIn(name, files[0])
 
 
+class HostCommandTest(unittest.TestCase):
+    """The report's host command must fetch the script before it runs it.
+
+    An operator who runs the refresh without fetching it first gets
+    "No such file or directory", which says nothing about what is wrong.
+    The report therefore carries one block that does both, in order, and
+    this test is what keeps the two steps together.
+    """
+
+    def setUp(self):
+        root = Path(__file__).resolve().parents[1]
+        self.report = (root / 'docs/reports/2026-11-27-auto-deploy-and-versioning.md') \
+            .read_text(encoding='utf-8')
+        self.block = self.report[self.report.index('### ۶.۱'):self.report.index('### ۶.۲')]
+
+    def test_the_block_fetches_the_script_before_it_runs_it(self):
+        fetch = self.block.index('curl -fsSL -o refresh-preview-pull-deploy.sh')
+        run = self.block.index('/root/refresh-preview-pull-deploy.sh "$COMMIT"')
+        self.assertLess(fetch, run)
+
+    def test_the_block_fetches_the_script_from_the_same_commit_it_refreshes_from(self):
+        # One commit, one source: the helpers must come from the commit CI
+        # tested, and the script that fetches them from that same commit.
+        self.assertIn('$COMMIT/scripts/refresh-preview-pull-deploy.sh', self.block)
+        self.assertIn('/root/refresh-preview-pull-deploy.sh "$COMMIT"', self.block)
+
+    def test_the_block_reads_the_commit_from_the_repository(self):
+        # A pinned commit in the report goes out of date on the next merge.
+        self.assertIn('commits/dev', self.block)
+
+    def test_the_prerequisites_are_checked_before_anything_is_changed(self):
+        section = self.report[self.report.index('### ۶.۲'):self.report.index('### ۶.۳')]
+        self.assertIn('/usr/local/libexec/xennic-preview', section)
+        self.assertIn('/root/.xennic-release-token', section)
+        self.assertIn('xennic-pull-deploy.timer', section)
+
+
 class CandidateFileTest(unittest.TestCase):
     """The manifest the operator approves is written once, root-only, intact."""
 
