@@ -105,28 +105,43 @@ xennic-pull-deploy.timer  (هر ۵ دقیقه، systemd، root)
 
 همه به‌عنوان root، روی همان میزبانی که timer و gateway روی آن نصب است.
 
-### ۶.۱) گرفتن کد تازه
+### ۶.۱) همه‌چیز، در یک بلوک
+
+این بلوک را **یک‌جا** اجرا کنید. دو گام هستند و ترتیبشان مهم است: اسکریپت باید **اول** روی میزبان باشد، وگرنه
+اجرای گامِ دوم با `No such file or directory` می‌شکند.
 
 ```bash
+set -euo pipefail
 cd /root
-curl -fsSL -o refresh-preview-pull-deploy.sh \
-  https://raw.githubusercontent.com/feerozmandi/xennic-website/dev/scripts/refresh-preview-pull-deploy.sh
-chmod 700 refresh-preview-pull-deploy.sh
-```
 
-### ۶.۲) تازه‌سازیِ همه‌چیز از یک کامیت
-
-```bash
-# بهتر است کامیتِ دقیقِ همان merge باشد، نه نامِ شاخه: helperها از همان
-# کامیتی گرفته می‌شوند که CI آزموده و منتشر کرده است. کامیت را از خودِ
-# مخزن می‌خوانیم تا این دستور هرگز کهنه نشود:
+# کامیت را از خودِ مخزن می‌خوانیم تا این دستور هرگز کهنه نشود. بهتر است
+# کامیتِ دقیقِ همان merge باشد، نه نامِ شاخه: helperها از همان کامیتی گرفته
+# می‌شوند که CI آزموده و منتشر کرده است.
 COMMIT=$(curl -fsSL https://api.github.com/repos/feerozmandi/xennic-website/commits/dev \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+echo "commit: $COMMIT"
+
+# گامِ اول: خودِ اسکریپت، از همان کامیت.
+curl -fsSL -o refresh-preview-pull-deploy.sh \
+  "https://raw.githubusercontent.com/feerozmandi/xennic-website/$COMMIT/scripts/refresh-preview-pull-deploy.sh"
+chmod 700 refresh-preview-pull-deploy.sh
+
+# گامِ دوم: تازه‌سازیِ همه‌چیز از همان کامیت.
 /root/refresh-preview-pull-deploy.sh "$COMMIT"
 ```
 
-اگر می‌خواهید کامیتی را **دقیقاً** pin کنید، همان چیزی را نام ببرید که CI آزموده و منتشر کرده است؛
-ولی کامیتِ بالا همیشه همان است، چون از `dev` خوانده می‌شود، و **هرگز کهنه نمی‌شود**.
+### ۶.۲) پیش‌نیازها، پیش از هر تغییری
+
+این‌ها **فقط‌خواندنی**‌اند و هیچ چیزی را تغییر نمی‌دهند. اگر یکی نبود، همان‌جا متوقف شوید؛ مسیرِ
+`--refresh` روی میزبانی کار می‌کند که **قبلاً** مجموعهٔ helperها را داشته باشد، چون کارش جابه‌جاییِ
+`/usr/local/libexec/xennic-preview` است.
+
+```bash
+ls -ld /usr/local/libexec/xennic-preview          # مجموعهٔ helperهای ثابت
+ls -l  /root/.xennic-release-token                 # توکن انتشار (مقدارش را نخوانید)
+systemctl is-active xennic-pull-deploy.timer || echo "timer فعال نیست"
+```
+
 فهرستِ زندهٔ نام‌ها و کامیت‌هایشان:
 
 ```bash
