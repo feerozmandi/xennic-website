@@ -59,6 +59,7 @@ jobs:
           python3 tests/preview-deploy-receiver.py
           python3 tests/preview-deploy-lock.py
           python3 tests/preview-deploy-state.py
+          python3 tests/preview-deploy-state-diagnose.py
           python3 tests/preview-deploy-readiness.py
           python3 tests/preview-deploy-transaction.py
           python3 tests/preview-deploy-backend.py
