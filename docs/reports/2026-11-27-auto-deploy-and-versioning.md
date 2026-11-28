@@ -458,7 +458,67 @@ PR #75 ادغام شد (merge commit `35cdf72f`) و اجرای `46133051965` (ش
 
 `preview-release-verifier.py` روی APIِ واقعی همین نام را برای همان کامیت برگرداند: **`v1.2.6`**. پس قاعدهٔ «یک نام روی یک کامیت یعنی این ایمیج آزموده شده است» دوباره برقرار است، و این بار نام را **خودِ اسکریپت** نوشت و **خودش هم خواند و تأیید کرد**.
 
-### ۱۲.۶) آنچه هنوز باز است
+### ۱۲.۶) استقرار روی میزبان، و اثباتِ نهایی
 
-- **استقرارِ خودکار روی میزبان** حالا می‌تواند جلو برود: برای نخستین بار یک اجرای سبز برای headِ `dev` وجود دارد و artifactِ شواهدش سالم است. کاری که از این به بعد لازم است، اجرای همان فرمان‌های بخش ۶ روی میزبان است و خودِ timer آن را انجام می‌دهد.
+تا پیش از اجرای ۳۲۱، هر تلاشِ deployer روی میزبان با یک جمله می‌ایستد:
+
+```
+pull deploy stopped: no successful run for the current dev head
+```
+
+آن جمله دیگر درست نیست، و همان timerِ پنج‌دقیقه‌ای خودش کار را کرد:
+
+```
+Nov 28 10:26:56 server2085 ci-pull-deploy[2860482]: deployed
+```
+
+و تشخیصِ فقط‌خواندنی — که همه‌چیز را از همین میزبان می‌خواند — این را گفت:
+
+```
+== dev head
+   dev head: 35cdf72f142e6fb6323d2cc36109c318a34b7a36
+
+== workflow runs
+   newest successful dev run: number 321, id 46133051965, attempt 1
+
+== release evidence artifact
+   xennic-preview-release-1: id 15259285476, 376 bytes
+
+== artifact download
+   redirect 302 -> productionresultssa12.blob.core.windows.net
+   downloaded 376 bytes
+
+== evidence envelope
+   archive contains: ['xennic-preview-release.json']
+   the envelope binds to this run, commit and run number
+   candidate: commit 35cdf72f142e6fb6323d2cc36109c318a34b7a36, run 321, digest sha256:e1e0019398bf99872cdc0318e01aba7b7320382a98ab9787d7278a3855fbf5ad
+
+== live release journal
+   current: run 321 commit 35cdf72f142e6fb6323d2cc36109c318a34b7a36
+   blocked: False
+
+== the name of the live release
+   the live version is v1.2.6, and the repository names the live commit the same
+
+== reviewed transitions
+   7 transition(s) on file
+   ...
+   896073a -> 35cdf72
+
+== public routes (no redirect is followed)
+   https://xennic.ir/robots.txt -> 200
+   https://xennic.ir/sitemap.xml -> 200
+   https://xennic.ir/platform -> 200
+   https://xennic.ir/health -> 302
+
+== result
+   The live release is v1.2.6, and that is the name the repository gives it.
+   Every step of the release read works from this host.
+```
+
+این همان اثباتی است که بخش ۶ خواسته بود، و این بار برای یک release نام‌دار: نسخهٔ زنده `v1.2.6` است و **نامی که مخزن به کامیتِ زنده می‌دهد همان است**. گذارِ `896073a -> 35cdf72` هم **خودکار** تأیید شد (کلیدِ مالک روشن بود، درختِ مهاجرت عوض نشده بود و نام‌های اعلام‌شده با ledgerِ زنده یکی بودند) و در همان فایلِ ردیف‌های بازبینی‌شده نشست — همان شکلِ ردیفِ دستی، با پشتیبان.
+
+### ۱۲.۷) آنچه هنوز باز است
+
+- **زنجیره خودبه‌خود است و ادامه دارد.** هر merge به `dev` یک انتشار است، پس mergeِ همین گزارش هم یک نسخهٔ تازه می‌سازد و همان را همان میزبان خودش مستقر می‌کند. این همان الگویی است که از `v1.0.0` تا کنون دیده شده، و گزارش همیشه **عکسِ لحظه** را نگه می‌دارد: اثباتِ بالا برای `v1.2.6` است، و نسخهٔ بعدی یک شماره جلوتر می‌رود.
 - تگِ `v1.2.5` روی `e9169626` **دستی** ساخته شد (ایمیجش publish و آزموده شده بود، ولی گامِ نام‌گذاری شکست خورده بود و پس از آن artifactِ شواهدی برای آن اجرا ساخته نشد). این تگ نگه داشته می‌شود: حذفش نامی را که انتشار گرفته دوباره آزاد می‌کند و دو انتشار را به هم می‌آمیزد.
