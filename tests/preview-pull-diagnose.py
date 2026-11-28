@@ -299,6 +299,23 @@ class HostCommandTest(unittest.TestCase):
         self.assertIn('/root/.xennic-release-token', section)
         self.assertIn('xennic-pull-deploy.timer', section)
 
+    def test_the_report_says_the_mismatch_is_an_anomaly_not_a_failure(self):
+        # A difference between the journal and the repository stops nothing:
+        # the deployment is finished and healthy. The report must not tell
+        # the operator to look for a FAILED.
+        for line in self.report.split('\n'):
+            if 'FAILED' in line:
+                self.assertIn('ANOMALY', line,
+                              f'the report calls the mismatch a failure here: {line.strip()}')
+
+    def test_the_report_says_what_a_second_refresh_will_refuse_with(self):
+        # The refresh keeps the previous helper set, so a second refresh is
+        # refused until that copy is removed. The operator has to be told
+        # which directory and what removing it means.
+        section = self.report[self.report.index('### ۶.۲'):self.report.index('### ۶.۳')]
+        self.assertIn('.xennic-preview-before-refresh', section)
+        self.assertIn('rm -rf', section)
+
 
 class CandidateFileTest(unittest.TestCase):
     """The manifest the operator approves is written once, root-only, intact."""

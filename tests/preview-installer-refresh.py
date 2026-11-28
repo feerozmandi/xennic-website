@@ -13,6 +13,7 @@ tests/preview-installer-upgrade-ci.sh is where the swap itself is exercised.
 import hashlib
 import importlib.util
 import inspect
+import os
 from pathlib import Path
 import unittest
 
@@ -49,6 +50,59 @@ class RefreshPathTest(unittest.TestCase):
     def test_the_refresh_staging_directory_is_its_own(self):
         self.assertNotEqual(installer.REFRESH_SOURCE, installer.SOURCE)
         self.assertNotEqual(installer.REFRESH_BACKUP, installer.BACKUP)
+
+
+class LeftoverMessageTest(unittest.TestCase):
+    """A refusal has to name what is in the way, and where it is.
+
+    An operator on the host was told "previous or incomplete helper
+    refresh exists" and could not act on it: the message named no path,
+    so it did not say which directory to look at or what removing it
+    would mean. The message now carries the path and says what the
+    directory holds.
+    """
+
+    def test_the_message_names_the_directory_that_is_in_the_way(self):
+        real = os.path.lexists
+        try:
+            os.path.lexists = lambda p: True if str(p) == str(installer.REFRESH_BACKUP) else real(p)
+            message = installer.leftover_message(installer.NEW_DIR, installer.REFRESH_BACKUP,
+                                                 "helper refresh")
+        finally:
+            os.path.lexists = real
+        self.assertIn(str(installer.REFRESH_BACKUP), message)
+        self.assertIn("helper refresh", message)
+
+    def test_the_message_names_every_leftover_that_is_there(self):
+        real = os.path.lexists
+        try:
+            os.path.lexists = lambda p: True if str(p) in (str(installer.NEW_DIR),
+                                                           str(installer.REFRESH_BACKUP)) else real(p)
+            message = installer.leftover_message(installer.NEW_DIR, installer.REFRESH_BACKUP,
+                                                 "helper refresh")
+        finally:
+            os.path.lexists = real
+        self.assertIn(str(installer.NEW_DIR), message)
+        self.assertIn(str(installer.REFRESH_BACKUP), message)
+
+    def test_the_message_says_what_removing_it_means(self):
+        real = os.path.lexists
+        try:
+            os.path.lexists = lambda p: True if str(p) == str(installer.REFRESH_BACKUP) else real(p)
+            message = installer.leftover_message(installer.NEW_DIR, installer.REFRESH_BACKUP,
+                                                 "helper refresh")
+        finally:
+            os.path.lexists = real
+        self.assertIn("keeps the set from before the last one", message)
+        self.assertIn("removed", message)
+
+    def test_the_refresh_refuses_with_that_message(self):
+        source = inspect.getsource(installer.refresh)
+        self.assertIn("leftover_message(NEW_DIR, REFRESH_BACKUP", source)
+
+    def test_the_update_refuses_with_that_message(self):
+        source = inspect.getsource(installer.upgrade)
+        self.assertIn("leftover_message(NEW_DIR, BACKUP", source)
 
 
 if __name__ == "__main__":

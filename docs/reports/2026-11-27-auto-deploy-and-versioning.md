@@ -148,6 +148,27 @@ systemctl is-active xennic-pull-deploy.timer || echo "timer فعال نیست"
 gh api repos/feerozmandi/xennic-website/tags --jq '.[] | "\\(.name) -> \\(.commit.sha)"'
 ```
 
+### ۶.۲.۱) اگر refresh را دوباره اجرا می‌کنید
+
+refresh مجموعهٔ helperها را **جابه‌جا** می‌کند و نسخهٔ پیشین را در
+`/usr/local/libexec/.xennic-preview-before-refresh` نگه می‌دارد. پس **اجرای دومِ** refresh تا وقتی
+آن نسخه پاک نشده رد می‌شود، با این پیام:
+
+```
+Fixed preview helper installation refused: previous or incomplete helper refresh exists: /usr/local/libexec/.xennic-preview-before-refresh — ...
+```
+
+این رد شدن **درست** است: جایی برای نگه‌داشتنِ نسخهٔ پیشینِ دیگری نیست، و یک refreshِ نیمه‌کاره نباید
+پاک شود. وقتی مجموعهٔ فعلی را دیدید و از آن مطمئن شدید، نسخهٔ پشتیبان را بردارید و دوباره اجرا کنید:
+
+```bash
+ls -ld /usr/local/libexec/.xennic-preview-before-refresh
+rm -rf /usr/local/libexec/.xennic-preview-before-refresh
+```
+
+> در shellِ تعاملیِ root از `set -e` استفاده نکنید: با اولین فرمانِ ناموفق، پوسته می‌بندد و نشستِ SSH
+> قطع می‌شود. `set -euo pipefail` را داخل یک اسکریپت بگذارید، نه در پوستهٔ تعاملی.
+
 این یک دستور چهار کار می‌کند و هیچ‌کدام استقرار نمی‌کند:
 
 1. **helperهای ثابت** (`preview-fixed-operations.py`، `preview-deploy-state.py`، `preview-deploy-transaction.py`، `preview-deploy-backend.py`، …) را از همان کامیت می‌گیرد و با مسیر تازهٔ `--refresh` نصب‌کنندهٔ بررسی‌شده جایگزین می‌کند. مسیر تازه روی میزبانِ **در حال سرویس** کار می‌کند: ریشهٔ preview، ژورنال، فایل compose و گیت‌وی را **نه می‌خواند و نه می‌نویسد**، قفل استقرار را می‌گیرد، و مجموعهٔ قبلی را نگه می‌دارد.
@@ -186,7 +207,8 @@ journalctl -u xennic-pull-deploy.service -n 40 --no-pager
 
 # ۴) نامِ انتشار باید در ژورنال و در مخزن یکی باشد
 #    تشخیصِ فقط‌خواندنی این را خودش می‌سنجد و اگر ناهماهنگ باشد
-#    با «FAILED» و کد خروجِ ۱ می‌ایستد.
+#    با «ANOMALY» و کد خروجِ ۱ می‌ایستد (نه «FAILED»: در آن حالت چیزی
+#    نایستاده و فقط اثبات نادرست است).
 python3 /root/xennic-preview-pull-deploy/diagnose-preview-pull-deploy.py
 
 #    (یا به‌صورت دستی)
@@ -199,6 +221,30 @@ gh api repos/feerozmandi/xennic-website/tags --jq '.[].name'
 در بند ۴، مقدار `release_version` در ژورنال باید **همان** نامی باشد که در مخزن تگ شده است؛ اگر نبود، یعنی خواندنِ تگ روی این میزبان ممکن نبوده و نسخه از پیامِ commitها حساب شده است (که کار می‌کند، ولی نامِ مخزن را نشان نمی‌دهد).
 
 بخشِ «the name of the live release» در خروجیِ تشخیص همین را **ماشینی** می‌سنجد: نامی که مخزن به کامیتِ زنده می‌دهد با مقدارِ `release_version` در ژورنال سنجیده می‌شود، و اگر یکی نباشند، تشخیص آن را `ANOMALY` می‌نامد و با کد خروجِ ۱ می‌ایستد. پس اثباتِ نهایی یک دستور است، نه یک مقایسهٔ چشمی.
+
+**انتظارِ دقیق بعد از استقرار:** ژورنال باید `current.commit` را روی کامیتِ مستقرشده بگذارد و
+`release_version` را برابرِ نامِ مخزن بنویسد (این نام را deployer از همان تگِ `vX.Y.Z` می‌خواند، نه
+از پیامِ commitها). آن‌وقت بخشِ «the name of the live release» باید این را بگوید:
+
+```
+the live version is v1.2.4, and the repository names the live commit the same
+```
+
+و نتیجه:
+
+```
+== result
+   The live release is v1.2.4, and that is the name the repository gives it.
+   Every step of the release read works from this host.
+```
+
+**اگر به‌جای آن گفت** `the repository names no release for the live commit ...`، یعنی نسخهٔ زنده
+هنوز همان نسخهٔ **پیش از نام‌گذاری** است (کامیتی که نه تگ دارد و نه `release_version`). این خطا نیست و
+`ANOMALY` هم نیست: یعنی هنوز استقرارِ تازه انجام نشده. برای دیدنِ این حالت، ژورنال را بخوانید:
+
+```bash
+cat /srv/xennic-preview/state/release-state.json
+```
 
 این `ANOMALY` عمداً `FAILED` نیست: `FAILED` یعنی «deployer اینجا می‌ایستد»، و در این حالت چیزی نایستاده — استقرار تمام شده و سالم است. آنچه نادرست است **اثبات** است، و صاحبِ میزبان باید آن را ببیند.
 
@@ -234,7 +280,7 @@ JSON
 | `scripts/preview-pull-deploy.py` | کلید خودکار، گزارشِ «منتظر تأیید» پس از شکست، و ثبتِ نسخه |
 | `scripts/install-preview-sftp-helper.py` | مسیر تازهٔ `--refresh` برای میزبانِ در حال سرویس، و `REFRESH_MANIFEST` |
 | `scripts/refresh-preview-pull-deploy.sh` | تازه‌سازیِ helperها در کنار deployer |
-| `scripts/diagnose-preview-pull-deploy.py` | بخشِ «the name of the live release»: سنجیدنِ نامِ مخزن برای کامیتِ زنده با `release_version` ژورنال؛ ناهماهنگی `FAILED` است |
+| `scripts/diagnose-preview-pull-deploy.py` | بخشِ «the name of the live release»: سنجیدنِ نامِ مخزن برای کامیتِ زنده با `release_version` ژورنال؛ ناهماهنگی `ANOMALY` است |
 | `.github/workflows/ci.yml` | نام‌گذاری انتشار، تگِ دوم روی ایمیج، ساختِ تگِ گیت پس از آزمونِ ایمیج، و `concurrency` برای هر شاخه |
 | `tests/preview-release-version.py` | ۱۱ آزمون برای نام‌گذاری (روی یک مخزنِ ساختگی) |
 | `tests/preview-release-verifier.py` | آزمون‌های نامِ انتشار: بی‌نام، دو نام، و نامِ نامعتبر |
