@@ -53,6 +53,7 @@ jobs:
           python3 tests/preview-deploy-manifest.py
           python3 tests/preview-release-evidence.py
           python3 tests/preview-release-version.py
+          python3 tests/preview-release-tag.py
           python3 tests/preview-release-verifier.py
           python3 tests/preview-pull-image.py
           python3 tests/preview-deploy-client.py
@@ -599,23 +600,20 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/preview-release-version.py --check "$VERSION"
-          # The name is looked up as the commit it points at, so a name that
-          # another commit already carries is refused instead of being moved.
-          # Only a commit is an answer: an error page, or an empty answer,
-          # means the name is free.
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/commits/$VERSION" --jq '.sha' 2>/dev/null || true)
-          if printf '%s' "$existing" | grep -qE '^[0-9a-f]{40}$'; then
-            if [ "$existing" != "$COMMIT" ]; then
-              echo "::error::The release name $VERSION already names $existing."
-              exit 1
-            fi
-            echo "$VERSION already names this commit."
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$VERSION" -f sha="$COMMIT" > /dev/null
-            echo "Tagged $VERSION."
-          fi
-          echo "- Release tag: \`$VERSION\` → \`${COMMIT:0:7}\`" >> "$GITHUB_STEP_SUMMARY"
+          # The name is written as a ref and read back as a ref: the API is
+          # asked about the ref itself, not about a commit that carries that
+          # name. Only a commit is an answer, so the error page of a name
+          # that is free means the name is free.
+          #
+          # The write is idempotent: a name that already names this commit
+          # is a success, a name that names another commit is refused, and a
+          # write the API refuses is read back once more, because the write
+          # may have reached the API even when its answer did not reach the
+          # run. The reason of a refusal is written as an error line, so a
+          # failed release can be read next to the failed step, without the
+          # run log.
+          python3 scripts/preview-release-tag.py --repository "$GITHUB_REPOSITORY" \
+            --version "$VERSION" --commit "$COMMIT" --summary "$GITHUB_STEP_SUMMARY"
       - name: Prepare same-run release evidence
         env:
           IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
