@@ -150,6 +150,26 @@ def verify_backend():
     module(TARGET / 'preview-deploy-backend.py', 'installer_backend').FixedRunner().verify_helpers()
 
 
+def leftover_message(update_dir, backup_dir, what):
+    """Say what is in the way, and where it is.
+
+    A refusal that names no path is a refusal the operator cannot act on.
+    The refresh keeps the set from before the last one in the backup
+    directory, and it refuses to run again while that copy is there, so
+    the message has to say which directory holds it and that removing it
+    is what a second run needs.
+    """
+    parts = []
+    for path in (update_dir, backup_dir):
+        if os.path.lexists(path):
+            parts.append(str(path))
+    named = ', '.join(parts)
+    return (f'previous or incomplete {what} exists: {named} — '
+            f'the {what} keeps the set from before the last one in the backup '
+            f'directory, so it will not run again until that copy is removed '
+            f'(remove it once the current set is known to be good)')
+
+
 def assert_pristine():
     # This update is deliberately limited to the verified pre-first-install
     # state. Unknown journal, data, project resources or work files fail closed.
@@ -193,7 +213,7 @@ def upgrade():
     if {p.name for p in INCOMING.iterdir()} != set(FILES) | {'install-preview-sftp-helper.py'}:
         raise RuntimeError('unexpected incoming staging contents')
     if os.path.lexists(NEW_DIR) or os.path.lexists(BACKUP):
-        raise RuntimeError('previous or incomplete helper update exists')
+        raise RuntimeError(leftover_message(NEW_DIR, BACKUP, 'helper update'))
     old = verified_sources(SOURCE, OLD_MANIFEST)
     new = verified_sources(INCOMING, NEW_MANIFEST)
     installed_matches(TARGET, old)
@@ -266,7 +286,7 @@ def refresh():
     if {p.name for p in REFRESH_SOURCE.iterdir()} != set(ACTIVATION_FILES):
         raise RuntimeError('unexpected refresh staging contents')
     if os.path.lexists(NEW_DIR) or os.path.lexists(REFRESH_BACKUP):
-        raise RuntimeError('previous or incomplete helper refresh exists')
+        raise RuntimeError(leftover_message(NEW_DIR, REFRESH_BACKUP, 'helper refresh'))
     candidate = verified_sources(REFRESH_SOURCE, REFRESH_MANIFEST, ACTIVATION_FILES)
     locks = module(TARGET / 'preview-deploy-lock.py', 'installer_refresh_lock')
     with locks.acquire_lock(nonblocking=True):
